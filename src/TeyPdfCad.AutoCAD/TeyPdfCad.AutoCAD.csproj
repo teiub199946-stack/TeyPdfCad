@@ -1,37 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework Condition="'$(TeyAutoCadTargetFramework)' == ''">net8.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(TeyAutoCadTargetFramework)' == ''">net8.0</TargetFramework>
     <TargetFramework Condition="'$(TeyAutoCadTargetFramework)' != ''">$(TeyAutoCadTargetFramework)</TargetFramework>
     <RootNamespace>TeyPdfCad.AutoCAD</RootNamespace>
     <AssemblyName>TeyPdfCad.AutoCAD</AssemblyName>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <NoWarn>$(NoWarn);MSB3270</NoWarn>
-
-    <!-- Fast local defaults. Override /p:AutoCADManagedPath=... for another installation. -->
-    <AutoCADManagedPath Condition="'$(AutoCADManagedPath)' == '' and Exists('C:\Program Files\Autodesk\AutoCAD 2026\AcDbMgd.dll')">C:\Program Files\Autodesk\AutoCAD 2026</AutoCADManagedPath>
-    <AutoCADManagedPath Condition="'$(AutoCADManagedPath)' == '' and Exists('C:\Program Files\Autodesk\AutoCAD 2025\AcDbMgd.dll')">C:\Program Files\Autodesk\AutoCAD 2025</AutoCADManagedPath>
+    <AutoCADApiVersion Condition="'$(AutoCADApiVersion)' == ''">25.1.0</AutoCADApiVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
+    <PackageReference Include="AutoCAD.NET" Version="$(AutoCADApiVersion)" ExcludeAssets="runtime" />
   </ItemGroup>
-
-  <ItemGroup Condition="'$(AutoCADManagedPath)' != ''">
-    <Reference Include="AcCoreMgd">
-      <HintPath>$(AutoCADManagedPath)\AcCoreMgd.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="AcDbMgd">
-      <HintPath>$(AutoCADManagedPath)\AcDbMgd.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="AcMgd">
-      <HintPath>$(AutoCADManagedPath)\AcMgd.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-  </ItemGroup>
-
-  <Target Name="RequireAutoCADManagedPath" BeforeTargets="CoreCompile" Condition="'$(AutoCADManagedPath)' == ''">
-    <Error Text="AutoCAD managed assemblies were not found. Set /p:AutoCADManagedPath=&quot;C:\Program Files\Autodesk\AutoCAD 2026&quot;." />
-  </Target>
 </Project>
