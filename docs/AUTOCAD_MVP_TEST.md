@@ -1,72 +1,82 @@
-# TeyPdfCad — AutoCAD MVP acceptance test
+# TeyPdfCad — AutoCAD 2022 MVP acceptance test
 
 ## Purpose
 
 Prove the first end-to-end product invariant:
 
-> A vector PDF dimension such as `5200` is reconstructed as a native AutoCAD `Dimension` whose real `Measurement` is approximately `5200`, not as exploded LINE/TEXT geometry and not as a fake text override.
+> A vector PDF dimension such as `203`, `212`, `168` or `5200` is reconstructed as a native AutoCAD `Dimension` whose real `Measurement` matches the semantic value, not as exploded LINE/TEXT geometry and not as a fake text override.
 
 This is a V0.1 engineering test. Source PDFIMPORT primitives are intentionally preserved after reconstruction for visual comparison.
 
 ## Supported test target
 
-- AutoCAD 2026 initial .NET 8 generation.
+- AutoCAD 2022 / release family 24.1.
+- .NET Framework 4.8 host.
 - Vector PDF only.
 - Linear / aligned / rotated dimensions.
 - One detected drawing-scale group per selected region.
 
-Raster/scanned PDFs, multi-scale automatic region partitioning, radius/diameter native reconstruction, hatch/table/block recovery and final source cleanup are intentionally outside this acceptance gate.
+Raster/scanned PDFs, automatic vector-glyph/SHX text recognition, multi-scale automatic region partitioning, radius/diameter native reconstruction, hatch/table/block recovery and final source cleanup are intentionally outside this acceptance gate.
 
 ## Test package
 
-GitHub Actions workflow: `AutoCAD Adapter CI`
+GitHub Actions workflow: `AutoCAD 2022 Adapter CI`
 
 Artifact name:
 
-`TeyPdfCad-AutoCAD2026`
+`TeyPdfCad-AutoCAD2022`
 
 Expected files:
 
 - `TeyPdfCad.AutoCAD.dll`
 - `TeyPdfCad.Core.dll`
-- `TeyPdfCad.AutoCAD.deps.json`
+- `AUTOCAD_MVP_TEST.md`
+- `BUILD_INFO.txt`
 
-Keep the files together in the same folder.
+Keep the DLL files together in the same folder.
 
 ## Test drawing
 
-Use a simple vector PDF exported from CAD containing at least:
+Use a simple vector PDF exported from CAD containing at least three dimensions, preferably including an angled one. The current real smoke drawing uses approximately:
 
-- one horizontal dimension, for example `5200`;
-- preferably a short chain such as `1200 + 1800 + 2200`;
-- ordinary geometry around the dimensions;
-- TrueType text where possible for the first test.
+- vertical dimension `203`;
+- angled dimension `212`;
+- lower dimension `168`.
 
-For the first acceptance test prefer one scale only on the selected PDF fragment.
+For the first acceptance pass use TrueType dimension text so PDFIMPORT produces `DBText`/`MText` primitives. A PDF where the visible digits are imported only as line/polyline glyph geometry is a separate required regression case for the future `VectorTextRecognizer`; do not lower Core recognition thresholds to force that file through this gate.
+
+Use one drawing scale on the selected fragment.
 
 ## Procedure
 
-1. Start AutoCAD 2026 with a blank drawing.
-2. Run `PDFIMPORT`.
-3. Import the vector PDF as AutoCAD geometry/text.
-4. Keep the imported objects at the scale produced by PDFIMPORT; do not manually correct scale before TeyPdfCad analysis.
-5. Run `NETLOAD`.
-6. Load `TeyPdfCad.AutoCAD.dll` from the artifact folder.
-7. Run `TEYPDFANALYZE`.
-8. Select only the objects that belong to the imported PDF fragment being tested.
-9. Read the command-line report.
+1. Start AutoCAD 2022 with a blank drawing.
+2. Run `PDFIMPORT` and import the test vector PDF.
+3. Keep the imported objects at the scale produced by PDFIMPORT; do not manually correct scale before TeyPdfCad analysis.
+4. Run `NETLOAD` and load `TeyPdfCad.AutoCAD.dll` from the artifact folder.
+5. Confirm `TEYPDFPING` prints that plugin commands are registered.
+6. Run `TEYPDFANALYZE`.
+7. Window-select the entire imported PDF fragment and press Enter.
+8. Read the command-line report.
 
-Expected analysis result:
+The report includes the number of selected AutoCAD entities as well as generated line/text primitives. For the TrueType proof the expected shape is similar to:
 
+`selected=..., lines=..., texts=3, dimensions=3, ...`
+
+Exact line/entity counts depend on PDFIMPORT segmentation and are not acceptance metrics.
+
+If the report shows `texts=0` while line primitives exist, TeyPdfCad now emits an explicit diagnostic that the PDF text may be vector glyph geometry. That file is not a valid TrueType proof input; preserve it as a regression fixture for vector-text recognition.
+
+Expected analysis result for the TrueType proof:
+
+- `texts > 0`;
 - `dimensions > 0`;
-- a plausible detected scale;
+- a plausible detected drawing scale;
 - confidence values shown for recognized dimensions;
-- source object count shown through provenance;
 - no drawing modification.
 
-10. If exactly one scale group is detected, run `TEYPDFRECONSTRUCT`.
-11. Select the same PDFIMPORT fragment.
-12. The command must either:
+9. If exactly one scale group is detected, run `TEYPDFRECONSTRUCT`.
+10. Select the same PDFIMPORT fragment.
+11. The command must either:
     - commit a validated reconstruction, or
     - reject/roll back the operation with an explicit reason.
 
@@ -79,14 +89,14 @@ After successful reconstruction:
 1. Select one of the newly created dimensions.
 2. Open AutoCAD Properties.
 3. Confirm the object is a native AutoCAD dimension (`Aligned Dimension` / rotated dimension family), not LINE/TEXT geometry.
-4. Confirm `Measurement` is approximately the expected real value, e.g. `5200`.
-5. Edit/move a definition point and confirm the displayed dimension reacts as a real associative dimension object would geometrically.
+4. Confirm `Measurement` is approximately the expected real value, for example `203`, `212`, `168` or `5200`.
+5. Move a definition point and confirm the dimension reacts geometrically as a native AutoCAD dimension.
 
 For an annotation such as `5200±10`, the dimension text may use AutoCAD's `<>` measurement placeholder internally so the true measurement remains native while the suffix is preserved.
 
 ## Scale verification
 
-The command scales the selected imported PDF geometry into reconstructed real drawing units before creating dimensions.
+The reconstruction command scales the selected imported PDF geometry into reconstructed drawing units before creating native dimensions.
 
 Example:
 
@@ -102,9 +112,7 @@ A text override alone is not considered success.
 
 If more than one scale group is detected in the selection, `TEYPDFRECONSTRUCT` intentionally refuses global scaling and leaves the drawing unchanged.
 
-This prevents one global transform from corrupting a sheet containing, for example, a 1:100 plan and a 1:20 detail.
-
-Spatial scale partitioning will be implemented as a later adapter stage.
+This prevents one global transform from corrupting a sheet containing, for example, a 1:100 plan and a 1:20 detail. Spatial scale partitioning is a later adapter stage.
 
 ## Failure data to record
 
@@ -119,14 +127,15 @@ For every failed real PDF test record:
 - detected scale(s);
 - confidence;
 - whether the dimension line was continuous or split around text;
+- whether text arrived as DBText/MText or vector glyph geometry;
 - screenshot or minimal reproducible PDF/DWG when possible.
 
-Do not lower recognition thresholds merely to make an individual drawing pass. Add the failure as a regression case first, then correct the algorithm.
+Do not lower recognition thresholds merely to make an individual drawing pass. Add the failure as a regression case first, then correct the responsible layer.
 
 ## V0.1 pass condition
 
-The first product proof is achieved when a representative vector PDF containing a dimension `5200` passes this chain:
+The first product proof is achieved when a representative vector PDF passes this chain:
 
-`PDF -> PDFIMPORT -> TeyPdfCad semantic analysis -> geometry normalization -> native AutoCAD DIMENSION -> Measurement ≈ 5200`
+`PDF -> PDFIMPORT -> TeyPdfCad semantic analysis -> geometry normalization -> native AutoCAD DIMENSION -> Measurement ≈ semantic value`
 
 and the transaction automatically rolls back when this invariant is violated.

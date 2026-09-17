@@ -30,7 +30,8 @@ public sealed class ReconstructionCommands
         var scene = new AutoCadPrimitiveReader().Read(transaction, objectIds);
         var semantic = new SemanticReconstructionEngine().Analyze(scene);
 
-        WriteAnalysisReport(editor, scene.Lines.Count, scene.Texts.Count, semantic);
+        WriteAnalysisReport(editor, objectIds.Length, scene.Lines.Count, scene.Texts.Count, semantic);
+        editor.WriteMessage($"\n{DrawingUnitDiagnostics.Format(document.Database.Insunits)}\n");
         // No commit: analysis is intentionally read-only.
     }
 
@@ -44,6 +45,8 @@ public sealed class ReconstructionCommands
         var database = document.Database;
         var objectIds = GetPdfImportSelection(editor);
         if (objectIds is null) return;
+
+        editor.WriteMessage($"\n{DrawingUnitDiagnostics.Format(database.Insunits)}\n");
 
         using var transaction = database.TransactionManager.StartTransaction();
 
@@ -117,6 +120,7 @@ public sealed class ReconstructionCommands
 
     private static void WriteAnalysisReport(
         Editor editor,
+        int selectedCount,
         int lineCount,
         int textCount,
         SemanticReconstructionResult semantic)
@@ -125,10 +129,16 @@ public sealed class ReconstructionCommands
             ? "none"
             : string.Join(", ", semantic.DetectedDrawingScales.Select(x => x.ToString("G8")));
 
-        editor.WriteMessage(
-            $"\nTeyPdfCad analysis: lines={lineCount}, texts={textCount}, " +
-            $"dimensions={semantic.Dimensions.Count}, chains={semantic.DimensionChains.Count}, " +
-            $"scales=[{scales}], avg confidence={semantic.AverageDimensionConfidence:P2}.\n");
+        var summary = AnalysisReportFormatter.FormatSummary(
+            selectedCount,
+            lineCount,
+            textCount,
+            semantic.Dimensions.Count,
+            semantic.DimensionChains.Count,
+            scales,
+            semantic.AverageDimensionConfidence);
+
+        editor.WriteMessage($"\n{summary}\n");
 
         foreach (var dimension in semantic.Dimensions.Take(20))
         {

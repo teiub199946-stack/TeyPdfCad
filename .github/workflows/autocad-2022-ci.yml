@@ -2,7 +2,7 @@ name: AutoCAD 2022 Adapter CI
 
 on:
   push:
-    branches: [ 'feature/autocad-2022-host' ]
+    branches: [ 'feature/autocad-2022-*' ]
   workflow_dispatch:
 
 jobs:
