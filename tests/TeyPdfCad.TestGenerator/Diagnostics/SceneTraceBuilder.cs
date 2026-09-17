@@ -29,7 +29,7 @@ public sealed class SceneTraceBuilder
         var p2Input = FindDefinitionPoint(scene, testCase, cleanP2, ":ext:2");
         var dimensionLineInput = FindDimensionLineLocation(scene, testCase, cleanDimensionLine);
         var text = FindText(scene, testCase, cleanText);
-        var textInput = text is null ? null : ToPoint(text.Position);
+        Point2D? textInput = text is null ? null : ToPoint(text.Position);
 
         var provenance = scene.Lines.SelectMany(x => x.ProvenanceIds)
             .Concat(scene.Texts.SelectMany(x => x.ProvenanceIds))
