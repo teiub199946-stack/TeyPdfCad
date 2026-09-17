@@ -21,7 +21,7 @@ internal sealed class NativeDimensionWriter
             var p1 = Transform(candidate.DefinitionPoint1, coordinateTransform);
             var p2 = Transform(candidate.DefinitionPoint2, coordinateTransform);
             var dimLinePoint = Transform(candidate.DimensionLinePoint, coordinateTransform);
-            var textOverride = DimensionTextOverrideBuilder.Build(candidate.SourceText);
+            var textOverride = DimensionTextOverrideBuilder.Build(candidate.SourceText, candidate.DisplayedValue);
 
             Dimension dimension = candidate.Kind switch
             {
