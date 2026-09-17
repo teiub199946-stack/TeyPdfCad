@@ -60,6 +60,8 @@ public sealed record LegacyWrongPointsSummary
 {
     public int Total { get; init; }
     public int RealCoreDefects { get; init; }
+    public int ExpectedNoisePropagation { get; init; }
+    public int NumericTolerance { get; init; }
     public int NoiseOrNumericExplained { get; init; }
     public int Other { get; init; }
 }
