@@ -31,6 +31,7 @@ public sealed class ReconstructionCommands
         var semantic = new SemanticReconstructionEngine().Analyze(scene);
 
         WriteAnalysisReport(editor, objectIds.Length, scene.Lines.Count, scene.Texts.Count, semantic);
+        editor.WriteMessage($"\n{DrawingUnitDiagnostics.Format(document.Database.Insunits)}\n");
         // No commit: analysis is intentionally read-only.
     }
 
@@ -44,6 +45,8 @@ public sealed class ReconstructionCommands
         var database = document.Database;
         var objectIds = GetPdfImportSelection(editor);
         if (objectIds is null) return;
+
+        editor.WriteMessage($"\n{DrawingUnitDiagnostics.Format(database.Insunits)}\n");
 
         using var transaction = database.TransactionManager.StartTransaction();
 
