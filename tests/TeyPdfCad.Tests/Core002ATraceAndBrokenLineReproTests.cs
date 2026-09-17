@@ -1,5 +1,6 @@
 using TeyPdfCad.TestGenerator.Diagnostics;
 using TeyPdfCad.TestGenerator.Generation;
+using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Pipelines;
 using Xunit;
 
@@ -25,7 +26,7 @@ public sealed class Core002ATraceAndBrokenLineReproTests
             line.ProvenanceIds.Any(selectedProvenance.Contains) &&
             line.ProvenanceIds.Any(id => id.Contains(":dimline", StringComparison.Ordinal)));
 
-        var midpoint = new Models.Point2D(
+        var midpoint = new Point2D(
             (selectedDimensionLine.Start.X + selectedDimensionLine.End.X) / 2.0,
             (selectedDimensionLine.Start.Y + selectedDimensionLine.End.Y) / 2.0);
 
@@ -56,7 +57,7 @@ public sealed class Core002ATraceAndBrokenLineReproTests
         Assert.True(testCase.Noise.MicroBreak || testCase.IsDimensionLineBroken);
 
         var run = await new SemanticCoreTestPipeline().RunDetailedAsync(testCase);
-        Assert.Equal(Models.ExpectedResult.Recognized, run.Actual.Result);
+        Assert.Equal(ExpectedResult.Recognized, run.Actual.Result);
         Assert.NotNull(run.Trace.CoreResult);
 
         var provenance = run.Trace.CoreResult!.ProvenanceIds;
