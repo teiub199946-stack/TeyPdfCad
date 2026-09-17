@@ -1,3 +1,5 @@
+using TeyPdfCad.Core.Compatibility;
+
 namespace TeyPdfCad.Core.Recognition;
 
 internal readonly record struct ScaleObservation(double Scale, double Weight);
@@ -27,7 +29,7 @@ internal static class ScaleConsensusEstimator
         for (var i = 0; i < observations.Count; i++)
         {
             var seed = observations[i].Scale;
-            if (!double.IsFinite(seed) || seed <= 0) continue;
+            if (!NumericCompat.IsFinite(seed) || seed <= 0) continue;
 
             var members = observations
                 .Where(x => RelativeDifference(x.Scale, seed) <= relativeTolerance)
