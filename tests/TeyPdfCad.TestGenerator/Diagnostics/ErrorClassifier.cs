@@ -76,6 +76,7 @@ public sealed class ErrorClassifier
                            Math.Abs(actual.Value.Value - expected.ExpectedValue) <= _config.ValueToleranceAbsolute;
         if (!valueCorrect)
             return SemanticTerminal(expected, actual, DiagnosticCategory.WrongValue, legacyWrongPoints,
+                countCorrect: true,
                 valueCorrect: false,
                 reason: $"Expected value {expected.ExpectedValue:0.######}, Core returned {actual.Value?.ToString("0.######") ?? "<null>"}.");
 
@@ -83,7 +84,7 @@ public sealed class ErrorClassifier
                            Math.Abs(actual.DrawingScale.Value - expected.DrawingScale) <= _config.ScaleTolerance;
         if (!scaleCorrect)
             return SemanticTerminal(expected, actual, DiagnosticCategory.WrongScale, legacyWrongPoints,
-                valueCorrect: true, scaleCorrect: false,
+                countCorrect: true, valueCorrect: true, scaleCorrect: false,
                 reason: $"Expected scale 1:{expected.DrawingScale:0.######}, Core returned {actual.DrawingScale?.ToString("0.######") ?? "<null>"}.");
 
         var typeCorrect = TypesEquivalent(expected, actual);
@@ -93,7 +94,7 @@ public sealed class ErrorClassifier
                 ? DiagnosticCategory.ChainMismatch
                 : DiagnosticCategory.WrongDimensionType;
             return SemanticTerminal(expected, actual, category, legacyWrongPoints,
-                valueCorrect: true, scaleCorrect: true, typeCorrect: false,
+                countCorrect: true, valueCorrect: true, scaleCorrect: true, typeCorrect: false,
                 reason: $"Expected type {expected.DimensionType}, Core returned {actual.DimensionType?.ToString() ?? "<null>"}.");
         }
 
@@ -134,6 +135,7 @@ public sealed class ErrorClassifier
             ScaleCorrect = true,
             TypeCorrect = true,
             CountCorrect = true,
+            GeometryEvaluated = true,
             GeometryCorrect = geometryCorrect,
             AbstentionCorrect = null,
             MaxPaperError = maxPaper,
@@ -353,6 +355,7 @@ public sealed class ErrorClassifier
             IsRealCoreDefect = defect,
             WasLegacyWrongPoints = legacyWrongPoints,
             DetectionCorrect = detectionCorrect,
+            GeometryEvaluated = false,
             GeometryCorrect = false,
             AbstentionCorrect = abstentionCorrect,
             Reasons = new List<string> { reason }
@@ -382,6 +385,7 @@ public sealed class ErrorClassifier
             ScaleCorrect = scaleCorrect,
             TypeCorrect = typeCorrect,
             CountCorrect = countCorrect,
+            GeometryEvaluated = false,
             GeometryCorrect = false,
             Reasons = new List<string> { reason }
         };
