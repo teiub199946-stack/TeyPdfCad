@@ -77,8 +77,8 @@ public sealed class DiagnosticReportBuilder
 
         var legacy = stableRecords.Where(x => x.Diagnostic.WasLegacyWrongPoints).ToList();
         var legacyReal = legacy.Count(x => x.Diagnostic.IsRealCoreDefect);
-        var legacyExplained = legacy.Count(x => x.Diagnostic.Category is
-            DiagnosticCategory.ExpectedNoisePropagation or DiagnosticCategory.NumericTolerance);
+        var legacyNoise = legacy.Count(x => x.Diagnostic.Category == DiagnosticCategory.ExpectedNoisePropagation);
+        var legacyNumeric = legacy.Count(x => x.Diagnostic.Category == DiagnosticCategory.NumericTolerance);
 
         return new DiagnosticRegressionReport
         {
@@ -133,8 +133,10 @@ public sealed class DiagnosticReportBuilder
             {
                 Total = legacy.Count,
                 RealCoreDefects = legacyReal,
-                NoiseOrNumericExplained = legacyExplained,
-                Other = legacy.Count - legacyReal - legacyExplained
+                ExpectedNoisePropagation = legacyNoise,
+                NumericTolerance = legacyNumeric,
+                NoiseOrNumericExplained = legacyNoise + legacyNumeric,
+                Other = legacy.Count - legacyReal - legacyNoise - legacyNumeric
             },
             Categories = stableRecords
                 .GroupBy(x => x.Diagnostic.Category)
