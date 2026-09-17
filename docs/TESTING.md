@@ -75,7 +75,31 @@ dotnet run --project tests/TeyPdfCad.TestGenerator -- \
 `self-check` uses `ExpectedEchoPipeline`. It proves the generator/runner/reporting
 plumbing only. It is deliberately not presented as Semantic Core accuracy.
 
-Compare real Semantic Core output:
+Run the real Semantic Core benchmark:
+
+```bash
+dotnet run --project tests/TeyPdfCad.TestGenerator -- \
+  core-run --count 10000 --seed 12345 --output artifacts/semantic-core/10000
+```
+
+`core-run` performs the full CAD-neutral test path:
+
+```text
+DimensionCase drawing coordinates
+  -> paper/PDFIMPORT-like PrimitiveScene
+  -> SemanticReconstructionEngine
+  -> detected paper-space semantics
+  -> drawing coordinates
+  -> RegressionRunner
+```
+
+The adapter does not feed expected type, expected value, expected confidence or expected
+result into the Core recognizer. Without `--baseline`, `core-run` always writes the
+honest report and exits successfully even when the report's release gate is `FAIL`.
+This is intentional for first-baseline measurement and GitHub Actions artifact capture.
+With `--baseline`, the normal regression gate is enforced.
+
+Compare externally supplied actual results:
 
 ```bash
 dotnet run --project tests/TeyPdfCad.TestGenerator -- \
@@ -108,6 +132,12 @@ The runner classifies every case as one of:
 Definition points are compared with endpoint order tolerance, so a recognizer is
 not failed merely for swapping P1/P2.
 
+Exploded non-axis PDF primitives can be compatible with both native AutoCAD
+`AlignedDimension` and `RotatedDimension` when the original native class has been
+lost. `SemanticCoreTestPipeline` derives this condition from the generated
+`PrimitiveScene` and reports it as `SemanticTypeAmbiguity`; it does not inspect the
+expected case label to manufacture a passing type.
+
 ## Metrics and reports
 
 Every run writes `report.json` and `report.md`.
@@ -118,12 +148,53 @@ The reports include:
 - expected dimensions and expected negatives;
 - TP/TN/FP/FN;
 - wrong geometry/value/type/scale/confidence/count;
+- semantic type ambiguity count;
 - precision, recall and F1;
 - total runtime, cases/sec, median, p95 and p99;
 - breakdowns by angle, scale, dimension type, arrow type, text position,
   noise level and dimension length;
 - top failures and worst categories;
 - baseline deltas and release-gate status.
+
+## First real Semantic Core baseline — TEST-002
+
+Seed `12345`, 10,000 deterministic synthetic cases, real
+`SemanticReconstructionEngine`:
+
+| Metric | Result |
+|---|---:|
+| Precision | 94.979% |
+| Recall | 85.931% |
+| F1 | 90.229% |
+| False positive | 318 |
+| False negative | 985 |
+| Wrong measurement | 0 |
+| Wrong geometry/count | 3592 |
+| Wrong type | 658 |
+| Semantic type ambiguity | 2595 |
+| Full semantic pass rate | 39.470% |
+| False-positive rate on expected negatives | 12.725% |
+
+The release gate is `FAIL` because the false-positive rate exceeds the configured
+0.5% maximum. The metric is intentionally not softened or rebased away.
+
+The main confirmed Core weaknesses from this baseline are tracked separately:
+
+- false-positive negative-evidence rejection (`LinesTextNoArrows`, block/table lookalikes);
+- recall degradation under larger PDFIMPORT noise, high drawing scales and outside text;
+- no explicit Core abstention/ambiguous channel for borderline evidence;
+- unstable detected counts in longer dimension chains.
+
+### Geometry/noise caveat
+
+`WrongPoints` is intentionally retained in the honest report, but it must not be
+interpreted automatically as a pure recognizer defect. TEST-001 stores a clean DWG
+golden geometry plus injected PDFIMPORT-like paper-space coordinate jitter. When
+paper-space jitter is mapped back through drawing scale, the resulting drawing-space
+coordinate delta can legitimately exceed the fixed `0.05` point tolerance, especially
+at large scales. TEST-002 therefore does not hide these failures, but Core bug triage
+must separate actual reconstruction error from propagated input noise before changing
+the production recognizer or the tolerance policy.
 
 ## Baseline
 
@@ -140,7 +211,8 @@ rate, false-positive rate and wrong-measurement rate are compared. A degradation
 beyond the configured tolerance is reported as `REGRESSION`.
 
 Baseline changes should be deliberate and reviewable. Do not update a baseline
-just to make a failing gate green.
+just to make a failing gate green. The TEST-002 result above is an observed baseline,
+not automatically an accepted release baseline.
 
 ## Release gate
 
@@ -155,15 +227,17 @@ The initial gate fails when:
 
 ## Connecting Semantic Core
 
-Implement `ISemanticTestPipeline`.
-
-The adapter receives one `DimensionCase` and must return one
-`ActualDimensionResult`. Keep conversion from test data to `PrimitiveScene` in
-the adapter or test integration layer. Do not add test-generator dependencies to
+`SemanticCoreTestPipeline` is the Core-backed implementation of
+`ISemanticTestPipeline`. `DimensionCasePrimitiveSceneBuilder` owns test-case to
+`PrimitiveScene` conversion. This keeps synthetic/test concerns outside
 `TeyPdfCad.Core`.
 
-When the recognizer exposes a stable API, add a Core-backed implementation next
-to the test harness and feed its output into `RegressionRunner`.
+The current TEST-002 adapter converts clean drawing coordinates to paper coordinates,
+applies controlled PDFIMPORT-like evidence/noise, invokes `SemanticReconstructionEngine`,
+and maps detected paper-space points back with the detected drawing scale.
+
+Do not add test-generator dependencies to `TeyPdfCad.Core` and do not change the
+production recognizer simply to improve the TEST-002 score.
 
 ## Future AutoCAD round trip
 
@@ -195,7 +269,11 @@ dotnet build TeyPdfCad.sln --configuration Release --no-restore
 dotnet test TeyPdfCad.sln --configuration Release --no-build
 dotnet run --project tests/TeyPdfCad.TestGenerator \
   --configuration Release --no-build -- verify --output artifacts/generated/ci
+dotnet run --project tests/TeyPdfCad.TestGenerator \
+  --configuration Release --no-build -- core-run --count 10000 --seed 12345 \
+  --output artifacts/semantic-core/10000
 ```
 
-The GitHub Actions workflow runs the same acceptance path for
-`feature/test-generator` and pull requests.
+GitHub Actions runs the deterministic harness plus real Semantic Core baselines at
+100, 1,000 and 10,000 cases and uploads `report.json` / `report.md` as the
+`semantic-core-regression` artifact.
