@@ -1,3 +1,4 @@
+using TeyPdfCad.Core.Compatibility;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 
@@ -47,7 +48,7 @@ internal static class DimensionGeometryAnalysis
         var right = scalars.Max();
         var nearLeft = scalars.Where(x => x <= 0).DefaultIfEmpty(double.NegativeInfinity).Max();
         var nearRight = scalars.Where(x => x >= 0).DefaultIfEmpty(double.PositiveInfinity).Min();
-        if (!double.IsFinite(nearLeft) || !double.IsFinite(nearRight)) return false;
+        if (!NumericCompat.IsFinite(nearLeft) || !NumericCompat.IsFinite(nearRight)) return false;
         if (nearRight - nearLeft > text.Height * 8.0) return false;
 
         var leftPoint = points[Array.IndexOf(scalars, left)];
@@ -116,7 +117,7 @@ internal static class DimensionGeometryAnalysis
     public static double CanonicalScaleScore(double raw, double snapped)
     {
         var error = Math.Abs(raw - snapped) / Math.Max(snapped, 1e-9);
-        return 1.0 - Math.Clamp(error / 0.03, 0.0, 1.0);
+        return 1.0 - NumericCompat.Clamp(error / 0.03, 0.0, 1.0);
     }
 
     public static double ArrowEvidence(IEnumerable<LinePrimitive> lines, LinePrimitive dimensionLine,
