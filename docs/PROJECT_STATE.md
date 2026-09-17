@@ -69,6 +69,20 @@ Therefore the first product invariant is directly demonstrated on real AutoCAD 2
 
 The next associativity acceptance fixture must therefore include explicit measured geometry (for example a rectangle/line) plus dimensions whose extension origins land on that geometry. PASS requires that editing the measured object updates the reconstructed dimension automatically.
 
+### Managed AutoCAD 2022 associativity API spike
+
+A separate throwaway branch `feature/autocad-2022-dimassoc-spike` probed the exact AutoCAD 2022 managed assemblies used by this project.
+
+Evidence:
+
+- initial compile-time probe referenced `DimAssoc`, `OsnapPointRef`, and `DimAssocPointType` directly;
+- CI run `35259318178` compiled the production bridge but the test project failed with `CS0246` for all three types;
+- a follow-up reflection probe on commit `34aa13c6f83ceb153dab6914513144209538470f` verified that the AutoCAD 2022 managed DatabaseServices assembly does not export those native association types;
+- the same probe verifies that `Database.DimAssoc` exists as the DIMASSOC system setting, while `Dimension` exposes no public instance member containing `Assoc`;
+- AutoCAD 2022 Adapter CI run `35259524604` passed the reflection probe, build, tests and package verification.
+
+Engineering conclusion: the current pure C# managed writer can create correct native dimensions, but full native geometry association is not available through the public managed types probed here. Do not fake this by merely setting `DIMASSOC=2`. If full associative reconstruction becomes an MVP requirement, evaluate a narrow ObjectARX/C++ bridge or another verified native API path as a separate architectural task. Keep this concern outside Semantic Core.
+
 ## Units / INSUNITS diagnostics — implemented and CI-verified
 
 AutoCAD drawing coordinates are drawing units; they are not intrinsically millimeters. Autodesk defines `INSUNITS=4` as millimeters, `INSUNITS=6` as meters, and `INSUNITS=0` as undefined/unitless context.
@@ -111,11 +125,12 @@ This PDF must be preserved as a required future regression fixture. Do not weake
 - Current real-E2E work branch: `feature/autocad-2022-e2e-real`.
 - PR #13 is the isolated AutoCAD 2022 real-PDF diagnostics/E2E branch and remains review-gated.
 - Helper TEST-002/TEST-003 work must remain isolated from the AutoCAD host branch.
+- `feature/autocad-2022-dimassoc-spike` is a throwaway API-probe branch; do not merge it into product code.
 
 ## Near-term priorities
 
 1. Real-run the new `INSUNITS` diagnostics in AutoCAD 2022 and record the current drawing's unit context. Do not infer mm from the displayed number alone.
-2. Build an associativity acceptance PDF/DWG containing explicit measured geometry and prove whether native associations can be reconstructed; do not treat `DIMASSOC=2` as sufficient by itself.
+2. Keep native dimension associativity outside the current C# MVP unless a verified native bridge is explicitly approved. The next associativity fixture with explicit measured geometry remains useful for future bridge validation.
 3. Review and integrate TEST-003 findings before changing Semantic Core thresholds or algorithms.
 4. Add the real vector-glyph PDF as a regression fixture and implement `VectorTextRecognizer` as an upstream module, not as ad-hoc changes inside Semantic Core.
 5. Later: spatial scale partitioning for sheets containing multiple drawing scales.
