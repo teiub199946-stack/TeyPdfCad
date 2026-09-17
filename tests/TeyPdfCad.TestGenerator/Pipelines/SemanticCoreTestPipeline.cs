@@ -138,7 +138,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
         var sourceText = useChain ? null : representative.SourceText;
         var coreText = FindCoreText(scene, provenance, sourceText, paperDimensionLinePoint);
         var textPaper = coreText?.Position;
-        var textWorld = textPaper is null ? null : ToDrawing(textPaper.Value, drawingScale);
+        Point2D? textWorld = textPaper is null ? null : ToDrawing(textPaper.Value, drawingScale);
         var broken = provenance.Any(id =>
             id.Contains(":dimline:left", StringComparison.Ordinal) ||
             id.Contains(":dimline:right", StringComparison.Ordinal));
