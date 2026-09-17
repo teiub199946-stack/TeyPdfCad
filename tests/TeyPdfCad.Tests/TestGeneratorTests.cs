@@ -91,6 +91,48 @@ public sealed class TestGeneratorTests
     }
 
     [Fact]
+    public async Task AmbiguousActualDoesNotInflateTruePositiveOrFalsePositiveMetrics()
+    {
+        var source = new DimensionCaseGenerator().Generate(100, 24680);
+        var positive = source.Cases.First(x => x.ExpectedResult == ExpectedResult.Recognized);
+        var negative = source.Cases.First(x => x.ExpectedResult == ExpectedResult.Rejected);
+
+        var corpus = new TestCorpus
+        {
+            Seed = source.Seed,
+            Cases = new List<DimensionCase> { positive, negative }
+        };
+
+        var actual = new List<ActualDimensionResult>
+        {
+            new()
+            {
+                CaseId = positive.Id,
+                Result = ExpectedResult.Ambiguous
+            },
+            new()
+            {
+                CaseId = negative.Id,
+                Result = ExpectedResult.Ambiguous
+            }
+        };
+
+        var report = await new RegressionRunner().RunAsync(
+            corpus,
+            new JsonActualResultPipeline(actual),
+            new TestConfig());
+
+        Assert.Equal(0, report.TruePositive);
+        Assert.Equal(0, report.TrueNegative);
+        Assert.Equal(0, report.FalsePositive);
+        Assert.Equal(0, report.FalseNegative);
+        Assert.Equal(0, report.Precision);
+        Assert.Equal(0, report.Recall);
+        Assert.Equal(2, report.Failed);
+        Assert.All(report.Failures, x => Assert.Equal(ComparisonOutcome.AmbiguousMismatch, x.Outcome));
+    }
+
+    [Fact]
     public void BaselineEvaluatorDetectsRecallRegression()
     {
         var report = new RegressionReport
