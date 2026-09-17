@@ -158,6 +158,7 @@ public sealed record ActualDimensionResult
     public DimensionType? DimensionType { get; init; }
     public double? DrawingScale { get; init; }
     public ConfidenceClass? ConfidenceClass { get; init; }
+    public bool IsDimensionTypeAmbiguous { get; init; }
     public bool IsMissing { get; init; }
     public List<string> Diagnostics { get; init; } = new();
 }
@@ -167,6 +168,7 @@ public sealed record CaseComparison
     public string CaseId { get; init; } = string.Empty;
     public ComparisonOutcome Outcome { get; init; }
     public bool Passed { get; init; }
+    public bool SemanticTypeAmbiguity { get; init; }
     public double ElapsedMilliseconds { get; init; }
     public List<string> Reasons { get; init; } = new();
 }
@@ -236,6 +238,7 @@ public sealed record RegressionReport
     public int WrongConfidence { get; init; }
     public int WrongCount { get; init; }
     public int MissingActual { get; init; }
+    public int SemanticTypeAmbiguity { get; init; }
     public double Precision { get; init; }
     public double Recall { get; init; }
     public double F1 { get; init; }
