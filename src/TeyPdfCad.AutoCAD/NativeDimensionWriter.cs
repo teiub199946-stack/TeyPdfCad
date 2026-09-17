@@ -46,6 +46,7 @@ internal sealed class NativeDimensionWriter
             dimension.LayerId = database.Clayer;
             var objectId = targetSpace.AppendEntity(dimension);
             transaction.AddNewlyCreatedDBObject(dimension, true);
+            dimension.RecomputeDimensionBlock(true);
             created.Add(objectId);
         }
 
