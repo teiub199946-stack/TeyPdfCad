@@ -1,0 +1,40 @@
+{
+  "id": "case_000002",
+  "seed": 12345,
+  "dimensionType": "negative",
+  "expectedValue": 5200,
+  "p1": { "x": 0, "y": 0 },
+  "p2": { "x": 5200, "y": 0 },
+  "dimensionLinePoint": { "x": 2600, "y": 350 },
+  "rotation": 0,
+  "textPosition": { "x": 2600, "y": 350 },
+  "textPlacement": "centered",
+  "textHeight": 250,
+  "arrowType": "closedFilled",
+  "arrowSize": 250,
+  "extensionLineOffset": 150,
+  "extensionLineExtension": 125,
+  "drawingScale": 100,
+  "expectedConfidenceClass": "none",
+  "expectedResult": "rejected",
+  "expectedDimensions": 0,
+  "negativePattern": "textNearOrdinaryLine",
+  "noise": {
+    "coordinateJitter": 0.01,
+    "microBreak": false,
+    "endpointMismatch": true,
+    "angularSkewDegrees": 0.001,
+    "textOffset": { "x": 0.005, "y": -0.003 }
+  },
+  "observedGeometry": {
+    "p1": { "x": 0.004, "y": -0.006 },
+    "p2": { "x": 5199.995, "y": 0.003 },
+    "dimensionLinePoint": { "x": 2600.002, "y": 349.996 },
+    "textPosition": { "x": 2600.005, "y": 349.997 }
+  },
+  "isTextFlipped": false,
+  "isDimensionLineBroken": false,
+  "isInsideGeometry": false,
+  "segments": [],
+  "tags": ["fixture", "negative", "TextNearOrdinaryLine"]
+}

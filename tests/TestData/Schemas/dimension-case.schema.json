@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teypdfcad.local/schemas/dimension-case.schema.json",
+  "title": "TeyPdfCad DimensionCase",
+  "type": "object",
+  "required": [
+    "id",
+    "seed",
+    "dimensionType",
+    "expectedValue",
+    "p1",
+    "p2",
+    "dimensionLinePoint",
+    "rotation",
+    "textPosition",
+    "textPlacement",
+    "drawingScale",
+    "expectedResult",
+    "expectedDimensions"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^case_[0-9]{6}$" },
+    "seed": { "type": "integer" },
+    "dimensionType": {
+      "enum": ["linear", "rotated", "aligned", "chain", "negative"]
+    },
+    "expectedResult": {
+      "enum": ["recognized", "rejected", "ambiguous"]
+    },
+    "expectedDimensions": { "type": "integer", "minimum": 0 },
+    "drawingScale": { "type": "number", "exclusiveMinimum": 0 },
+    "rotation": { "type": "number" },
+    "expectedValue": { "type": "number" },
+    "textPlacement": {
+      "enum": [
+        "centered",
+        "above",
+        "below",
+        "offsetLeft",
+        "offsetRight",
+        "outsideLeft",
+        "outsideRight"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

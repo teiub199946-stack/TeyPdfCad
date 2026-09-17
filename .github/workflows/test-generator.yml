@@ -1,0 +1,58 @@
+name: test-generator
+
+on:
+  push:
+    branches:
+      - feature/test-generator
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "docs/TESTING.md"
+      - "Directory.Build.props"
+      - "TeyPdfCad.sln"
+      - ".github/workflows/test-generator.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore TeyPdfCad.sln
+
+      - name: Build
+        run: dotnet build TeyPdfCad.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test TeyPdfCad.sln --configuration Release --no-build
+
+      - name: Verify deterministic generator
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          verify
+          --output artifacts/generated/ci
+
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-generator-verification
+          path: |
+            artifacts/generated/ci/10000/report.json
+            artifacts/generated/ci/10000/report.md
+            artifacts/generated/ci/determinism/seed-12345.sha256
+          if-no-files-found: warn
