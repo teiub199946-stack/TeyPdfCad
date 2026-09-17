@@ -16,3 +16,11 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet restore src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj
       - run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeyPdfCad-AutoCAD2026
+          if-no-files-found: error
+          path: |
+            src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.dll
+            src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.Core.dll
+            src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.deps.json
