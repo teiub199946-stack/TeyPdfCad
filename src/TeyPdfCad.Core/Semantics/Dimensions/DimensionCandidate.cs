@@ -18,4 +18,8 @@ public sealed record DimensionCandidate(
     double DrawingScale,
     double Confidence,
     string SourceText,
-    double ArrowEvidence);
+    double ArrowEvidence,
+    IReadOnlyList<string>? SourcePrimitiveIds = null)
+{
+    public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
+}
