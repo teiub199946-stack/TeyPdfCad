@@ -101,3 +101,25 @@ public sealed record GeometrySubcheck
     public GeometryToleranceResult? Error { get; init; }
     public string Explanation { get; init; } = string.Empty;
 }
+
+public sealed record CaseDiagnostic
+{
+    public string CaseId { get; init; } = string.Empty;
+    public int Seed { get; init; }
+    public DiagnosticCategory Category { get; init; }
+    public bool IsRealCoreDefect { get; init; }
+    public bool WasLegacyWrongPoints { get; init; }
+    public bool DetectionCorrect { get; init; }
+    public bool? ValueCorrect { get; init; }
+    public bool? ScaleCorrect { get; init; }
+    public bool? TypeCorrect { get; init; }
+    public bool? CountCorrect { get; init; }
+    public bool GeometryCorrect { get; init; }
+    public bool? AbstentionCorrect { get; init; }
+    public double MaxPaperError { get; init; }
+    public double MaxWorldError { get; init; }
+    public double SignedPaperDx { get; init; }
+    public double SignedPaperDy { get; init; }
+    public List<GeometrySubcheck> GeometryChecks { get; init; } = new();
+    public List<string> Reasons { get; init; } = new();
+}
