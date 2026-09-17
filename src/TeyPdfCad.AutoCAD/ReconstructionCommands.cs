@@ -70,7 +70,7 @@ public sealed class ReconstructionCommands
                 $"selected={objectIds.Length}, lines={scene.Lines.Count}, texts={scene.Texts.Count}, " +
                 $"INSUNITS={(int)database.Insunits}. Drawing was not changed.\n");
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
             editor.WriteMessage($"\nTeyPdfCad fixture export failed: {ex.Message}\n");
         }
