@@ -16,7 +16,7 @@ public sealed class LinearDimensionRecognizer
         {
             if (!TryParseDimensionValue(text.Value, out var value) || value <= 0) continue;
             DimensionCandidate? best = null;
-            foreach (var line in scene.Lines)
+            foreach (var line in DimensionGeometryAnalysis.DimensionLineCandidates(scene.Lines, text))
             {
                 var candidate = TryBuildCandidate(scene, text, value, line, options);
                 if (candidate is not null && (best is null || candidate.Confidence > best.Confidence)) best = candidate;
