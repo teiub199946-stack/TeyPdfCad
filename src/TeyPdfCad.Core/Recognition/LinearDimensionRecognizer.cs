@@ -1,3 +1,4 @@
+using TeyPdfCad.Core.Compatibility;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Semantics.Dimensions;
@@ -63,7 +64,7 @@ public sealed class LinearDimensionRecognizer
                 if (probe is null || probe.Value.ProjectedDistance <= 1e-9) continue;
 
                 var rawScale = displayedValue / probe.Value.ProjectedDistance;
-                if (!double.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9) continue;
+                if (!NumericCompat.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9) continue;
 
                 var structuralWeight = 0.60 + 0.25 * probe.Value.TextScore + 0.15 * probe.Value.ArrowEvidence;
                 var observation = new ScaleObservation(rawScale, structuralWeight);
@@ -124,7 +125,7 @@ public sealed class LinearDimensionRecognizer
         var relativeError = Math.Abs(reconstructed - displayedValue) / Math.Max(displayedValue, 1.0);
         if (relativeError > options.MeasurementRelativeTolerance) return null;
 
-        var measurementScore = 1.0 - Math.Clamp(relativeError / options.MeasurementRelativeTolerance, 0.0, 1.0);
+        var measurementScore = 1.0 - NumericCompat.Clamp(relativeError / options.MeasurementRelativeTolerance, 0.0, 1.0);
         var scaleScore = options.DrawingScale.HasValue
             ? measurementScore
             : DimensionGeometryAnalysis.CanonicalScaleScore(rawScale, scale.Value);
@@ -143,7 +144,7 @@ public sealed class LinearDimensionRecognizer
             displayedValue,
             reconstructed,
             scale.Value,
-            Math.Clamp(confidence, 0.0, 1.0),
+            NumericCompat.Clamp(confidence, 0.0, 1.0),
             text.Value,
             probe.Value.ArrowEvidence,
             probe.Value.SourcePrimitiveIds);
@@ -194,7 +195,7 @@ public sealed class LinearDimensionRecognizer
         var projectedDistance = Math.Abs(GeometryMath.Dot(GeometryMath.Subtract(p2, p1), unitDim));
         if (projectedDistance <= 1e-9) return null;
 
-        var textScore = 1.0 - Math.Clamp(textDistance / textTolerance, 0.0, 1.0);
+        var textScore = 1.0 - NumericCompat.Clamp(textDistance / textTolerance, 0.0, 1.0);
         var arrows = DimensionGeometryAnalysis.ArrowEvidence(scene.Lines, dimensionLine, text.Height, unitDim);
         var provenanceIds = MergeProvenance(
             text.ProvenanceIds,
