@@ -17,4 +17,5 @@ public sealed record DimensionCandidate(
     double ReconstructedMeasurement,
     double DrawingScale,
     double Confidence,
-    string SourceText);
+    string SourceText,
+    double ArrowEvidence);
