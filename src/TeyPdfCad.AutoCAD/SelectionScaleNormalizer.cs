@@ -7,7 +7,7 @@ internal sealed class SelectionScaleNormalizer
 {
     public Matrix3d BuildTransform(Transaction transaction, IReadOnlyCollection<ObjectId> objectIds, double scale)
     {
-        if (!double.IsFinite(scale) || scale <= 0)
+        if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
             throw new ArgumentOutOfRangeException(nameof(scale));
 
         var anchor = FindLowerLeftAnchor(transaction, objectIds);
