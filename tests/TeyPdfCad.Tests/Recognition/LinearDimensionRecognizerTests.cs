@@ -30,6 +30,21 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Recognizes_Dimension_Line_Split_Around_Text()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(22, 0)));
+        scene.Lines.Add(new LinePrimitive(new Point2(30, 0), new Point2(52, 0)));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, -12), new Point2(0, 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(52, -12), new Point2(52, 1)));
+        scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+        Assert.Equal(5200, dimension.ReconstructedMeasurement, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+    }
+
+    [Fact]
     public void Recognizes_Aligned_Dimension_At_45_Degrees()
     {
         const double component = 36.76955262170047;
