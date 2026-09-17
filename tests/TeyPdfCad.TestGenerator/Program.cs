@@ -22,6 +22,7 @@ public static class Program
             {
                 "generate" => await GenerateAsync(cli, config),
                 "self-check" => await SelfCheckAsync(cli, config),
+                "core-run" => await CoreRunAsync(cli, config),
                 "compare" => await CompareAsync(cli, config),
                 "baseline" => await BaselineAsync(cli),
                 "verify" => await VerifyAsync(cli, config),
@@ -73,6 +74,43 @@ public static class Program
         Console.WriteLine($"Harness self-check: {report.ReleaseGate.Status}");
         Console.WriteLine($"Cases: {report.Total}, pass: {report.Passed}, fail: {report.Failed}");
         Console.WriteLine("NOTE: ExpectedEchoPipeline validates the test harness only; it is not Semantic Core accuracy.");
+        return report.ReleaseGate.Status == "PASS" ? 0 : 2;
+    }
+
+    private static async Task<int> CoreRunAsync(CliArgs cli, TestConfig config)
+    {
+        var count = cli.GetInt("--count", config.DefaultCount);
+        var seed = cli.GetInt("--seed", config.DefaultSeed);
+        var output = cli.Get("--output") ?? "artifacts/generated/core-run";
+        var baselinePath = cli.Get("--baseline");
+        var baseline = await LoadBaselineAsync(baselinePath);
+
+        var corpus = new DimensionCaseGenerator().Generate(count, seed);
+        await ArtifactWriter.WriteCorpusAsync(corpus, output, cli.Has("--split"));
+
+        var report = await new RegressionRunner().RunAsync(
+            corpus,
+            new SemanticCoreTestPipeline(),
+            config,
+            baseline);
+
+        await ArtifactWriter.WriteReportAsync(report, output);
+
+        Console.WriteLine($"Semantic Core regression: {report.ReleaseGate.Status}");
+        Console.WriteLine($"Cases: {report.Total}; pass: {report.Passed}; fail: {report.Failed}");
+        Console.WriteLine($"Precision: {report.Precision:P3}; Recall: {report.Recall:P3}; F1: {report.F1:P3}");
+        Console.WriteLine($"FP: {report.FalsePositive}; FN: {report.FalseNegative}; Wrong measurement: {report.WrongValue}");
+        Console.WriteLine($"Semantic type ambiguity: {report.SemanticTypeAmbiguity}");
+        Console.WriteLine($"Report: {Path.GetFullPath(Path.Combine(output, "report.json"))}");
+
+        // An initial measurement is allowed to be poor: without an accepted baseline this
+        // command records the truth and exits successfully so CI can upload the artifacts.
+        // Once --baseline is supplied, the existing release gate becomes enforceable.
+        if (string.IsNullOrWhiteSpace(baselinePath))
+        {
+            return 0;
+        }
+
         return report.ReleaseGate.Status == "PASS" ? 0 : 2;
     }
 
@@ -200,6 +238,7 @@ public static class Program
             Commands:
               generate   --count N --seed N --output DIR [--split]
               self-check --count N --seed N --output DIR [--baseline FILE]
+              core-run   --count N --seed N --output DIR [--baseline FILE] [--split]
               compare    --cases FILE --actual FILE --output DIR [--baseline FILE]
               baseline   --report FILE --output FILE
               verify     --output DIR
@@ -208,6 +247,8 @@ public static class Program
               --config FILE   Override testconfig.json.
 
             self-check/verify use ExpectedEchoPipeline and validate only the test infrastructure.
+            core-run uses the real SemanticReconstructionEngine. Without --baseline it records an honest baseline
+            even when the current Core does not satisfy the configured release thresholds.
             """);
         return 0;
     }
