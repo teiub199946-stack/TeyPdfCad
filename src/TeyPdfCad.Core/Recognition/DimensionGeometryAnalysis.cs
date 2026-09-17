@@ -54,7 +54,17 @@ internal static class DimensionGeometryAnalysis
         var rightPoint = points[Array.IndexOf(scalars, right)];
         if (GeometryMath.Distance(leftPoint, rightPoint) <= Math.Max(GeometryMath.Length(v1), GeometryMath.Length(v2))) return false;
 
-        merged = new LinePrimitive(leftPoint, rightPoint, first.Layer == second.Layer ? first.Layer : null);
+        var sourceIds = first.ProvenanceIds
+            .Concat(second.ProvenanceIds)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        merged = new LinePrimitive(
+            leftPoint,
+            rightPoint,
+            first.Layer == second.Layer ? first.Layer : null,
+            sourceIds);
         return true;
     }
 
