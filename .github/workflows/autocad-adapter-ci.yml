@@ -1,0 +1,18 @@
+name: AutoCAD Adapter CI
+
+on:
+  push:
+    branches: [ 'feature/autocad-bridge' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-autocad-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj
+      - run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
