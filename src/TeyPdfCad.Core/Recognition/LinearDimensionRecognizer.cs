@@ -1,4 +1,3 @@
-using System.Globalization;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Semantics.Dimensions;
@@ -57,7 +56,7 @@ public sealed class LinearDimensionRecognizer
 
         foreach (var text in scene.Texts)
         {
-            if (!TryParseDimensionValue(text.Value, out var displayedValue) || displayedValue <= 0)
+            if (!TryGetLinearDimensionValue(text.Value, out var displayedValue))
                 continue;
 
             ScaleObservation? best = null;
@@ -91,7 +90,7 @@ public sealed class LinearDimensionRecognizer
 
         foreach (var text in scene.Texts)
         {
-            if (!TryParseDimensionValue(text.Value, out var displayedValue) || displayedValue <= 0)
+            if (!TryGetLinearDimensionValue(text.Value, out var displayedValue))
                 continue;
 
             DimensionCandidate? best = null;
@@ -243,19 +242,23 @@ public sealed class LinearDimensionRecognizer
             && GeometryMath.Distance(a.DimensionLinePoint, b.DimensionLinePoint) <= tolerance;
     }
 
+    private static bool TryGetLinearDimensionValue(string value, out double displayedValue)
+    {
+        displayedValue = 0;
+        if (!DimensionTextParser.TryParse(value, out var parsed) || parsed is null)
+            return false;
+        if (parsed.Kind != DimensionTextKind.Linear)
+            return false;
+
+        displayedValue = parsed.NominalValue;
+        return displayedValue > 0;
+    }
+
     private static double NormalizeAngle(double degrees)
     {
         var value = degrees % 180.0;
         if (value < 0) value += 180.0;
         return value > 90.0 ? 180.0 - value : value;
-    }
-
-    private static bool TryParseDimensionValue(string value, out double parsed)
-    {
-        var normalized = value.Replace("\u00A0", string.Empty, StringComparison.Ordinal)
-            .Replace(" ", string.Empty, StringComparison.Ordinal)
-            .Replace(',', '.');
-        return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed);
     }
 
     private readonly record struct GeometryProbe(
