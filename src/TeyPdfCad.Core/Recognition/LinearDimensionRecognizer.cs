@@ -83,7 +83,9 @@ public sealed class LinearDimensionRecognizer
         var textScore = 1.0 - Math.Clamp(textDistance / textTolerance, 0.0, 1.0);
         var measurementScore = 1.0 - Math.Clamp(relativeError / options.MeasurementRelativeTolerance, 0.0, 1.0);
         var scaleScore = options.DrawingScale.HasValue ? 1.0 : CanonicalScaleScore(rawScale, scale.Value);
-        var confidence = 0.20 + 0.20 + 0.20 + 0.10 * textScore + 0.15 * scaleScore + 0.15 * measurementScore;
+        var arrowEvidence = CalculateArrowEvidence(scene.Lines, dimensionLine, text.Height, unitDim);
+        var confidence = 0.15 + 0.175 + 0.175 + 0.10 * textScore
+            + 0.15 * scaleScore + 0.15 * measurementScore + 0.10 * arrowEvidence;
 
         var angle = Math.Atan2(dimVector.Y, dimVector.X) * 180.0 / Math.PI;
         var normalized = Math.Abs(NormalizeAngle(angle));
@@ -99,7 +101,46 @@ public sealed class LinearDimensionRecognizer
             reconstructed,
             scale.Value,
             Math.Clamp(confidence, 0.0, 1.0),
-            text.Value);
+            text.Value,
+            arrowEvidence);
+    }
+
+    private static double CalculateArrowEvidence(
+        IEnumerable<LinePrimitive> lines,
+        LinePrimitive dimensionLine,
+        double textHeight,
+        Point2 unitDim)
+    {
+        var radius = Math.Max(textHeight * 2.0, GeometryMath.Distance(dimensionLine.Start, dimensionLine.End) * 0.04);
+        var atStart = HasTickOrArrowLine(lines, dimensionLine, dimensionLine.Start, radius, textHeight, unitDim);
+        var atEnd = HasTickOrArrowLine(lines, dimensionLine, dimensionLine.End, radius, textHeight, unitDim);
+        return (Convert.ToInt32(atStart) + Convert.ToInt32(atEnd)) / 2.0;
+    }
+
+    private static bool HasTickOrArrowLine(
+        IEnumerable<LinePrimitive> lines,
+        LinePrimitive dimensionLine,
+        Point2 endpoint,
+        double radius,
+        double textHeight,
+        Point2 unitDim)
+    {
+        foreach (var line in lines)
+        {
+            if (ReferenceEquals(line, dimensionLine)) continue;
+
+            var length = GeometryMath.Distance(line.Start, line.End);
+            if (length <= 1e-9 || length > Math.Max(textHeight * 4.0, radius * 2.0)) continue;
+
+            var midpoint = GeometryMath.Midpoint(line.Start, line.End);
+            if (GeometryMath.Distance(midpoint, endpoint) > radius) continue;
+
+            var unit = GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start));
+            var absoluteDot = Math.Abs(GeometryMath.Dot(unit, unitDim));
+            if (absoluteDot is > 0.20 and < 0.98) return true;
+        }
+
+        return false;
     }
 
     private static LinePrimitive? FindBestExtensionLine(
