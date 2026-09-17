@@ -19,7 +19,8 @@ public static class DimensionTextParser
         parsed = null;
         if (string.IsNullOrWhiteSpace(text)) return false;
 
-        var normalized = text.Trim().Replace('\u00A0', ' ');
+        var sourceText = text!;
+        var normalized = sourceText.Trim().Replace('\u00A0', ' ');
         normalized = DigitGroupingWhitespaceRegex.Replace(normalized, string.Empty);
 
         var match = FirstNumberRegex.Match(normalized);
@@ -32,7 +33,7 @@ public static class DimensionTextParser
 
         var prefix = normalized.Substring(0, match.Index).Trim();
         var kind = Classify(prefix);
-        parsed = new ParsedDimensionText(kind, value, text);
+        parsed = new ParsedDimensionText(kind, value, sourceText);
         return true;
     }
 
