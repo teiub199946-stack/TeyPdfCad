@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TeyPdfCad.Core</RootNamespace>
+    <AssemblyName>TeyPdfCad.Core</AssemblyName>
+  </PropertyGroup>
+</Project>
