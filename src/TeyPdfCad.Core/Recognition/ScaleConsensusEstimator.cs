@@ -10,10 +10,16 @@ internal static class ScaleConsensusEstimator
         IReadOnlyList<ScaleObservation> observations,
         double relativeTolerance,
         int minimumVotes)
-    {
-        if (observations.Count < minimumVotes) return null;
+        => EstimateClusters(observations, relativeTolerance, minimumVotes).FirstOrDefault();
 
-        ScaleConsensus? best = null;
+    public static IReadOnlyList<ScaleConsensus> EstimateClusters(
+        IReadOnlyList<ScaleObservation> observations,
+        double relativeTolerance,
+        int minimumVotes)
+    {
+        if (observations.Count < minimumVotes) return [];
+
+        var candidates = new List<ScaleConsensus>();
 
         for (var i = 0; i < observations.Count; i++)
         {
@@ -38,17 +44,21 @@ internal static class ScaleConsensusEstimator
 
             totalWeight = members.Sum(x => Math.Max(x.Weight, 1e-9));
             weightedScale = members.Sum(x => x.Scale * Math.Max(x.Weight, 1e-9)) / totalWeight;
-            var candidate = new ScaleConsensus(weightedScale, members.Length, totalWeight);
-
-            if (best is null
-                || candidate.Votes > best.Value.Votes
-                || (candidate.Votes == best.Value.Votes && candidate.Weight > best.Value.Weight))
-            {
-                best = candidate;
-            }
+            candidates.Add(new ScaleConsensus(weightedScale, members.Length, totalWeight));
         }
 
-        return best;
+        var result = new List<ScaleConsensus>();
+        foreach (var candidate in candidates
+                     .OrderByDescending(x => x.Votes)
+                     .ThenByDescending(x => x.Weight))
+        {
+            if (result.Any(existing => RelativeDifference(existing.Scale, candidate.Scale) <= relativeTolerance))
+                continue;
+
+            result.Add(candidate);
+        }
+
+        return result;
     }
 
     private static double RelativeDifference(double a, double b)
