@@ -26,7 +26,7 @@ internal sealed class NativeDimensionValidator
             var relativeError = Math.Abs(actual - expected) / Math.Max(Math.Abs(expected), 1.0);
             maxError = Math.Max(maxError, relativeError);
 
-            if (!double.IsFinite(actual) || relativeError > maxRelativeError)
+            if (double.IsNaN(actual) || double.IsInfinity(actual) || relativeError > maxRelativeError)
             {
                 return new NativeDimensionValidationResult(
                     false,
