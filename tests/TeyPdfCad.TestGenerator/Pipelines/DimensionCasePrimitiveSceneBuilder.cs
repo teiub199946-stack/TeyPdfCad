@@ -41,20 +41,15 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         return scene;
     }
 
-    private static void BuildSingle(PrimitiveScene scene, DimensionCase testCase, string sourcePrefix)
+    private static void BuildSingle(PrimitiveScene scene, DimensionCase testCase, string prefix)
     {
         var scale = testCase.DrawingScale;
-        var p1 = ToPaperObserved(testCase.P1, testCase.ObservedGeometry.P1, scale);
-        var p2 = ToPaperObserved(testCase.P2, testCase.ObservedGeometry.P2, scale);
-        var dimPoint = ToPaperObserved(testCase.DimensionLinePoint, testCase.ObservedGeometry.DimensionLinePoint, scale);
-        var textPoint = ToPaperObserved(testCase.TextPosition, testCase.ObservedGeometry.TextPosition, scale);
-
         AddDimensionEvidence(
             scene,
-            p1,
-            p2,
-            dimPoint,
-            textPoint,
+            ToPaperObserved(testCase.P1, testCase.ObservedGeometry.P1, scale),
+            ToPaperObserved(testCase.P2, testCase.ObservedGeometry.P2, scale),
+            ToPaperObserved(testCase.DimensionLinePoint, testCase.ObservedGeometry.DimensionLinePoint, scale),
+            ToPaperObserved(testCase.TextPosition, testCase.ObservedGeometry.TextPosition, scale),
             testCase.ExpectedValue,
             testCase.TextHeight / scale,
             testCase.ArrowType,
@@ -63,24 +58,19 @@ public sealed class DimensionCasePrimitiveSceneBuilder
             testCase.Rotation + (testCase.IsTextFlipped ? 180.0 : 0.0),
             testCase.Noise,
             testCase.IsDimensionLineBroken,
-            includeExtensionLines: true,
-            includeArrowEvidence: true,
-            sourcePrefix);
+            includeExtensions: true,
+            includeArrows: true,
+            prefix);
     }
 
     private static void BuildChain(PrimitiveScene scene, DimensionCase testCase)
     {
         var scale = testCase.DrawingScale;
-        var first = testCase.Segments[0].P1;
-        var last = testCase.Segments[^1].P2;
-        var overallDirection = Normalize(ToPaper(last, scale) - ToPaper(first, scale));
+        var first = ToPaper(testCase.Segments[0].P1, scale);
+        var last = ToPaper(testCase.Segments[^1].P2, scale);
+        var overallDirection = Normalize(last - first);
         var overallNormal = Perpendicular(overallDirection);
-        var cleanMidpoint = Midpoint(ToPaper(first, scale), ToPaper(last, scale));
-        var cleanDimPoint = ToPaper(testCase.DimensionLinePoint, scale);
-        var offset = Dot(cleanDimPoint - cleanMidpoint, overallNormal);
-        var textHeight = testCase.TextHeight / scale;
-        var arrowSize = testCase.ArrowSize / scale;
-        var extension = testCase.ExtensionLineExtension / scale;
+        var offset = Dot(ToPaper(testCase.DimensionLinePoint, scale) - Midpoint(first, last), overallNormal);
 
         for (var i = 0; i < testCase.Segments.Count; i++)
         {
@@ -89,9 +79,8 @@ public sealed class DimensionCasePrimitiveSceneBuilder
             var p2 = AddDeterministicPaperNoise(ToPaper(segment.P2, scale), testCase, i * 4 + 2);
             var direction = Normalize(p2 - p1);
             var normal = Perpendicular(direction);
-            var dimPoint = Midpoint(p1, p2) + normal * offset;
-            dimPoint = AddDeterministicPaperNoise(dimPoint, testCase, i * 4 + 3);
-            var textPoint = dimPoint + new Point2(testCase.Noise.TextOffset.X, testCase.Noise.TextOffset.Y);
+            var dimPoint = AddDeterministicPaperNoise(Midpoint(p1, p2) + normal * offset, testCase, i * 4 + 3);
+            var textPoint = dimPoint + new PaperPoint(testCase.Noise.TextOffset.X, testCase.Noise.TextOffset.Y);
 
             AddDimensionEvidence(
                 scene,
@@ -100,15 +89,15 @@ public sealed class DimensionCasePrimitiveSceneBuilder
                 dimPoint,
                 textPoint,
                 segment.ExpectedValue,
-                textHeight,
+                testCase.TextHeight / scale,
                 testCase.ArrowType,
-                arrowSize,
-                extension,
+                testCase.ArrowSize / scale,
+                testCase.ExtensionLineExtension / scale,
                 testCase.Rotation + (testCase.IsTextFlipped ? 180.0 : 0.0),
                 testCase.Noise,
                 testCase.IsDimensionLineBroken,
-                includeExtensionLines: true,
-                includeArrowEvidence: true,
+                includeExtensions: true,
+                includeArrows: true,
                 $"{testCase.Id}:chain:{i}");
         }
     }
@@ -130,15 +119,13 @@ public sealed class DimensionCasePrimitiveSceneBuilder
             case NegativePattern.LinesTextNoArrows:
                 AddDimensionEvidence(scene, p1, p2, dimPoint, textPoint, testCase.ExpectedValue,
                     textHeight, testCase.ArrowType, arrowSize, extension, testCase.Rotation,
-                    testCase.Noise, testCase.IsDimensionLineBroken, includeExtensionLines: true,
-                    includeArrowEvidence: false, prefix);
+                    testCase.Noise, testCase.IsDimensionLineBroken, true, false, prefix);
                 break;
 
             case NegativePattern.ArrowsLineNoExtensionLines:
                 AddDimensionEvidence(scene, p1, p2, dimPoint, textPoint, testCase.ExpectedValue,
                     textHeight, testCase.ArrowType, arrowSize, extension, testCase.Rotation,
-                    testCase.Noise, isBroken: false, includeExtensionLines: false,
-                    includeArrowEvidence: true, prefix);
+                    testCase.Noise, false, false, true, prefix);
                 break;
 
             case NegativePattern.TextNearOrdinaryLine:
@@ -192,10 +179,10 @@ public sealed class DimensionCasePrimitiveSceneBuilder
 
     private static void AddDimensionEvidence(
         PrimitiveScene scene,
-        Point2 p1,
-        Point2 p2,
-        Point2 dimensionLinePoint,
-        Point2 textPosition,
+        PaperPoint p1,
+        PaperPoint p2,
+        PaperPoint dimensionLinePoint,
+        PaperPoint textPosition,
         double displayedValue,
         double textHeight,
         ArrowType arrowType,
@@ -204,9 +191,9 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         double textRotation,
         NoiseSpec noise,
         bool isBroken,
-        bool includeExtensionLines,
-        bool includeArrowEvidence,
-        string sourcePrefix)
+        bool includeExtensions,
+        bool includeArrows,
+        string prefix)
     {
         var rawDirection = Normalize(p2 - p1);
         var direction = Rotate(rawDirection, noise.AngularSkewDegrees);
@@ -225,38 +212,30 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         }
 
         AddDimensionLine(scene, dimStart, dimEnd, textPosition, textHeight, arrowSize,
-            isBroken, noise.MicroBreak, noise.CoordinateJitter, sourcePrefix);
+            isBroken, noise.MicroBreak, noise.CoordinateJitter, prefix);
 
-        if (includeExtensionLines)
+        if (includeExtensions)
         {
-            AddExtensionLine(scene, p1, dimStart, extensionLineExtension, $"{sourcePrefix}:ext:1");
-            AddExtensionLine(scene, p2, dimEnd, extensionLineExtension, $"{sourcePrefix}:ext:2");
+            AddExtensionLine(scene, p1, dimStart, extensionLineExtension, $"{prefix}:ext:1");
+            AddExtensionLine(scene, p2, dimEnd, extensionLineExtension, $"{prefix}:ext:2");
         }
 
-        if (includeArrowEvidence)
+        if (includeArrows)
         {
-            AddArrowEvidence(scene, dimStart, direction, normal, arrowSize, arrowType, true, $"{sourcePrefix}:arrow:1");
-            AddArrowEvidence(scene, dimEnd, direction, normal, arrowSize, arrowType, false, $"{sourcePrefix}:arrow:2");
+            AddArrowEvidence(scene, dimStart, direction, normal, arrowSize, arrowType, true, $"{prefix}:arrow:1");
+            AddArrowEvidence(scene, dimEnd, direction, normal, arrowSize, arrowType, false, $"{prefix}:arrow:2");
         }
 
-        AddText(scene, displayedValue, textPosition, textHeight, textRotation, $"{sourcePrefix}:text");
+        AddText(scene, displayedValue, textPosition, textHeight, textRotation, $"{prefix}:text");
     }
 
-    private static void AddDimensionLine(
-        PrimitiveScene scene,
-        Point2 start,
-        Point2 end,
-        Point2 textPosition,
-        double textHeight,
-        double arrowSize,
-        bool isBroken,
-        bool microBreak,
-        double jitter,
-        string sourcePrefix)
+    private static void AddDimensionLine(PrimitiveScene scene, PaperPoint start, PaperPoint end,
+        PaperPoint textPosition, double textHeight, double arrowSize, bool isBroken, bool microBreak,
+        double jitter, string prefix)
     {
         if (!isBroken && !microBreak)
         {
-            AddLine(scene, start, end, $"{sourcePrefix}:dimline");
+            AddLine(scene, start, end, $"{prefix}:dimline");
             return;
         }
 
@@ -272,19 +251,19 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         var rightStart = center + direction * (gap / 2.0);
 
         if (Distance(start, leftEnd) > 1e-9)
-            AddLine(scene, start, leftEnd, $"{sourcePrefix}:dimline:left");
+            AddLine(scene, start, leftEnd, $"{prefix}:dimline:left");
         if (Distance(rightStart, end) > 1e-9)
-            AddLine(scene, rightStart, end, $"{sourcePrefix}:dimline:right");
+            AddLine(scene, rightStart, end, $"{prefix}:dimline:right");
     }
 
-    private static void AddExtensionLine(PrimitiveScene scene, Point2 definitionPoint, Point2 dimensionEndpoint,
-        double extension, string sourceId)
+    private static void AddExtensionLine(PrimitiveScene scene, PaperPoint definitionPoint,
+        PaperPoint dimensionEndpoint, double extension, string sourceId)
     {
         var vector = dimensionEndpoint - definitionPoint;
         var length = Math.Sqrt(Dot(vector, vector));
         if (length <= 1e-9)
         {
-            AddLine(scene, definitionPoint, definitionPoint + new Point2(0, Math.Max(extension, 0.1)), sourceId);
+            AddLine(scene, definitionPoint, definitionPoint + new PaperPoint(0, Math.Max(extension, 0.1)), sourceId);
             return;
         }
 
@@ -292,8 +271,8 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         AddLine(scene, definitionPoint, dimensionEndpoint + unit * Math.Max(extension, 0.0), sourceId);
     }
 
-    private static void AddArrowEvidence(PrimitiveScene scene, Point2 endpoint, Point2 direction, Point2 normal,
-        double requestedSize, ArrowType type, bool first, string sourceId)
+    private static void AddArrowEvidence(PrimitiveScene scene, PaperPoint endpoint, PaperPoint direction,
+        PaperPoint normal, double requestedSize, ArrowType type, bool first, string sourceId)
     {
         var size = Math.Max(Math.Abs(requestedSize), 0.05);
         var inward = first ? direction : direction * -1.0;
@@ -331,16 +310,26 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         var scale = testCase.DrawingScale;
         var p1 = ToPaper(testCase.P1, scale);
         var p2 = ToPaper(testCase.P2, scale);
-        var direction = Normalize(p2 - p1);
-        var normal = Perpendicular(direction);
+        var normal = Perpendicular(Normalize(p2 - p1));
         var shift = normal * Math.Max(testCase.TextHeight / scale * 6.0, 8.0);
-        var dimPoint = ToPaper(testCase.DimensionLinePoint, scale) + shift;
-        var textPoint = ToPaper(testCase.TextPosition, scale) + shift;
 
-        AddDimensionEvidence(scene, p1 + shift, p2 + shift, dimPoint, textPoint, testCase.ExpectedValue,
-            testCase.TextHeight / scale, testCase.ArrowType, testCase.ArrowSize / scale,
-            testCase.ExtensionLineExtension / scale, testCase.Rotation, new NoiseSpec(), false,
-            includeExtensionLines: true, includeArrowEvidence: true, $"{testCase.Id}:nearby");
+        AddDimensionEvidence(
+            scene,
+            p1 + shift,
+            p2 + shift,
+            ToPaper(testCase.DimensionLinePoint, scale) + shift,
+            ToPaper(testCase.TextPosition, scale) + shift,
+            testCase.ExpectedValue,
+            testCase.TextHeight / scale,
+            testCase.ArrowType,
+            testCase.ArrowSize / scale,
+            testCase.ExtensionLineExtension / scale,
+            testCase.Rotation,
+            new NoiseSpec(),
+            false,
+            true,
+            true,
+            $"{testCase.Id}:nearby");
     }
 
     private static void AddIntersectingDimension(PrimitiveScene scene, DimensionCase testCase)
@@ -350,22 +339,21 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         var p2 = ToPaper(testCase.P2, scale);
         var center = Midpoint(p1, p2);
         var halfLength = Distance(p1, p2) / 2.0;
-        var originalDirection = Normalize(p2 - p1);
-        var direction = Perpendicular(originalDirection);
+        var direction = Perpendicular(Normalize(p2 - p1));
         var normal = Perpendicular(direction);
         var q1 = center - direction * halfLength;
         var q2 = center + direction * halfLength;
-        var originalOffset = Distance(ToPaper(testCase.DimensionLinePoint, scale), center);
-        var dimPoint = center + normal * originalOffset;
+        var offset = Distance(ToPaper(testCase.DimensionLinePoint, scale), center);
+        var dimPoint = center + normal * offset;
 
         AddDimensionEvidence(scene, q1, q2, dimPoint, dimPoint, testCase.ExpectedValue,
             testCase.TextHeight / scale, testCase.ArrowType, testCase.ArrowSize / scale,
-            testCase.ExtensionLineExtension / scale, testCase.Rotation + 90.0, new NoiseSpec(), false,
-            includeExtensionLines: true, includeArrowEvidence: true, $"{testCase.Id}:intersecting");
+            testCase.ExtensionLineExtension / scale, testCase.Rotation + 90.0, new NoiseSpec(),
+            false, true, true, $"{testCase.Id}:intersecting");
     }
 
-    private static void AddTableLikeEvidence(PrimitiveScene scene, Point2 center, double height, double value,
-        double rotation, string prefix)
+    private static void AddTableLikeEvidence(PrimitiveScene scene, PaperPoint center, double height,
+        double value, double rotation, string prefix)
     {
         var w = Math.Max(height * 6.0, 6.0);
         var h = Math.Max(height * 3.0, 3.0);
@@ -373,23 +361,23 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         var right = center.X + w / 2.0;
         var bottom = center.Y - h / 2.0;
         var top = center.Y + h / 2.0;
-        AddLine(scene, new Point2(left, bottom), new Point2(right, bottom), $"{prefix}:row:1");
-        AddLine(scene, new Point2(left, top), new Point2(right, top), $"{prefix}:row:2");
-        AddLine(scene, new Point2(left, bottom), new Point2(left, top), $"{prefix}:col:1");
-        AddLine(scene, new Point2(right, bottom), new Point2(right, top), $"{prefix}:col:2");
-        AddLine(scene, new Point2(center.X, bottom), new Point2(center.X, top), $"{prefix}:col:mid");
+        AddLine(scene, new PaperPoint(left, bottom), new PaperPoint(right, bottom), $"{prefix}:row:1");
+        AddLine(scene, new PaperPoint(left, top), new PaperPoint(right, top), $"{prefix}:row:2");
+        AddLine(scene, new PaperPoint(left, bottom), new PaperPoint(left, top), $"{prefix}:col:1");
+        AddLine(scene, new PaperPoint(right, bottom), new PaperPoint(right, top), $"{prefix}:col:2");
+        AddLine(scene, new PaperPoint(center.X, bottom), new PaperPoint(center.X, top), $"{prefix}:col:mid");
         AddText(scene, value, center, height, rotation, $"{prefix}:text");
     }
 
-    private static void AddBlockLikeEvidence(PrimitiveScene scene, Point2 center, double height, double value,
-        double rotation, string prefix)
+    private static void AddBlockLikeEvidence(PrimitiveScene scene, PaperPoint center, double height,
+        double value, double rotation, string prefix)
     {
         var w = Math.Max(height * 5.0, 5.0);
         var h = Math.Max(height * 2.5, 2.5);
-        var a = new Point2(center.X - w / 2.0, center.Y - h / 2.0);
-        var b = new Point2(center.X + w / 2.0, center.Y - h / 2.0);
-        var c = new Point2(center.X + w / 2.0, center.Y + h / 2.0);
-        var d = new Point2(center.X - w / 2.0, center.Y + h / 2.0);
+        var a = new PaperPoint(center.X - w / 2.0, center.Y - h / 2.0);
+        var b = new PaperPoint(center.X + w / 2.0, center.Y - h / 2.0);
+        var c = new PaperPoint(center.X + w / 2.0, center.Y + h / 2.0);
+        var d = new PaperPoint(center.X - w / 2.0, center.Y + h / 2.0);
         AddLine(scene, a, b, $"{prefix}:block:1");
         AddLine(scene, b, c, $"{prefix}:block:2");
         AddLine(scene, c, d, $"{prefix}:block:3");
@@ -397,54 +385,54 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         AddText(scene, value, center, height, rotation, $"{prefix}:text");
     }
 
-    private static void AddPolylineLikeEvidence(PrimitiveScene scene, Point2 center, double height, double value,
-        double rotation, string prefix)
+    private static void AddPolylineLikeEvidence(PrimitiveScene scene, PaperPoint center, double height,
+        double value, double rotation, string prefix)
     {
-        var p0 = center + new Point2(-height * 5, -height * 0.5);
-        var p1 = center + new Point2(-height * 2, height * 0.8);
-        var p2 = center + new Point2(height, -height * 0.7);
-        var p3 = center + new Point2(height * 4, height * 0.5);
+        var p0 = center + new PaperPoint(-height * 5, -height * 0.5);
+        var p1 = center + new PaperPoint(-height * 2, height * 0.8);
+        var p2 = center + new PaperPoint(height, -height * 0.7);
+        var p3 = center + new PaperPoint(height * 4, height * 0.5);
         AddLine(scene, p0, p1, $"{prefix}:poly:1");
         AddLine(scene, p1, p2, $"{prefix}:poly:2");
         AddLine(scene, p2, p3, $"{prefix}:poly:3");
-        AddText(scene, value, center + new Point2(0, height * 1.5), height, rotation, $"{prefix}:text");
+        AddText(scene, value, center + new PaperPoint(0, height * 1.5), height, rotation, $"{prefix}:text");
     }
 
-    private static void AddRandomLookalike(PrimitiveScene scene, Point2 center, double height, double value,
-        double rotation, string prefix)
+    private static void AddRandomLookalike(PrimitiveScene scene, PaperPoint center, double height,
+        double value, double rotation, string prefix)
     {
-        AddLine(scene, center + new Point2(-height * 5, -height * 2), center + new Point2(height * 4, height * 1.2), $"{prefix}:random:1");
-        AddLine(scene, center + new Point2(-height * 3, height * 3), center + new Point2(height * 2, height * 4), $"{prefix}:random:2");
-        AddLine(scene, center + new Point2(height * 3, -height * 4), center + new Point2(height * 4, -height), $"{prefix}:random:3");
+        AddLine(scene, center + new PaperPoint(-height * 5, -height * 2), center + new PaperPoint(height * 4, height * 1.2), $"{prefix}:random:1");
+        AddLine(scene, center + new PaperPoint(-height * 3, height * 3), center + new PaperPoint(height * 2, height * 4), $"{prefix}:random:2");
+        AddLine(scene, center + new PaperPoint(height * 3, -height * 4), center + new PaperPoint(height * 4, -height), $"{prefix}:random:3");
         AddText(scene, value, center, height, rotation, $"{prefix}:text");
     }
 
-    private static void AddText(PrimitiveScene scene, double value, Point2 position, double height,
+    private static void AddText(PrimitiveScene scene, double value, PaperPoint position, double height,
         double rotation, string sourceId)
     {
         scene.Texts.Add(new TextPrimitive(
             value.ToString("0.###", CultureInfo.InvariantCulture),
-            position,
+            position.ToCore(),
             Math.Max(height, 1e-6),
             rotation,
             SourceIds: new[] { sourceId }));
     }
 
-    private static void AddLine(PrimitiveScene scene, Point2 start, Point2 end, string sourceId)
-        => scene.Lines.Add(new LinePrimitive(start, end, SourceIds: new[] { sourceId }));
+    private static void AddLine(PrimitiveScene scene, PaperPoint start, PaperPoint end, string sourceId)
+        => scene.Lines.Add(new LinePrimitive(start.ToCore(), end.ToCore(), SourceIds: new[] { sourceId }));
 
-    private static Point2 ToPaper(Point2D point, double scale) => new(point.X / scale, point.Y / scale);
+    private static PaperPoint ToPaper(Point2D point, double scale) => new(point.X / scale, point.Y / scale);
 
-    // Noise deltas stored by TEST-001 represent PDFIMPORT-space disturbances. The base
-    // DWG coordinate is scaled to paper, then the observed delta is applied in paper units.
-    private static Point2 ToPaperObserved(Point2D expected, Point2D observed, double scale)
+    // TEST-001 stores PDFIMPORT-like deltas. First scale the clean DWG point to paper,
+    // then apply the observed delta directly in paper units so noise is not divided twice.
+    private static PaperPoint ToPaperObserved(Point2D expected, Point2D observed, double scale)
         => new(expected.X / scale + (observed.X - expected.X), expected.Y / scale + (observed.Y - expected.Y));
 
-    private static Point2 AddDeterministicPaperNoise(Point2 point, DimensionCase testCase, int salt)
+    private static PaperPoint AddDeterministicPaperNoise(PaperPoint point, DimensionCase testCase, int salt)
     {
         var level = testCase.Noise.CoordinateJitter;
         if (level <= 0) return point;
-        return new Point2(
+        return new PaperPoint(
             point.X + StableNoise(testCase.Seed, salt) * level,
             point.Y + StableNoise(testCase.Seed, salt + 1) * level);
     }
@@ -461,30 +449,38 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         }
     }
 
-    private static Point2 Rotate(Point2 vector, double degrees)
+    private static PaperPoint Rotate(PaperPoint vector, double degrees)
     {
         if (Math.Abs(degrees) <= 1e-12) return vector;
         var radians = degrees * Math.PI / 180.0;
         var c = Math.Cos(radians);
         var s = Math.Sin(radians);
-        return Normalize(new Point2(vector.X * c - vector.Y * s, vector.X * s + vector.Y * c));
+        return Normalize(new PaperPoint(vector.X * c - vector.Y * s, vector.X * s + vector.Y * c));
     }
 
-    private static Point2 Normalize(Point2 vector)
+    private static PaperPoint Normalize(PaperPoint vector)
     {
         var length = Math.Sqrt(Dot(vector, vector));
-        return length <= 1e-12 ? new Point2(1, 0) : vector * (1.0 / length);
+        return length <= 1e-12 ? new PaperPoint(1, 0) : vector * (1.0 / length);
     }
 
-    private static Point2 Perpendicular(Point2 vector) => new(-vector.Y, vector.X);
-    private static double Dot(Point2 a, Point2 b) => a.X * b.X + a.Y * b.Y;
-    private static double Distance(Point2 a, Point2 b) => Math.Sqrt(Dot(a - b, a - b));
-    private static Point2 Midpoint(Point2 a, Point2 b) => new((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
+    private static PaperPoint Perpendicular(PaperPoint vector) => new(-vector.Y, vector.X);
+    private static double Dot(PaperPoint a, PaperPoint b) => a.X * b.X + a.Y * b.Y;
+    private static double Distance(PaperPoint a, PaperPoint b) => Math.Sqrt(Dot(a - b, a - b));
+    private static PaperPoint Midpoint(PaperPoint a, PaperPoint b) => new((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
 
-    private static double ProjectionParameter(Point2 p, Point2 a, Point2 b)
+    private static double ProjectionParameter(PaperPoint p, PaperPoint a, PaperPoint b)
     {
         var ab = b - a;
         var denominator = Dot(ab, ab);
         return denominator <= 1e-12 ? 0.5 : Dot(p - a, ab) / denominator;
+    }
+
+    private readonly record struct PaperPoint(double X, double Y)
+    {
+        public Point2 ToCore() => new(X, Y);
+        public static PaperPoint operator +(PaperPoint a, PaperPoint b) => new(a.X + b.X, a.Y + b.Y);
+        public static PaperPoint operator -(PaperPoint a, PaperPoint b) => new(a.X - b.X, a.Y - b.Y);
+        public static PaperPoint operator *(PaperPoint a, double scalar) => new(a.X * scalar, a.Y * scalar);
     }
 }
