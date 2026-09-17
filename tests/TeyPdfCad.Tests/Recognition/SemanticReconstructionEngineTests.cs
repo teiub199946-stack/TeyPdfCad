@@ -27,6 +27,8 @@ public sealed class SemanticReconstructionEngineTests
         var chain = Assert.Single(result.DimensionChains);
         Assert.Equal(5200, chain.TotalDisplayedValue, 6);
         Assert.Equal(100, result.DominantDrawingScale);
+        var scale = Assert.Single(result.DetectedDrawingScales);
+        Assert.Equal(100, scale, 6);
         Assert.True(result.AverageDimensionConfidence >= 0.75);
     }
 }
