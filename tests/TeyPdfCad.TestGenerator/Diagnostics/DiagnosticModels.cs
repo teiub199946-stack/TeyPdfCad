@@ -114,6 +114,7 @@ public sealed record CaseDiagnostic
     public bool? ScaleCorrect { get; init; }
     public bool? TypeCorrect { get; init; }
     public bool? CountCorrect { get; init; }
+    public bool GeometryEvaluated { get; init; }
     public bool GeometryCorrect { get; init; }
     public bool? AbstentionCorrect { get; init; }
     public double MaxPaperError { get; init; }
