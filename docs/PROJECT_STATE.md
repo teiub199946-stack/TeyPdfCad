@@ -63,7 +63,28 @@ Therefore the first product invariant is directly demonstrated on real AutoCAD 2
 
 `Vector PDF -> PDFIMPORT -> PrimitiveScene -> Semantic Core -> native Dimension -> real Measurement ~= semantic value`
 
-The remaining `Associative=No` status is a separate engineering gap and must not be confused with native-object reconstruction success.
+### Associativity interpretation
+
+`Associative=No` is not yet proven to be a defect in the writer. The first TrueType control PDF was intentionally minimal and primarily contains dimension graphics; it does not provide a robust independent measured-object geometry target for every extension point. AutoCAD associativity requires a dimension point to be coupled to actual geometry. Setting `DIMASSOC=2` alone is not sufficient proof that an API-created dimension is correctly associated.
+
+The next associativity acceptance fixture must therefore include explicit measured geometry (for example a rectangle/line) plus dimensions whose extension origins land on that geometry. PASS requires that editing the measured object updates the reconstructed dimension automatically.
+
+## Units / INSUNITS diagnostics — implemented and CI-verified
+
+AutoCAD drawing coordinates are drawing units; they are not intrinsically millimeters. Autodesk defines `INSUNITS=4` as millimeters, `INSUNITS=6` as meters, and `INSUNITS=0` as undefined/unitless context.
+
+A new adapter diagnostic now reports the current drawing units in both `TEYPDFANALYZE` and `TEYPDFRECONSTRUCT` without silently changing them:
+
+- `Millimeters`: explicitly reports `INSUNITS=4` and `1 drawing unit = 1 mm`.
+- `Undefined`: explicitly reports the engineering-unit interpretation as unverified and does not claim millimeters.
+- other units such as `Meters`: explicitly reports that current drawing units are not millimeters and must not be interpreted as mm without conversion.
+
+TDD evidence:
+
+- RED run: AutoCAD 2022 CI run `35258145634`; 3 new unit-diagnostic tests failed because `DrawingUnitDiagnostics` did not yet exist while the previous 7 tests passed.
+- GREEN run: AutoCAD 2022 CI run `35258421175`; build, all tests, net48 output verification, package staging and artifact upload passed.
+
+No automatic unit conversion and no Semantic Core change were introduced by this step.
 
 ## Verified real vector-glyph / SHX-style failure case
 
@@ -93,8 +114,8 @@ This PDF must be preserved as a required future regression fixture. Do not weake
 
 ## Near-term priorities
 
-1. Units / `INSUNITS` diagnostics and engineering-unit semantics. Do not silently assume that a drawing unit means millimeters; AutoCAD coordinates themselves are unitless without drawing-unit context.
-2. Native dimension associativity. Current reconstructed object is native but AutoCAD Properties reports `Associative=No`.
+1. Real-run the new `INSUNITS` diagnostics in AutoCAD 2022 and record the current drawing's unit context. Do not infer mm from the displayed number alone.
+2. Build an associativity acceptance PDF/DWG containing explicit measured geometry and prove whether native associations can be reconstructed; do not treat `DIMASSOC=2` as sufficient by itself.
 3. Review and integrate TEST-003 findings before changing Semantic Core thresholds or algorithms.
 4. Add the real vector-glyph PDF as a regression fixture and implement `VectorTextRecognizer` as an upstream module, not as ad-hoc changes inside Semantic Core.
 5. Later: spatial scale partitioning for sheets containing multiple drawing scales.
@@ -105,3 +126,4 @@ This PDF must be preserved as a required future regression fixture. Do not weake
 - Native `Dimension.Measurement` must agree with the semantic value within the defined validation tolerance or the transaction must roll back.
 - Do not lower thresholds or relabel expected results merely to make metrics green.
 - Preserve provenance/source IDs needed for safe future cleanup of exploded PDFIMPORT primitives.
+- Never silently assign engineering units from the appearance of a dimension label; unit semantics must be explicit or separately inferred and validated.
