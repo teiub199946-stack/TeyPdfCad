@@ -67,6 +67,13 @@ public sealed class RegressionRunner
                 return Pass(expected.Id, elapsedMilliseconds);
             }
 
+            if (actual.Result == ExpectedResult.Ambiguous)
+            {
+                return Fail(
+                    ComparisonOutcome.AmbiguousMismatch,
+                    "Expected Rejected but actual was Ambiguous.");
+            }
+
             return Fail(
                 ComparisonOutcome.FalsePositive,
                 $"Expected Rejected but actual was {actual.Result}.");
@@ -87,6 +94,13 @@ public sealed class RegressionRunner
         if (actual.Result == ExpectedResult.Rejected)
         {
             return Fail(ComparisonOutcome.FalseNegative, "Expected a dimension but the actual result was Rejected.");
+        }
+
+        if (actual.Result == ExpectedResult.Ambiguous)
+        {
+            return Fail(
+                ComparisonOutcome.AmbiguousMismatch,
+                "Expected Recognized but actual was Ambiguous.");
         }
 
         if (actual.DetectedDimensions != expected.ExpectedDimensions)
@@ -206,11 +220,17 @@ public sealed class RegressionRunner
         var missingPositive = expectedPositiveCases.Count(
             x => byId[x.Id].Outcome == ComparisonOutcome.MissingActual);
 
-        var truePositive = expectedPositiveCases.Count - falseNegative - missingPositive;
+        var ambiguousPositive = expectedPositiveCases.Count(
+            x => byId[x.Id].Outcome == ComparisonOutcome.AmbiguousMismatch);
+
+        // Detection precision/recall measure whether a dimension was actually recognized.
+        // Semantic mismatches (wrong value/points/type/scale/confidence/count) still count
+        // as detected positives, but Rejected, Missing and Ambiguous do not.
+        var truePositive = expectedPositiveCases.Count - falseNegative - missingPositive - ambiguousPositive;
         var trueNegative = expectedNegativeCases.Count(x => byId[x.Id].Passed);
 
         var precisionDenominator = truePositive + falsePositive;
-        var recallDenominator = truePositive + falseNegative + missingPositive;
+        var recallDenominator = truePositive + falseNegative + missingPositive + ambiguousPositive;
         var precision = SafeDivide(truePositive, precisionDenominator);
         var recall = SafeDivide(truePositive, recallDenominator);
         var f1 = precision + recall <= 0 ? 0 : (2 * precision * recall) / (precision + recall);
