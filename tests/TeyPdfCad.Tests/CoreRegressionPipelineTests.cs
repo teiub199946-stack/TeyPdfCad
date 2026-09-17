@@ -57,6 +57,34 @@ public sealed class CoreRegressionPipelineTests
         Assert.Equal(0, actual.DetectedDimensions);
     }
 
+    [Fact]
+    public async Task NonAxis_Primitives_With_Parallel_Definition_And_Dimension_Directions_Are_Type_Ambiguous()
+    {
+        const double component = 3676.955262170047;
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_contract_rotated_45",
+            DimensionType = DimensionType.Rotated,
+            P2 = new Point2D(component, component),
+            DimensionLinePoint = new Point2D(1590.990243, 2085.965019),
+            TextPosition = new Point2D(1590.990243, 2085.965019),
+            Rotation = 45,
+            ObservedGeometry = new ObservedGeometry
+            {
+                P1 = new Point2D(0, 0),
+                P2 = new Point2D(component, component),
+                DimensionLinePoint = new Point2D(1590.990243, 2085.965019),
+                TextPosition = new Point2D(1590.990243, 2085.965019)
+            }
+        };
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(DimensionType.Aligned, actual.DimensionType);
+        Assert.True(actual.IsDimensionTypeAmbiguous);
+    }
+
     private static DimensionCase CleanHorizontalCase()
     {
         return new DimensionCase
