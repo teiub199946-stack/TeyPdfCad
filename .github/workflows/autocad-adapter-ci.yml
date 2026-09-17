@@ -24,3 +24,4 @@ jobs:
             src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.dll
             src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.Core.dll
             src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.deps.json
+            docs/AUTOCAD_MVP_TEST.md
