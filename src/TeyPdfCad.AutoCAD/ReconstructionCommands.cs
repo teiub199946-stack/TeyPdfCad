@@ -3,11 +3,30 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using TeyPdfCad.Core.Recognition;
+using TeyPdfCad.Core.Semantics;
 
 namespace TeyPdfCad.AutoCAD;
 
 public sealed class ReconstructionCommands
 {
+    [CommandMethod("TEYPDFANALYZE", CommandFlags.Modal | CommandFlags.UsePickSet)]
+    public void AnalyzeSelectedPdfImportObjects()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null) return;
+
+        var editor = document.Editor;
+        var objectIds = GetPdfImportSelection(editor);
+        if (objectIds is null) return;
+
+        using var transaction = document.Database.TransactionManager.StartTransaction();
+        var scene = new AutoCadPrimitiveReader().Read(transaction, objectIds);
+        var semantic = new SemanticReconstructionEngine().Analyze(scene);
+
+        WriteAnalysisReport(editor, scene.Lines.Count, scene.Texts.Count, semantic);
+        // No commit: analysis is intentionally read-only.
+    }
+
     [CommandMethod("TEYPDFRECONSTRUCT", CommandFlags.Modal | CommandFlags.UsePickSet)]
     public void ReconstructSelectedPdfImportObjects()
     {
@@ -16,19 +35,8 @@ public sealed class ReconstructionCommands
 
         var editor = document.Editor;
         var database = document.Database;
-
-        var selectionOptions = new PromptSelectionOptions
-        {
-            MessageForAdding = "\nSelect objects produced by PDFIMPORT: "
-        };
-        var selection = editor.GetSelection(selectionOptions);
-        if (selection.Status != PromptStatus.OK || selection.Value.Count == 0)
-        {
-            editor.WriteMessage("\nTeyPdfCad: nothing selected.");
-            return;
-        }
-
-        var objectIds = selection.Value.GetObjectIds();
+        var objectIds = GetPdfImportSelection(editor);
+        if (objectIds is null) return;
 
         using var transaction = database.TransactionManager.StartTransaction();
 
@@ -44,7 +52,8 @@ public sealed class ReconstructionCommands
         if (semantic.DetectedDrawingScales.Count != 1)
         {
             editor.WriteMessage(
-                $"\nTeyPdfCad: {semantic.DetectedDrawingScales.Count} scale groups were detected. " +
+                $"\nTeyPdfCad: {semantic.DetectedDrawingScales.Count} scale groups were detected " +
+                $"[{string.Join(", ", semantic.DetectedDrawingScales.Select(x => x.ToString("G8")))}]. " +
                 "Automatic global scaling is intentionally blocked until spatial scale partitioning is enabled. Drawing was not changed.");
             return;
         }
@@ -83,5 +92,46 @@ public sealed class ReconstructionCommands
             $"\nTeyPdfCad: reconstructed {createdIds.Count} native dimensions. " +
             $"Scale={scale:G8}; max native measurement error={validation.MaxRelativeError:P4}. " +
             "Source PDFIMPORT primitives were preserved for review.");
+    }
+
+    private static ObjectId[]? GetPdfImportSelection(Editor editor)
+    {
+        var selectionOptions = new PromptSelectionOptions
+        {
+            MessageForAdding = "\nSelect objects produced by PDFIMPORT: "
+        };
+        var selection = editor.GetSelection(selectionOptions);
+        if (selection.Status == PromptStatus.OK && selection.Value.Count > 0)
+            return selection.Value.GetObjectIds();
+
+        editor.WriteMessage("\nTeyPdfCad: nothing selected.");
+        return null;
+    }
+
+    private static void WriteAnalysisReport(
+        Editor editor,
+        int lineCount,
+        int textCount,
+        SemanticReconstructionResult semantic)
+    {
+        var scales = semantic.DetectedDrawingScales.Count == 0
+            ? "none"
+            : string.Join(", ", semantic.DetectedDrawingScales.Select(x => x.ToString("G8")));
+
+        editor.WriteMessage(
+            $"\nTeyPdfCad analysis: lines={lineCount}, texts={textCount}, " +
+            $"dimensions={semantic.Dimensions.Count}, chains={semantic.DimensionChains.Count}, " +
+            $"scales=[{scales}], avg confidence={semantic.AverageDimensionConfidence:P2}.");
+
+        foreach (var dimension in semantic.Dimensions.Take(20))
+        {
+            editor.WriteMessage(
+                $"\n  {dimension.Kind}: text='{dimension.SourceText}', value={dimension.DisplayedValue:G12}, " +
+                $"scale={dimension.DrawingScale:G8}, confidence={dimension.Confidence:P1}, " +
+                $"sources={dimension.ProvenanceIds.Count}");
+        }
+
+        if (semantic.Dimensions.Count > 20)
+            editor.WriteMessage($"\n  ... {semantic.Dimensions.Count - 20} more dimensions.");
     }
 }
