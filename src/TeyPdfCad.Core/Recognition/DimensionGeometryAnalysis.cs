@@ -7,6 +7,52 @@ internal static class DimensionGeometryAnalysis
 {
     private static readonly double[] CanonicalScales = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500];
 
+    public static IEnumerable<LinePrimitive> DimensionLineCandidates(IReadOnlyList<LinePrimitive> lines, TextPrimitive text)
+    {
+        foreach (var line in lines) yield return line;
+
+        for (var i = 0; i < lines.Count; i++)
+        for (var j = i + 1; j < lines.Count; j++)
+            if (TryMergeAcrossText(lines[i], lines[j], text, out var merged))
+                yield return merged;
+    }
+
+    private static bool TryMergeAcrossText(LinePrimitive first, LinePrimitive second, TextPrimitive text, out LinePrimitive merged)
+    {
+        merged = first;
+        var v1 = GeometryMath.Subtract(first.End, first.Start);
+        var v2 = GeometryMath.Subtract(second.End, second.Start);
+        if (GeometryMath.Length(v1) <= 1e-9 || GeometryMath.Length(v2) <= 1e-9) return false;
+
+        var u1 = GeometryMath.Normalize(v1);
+        var u2 = GeometryMath.Normalize(v2);
+        if (Math.Abs(GeometryMath.Dot(u1, u2)) < Math.Cos(2.0 * Math.PI / 180.0)) return false;
+
+        var sameLineTolerance = Math.Max(text.Height * 0.5, 1e-6);
+        if (GeometryMath.DistancePointToInfiniteLine(GeometryMath.Midpoint(second.Start, second.End), first.Start, first.End) > sameLineTolerance) return false;
+        if (GeometryMath.DistancePointToInfiniteLine(text.Position, first.Start, first.End) > text.Height * 4.0) return false;
+
+        var points = new[] { first.Start, first.End, second.Start, second.End };
+        var scalars = points.Select(p => GeometryMath.Dot(GeometryMath.Subtract(p, text.Position), u1)).ToArray();
+        var firstCenter = GeometryMath.Dot(GeometryMath.Subtract(GeometryMath.Midpoint(first.Start, first.End), text.Position), u1);
+        var secondCenter = GeometryMath.Dot(GeometryMath.Subtract(GeometryMath.Midpoint(second.Start, second.End), text.Position), u1);
+        if (firstCenter * secondCenter >= 0) return false;
+
+        var left = scalars.Min();
+        var right = scalars.Max();
+        var nearLeft = scalars.Where(x => x <= 0).DefaultIfEmpty(double.NegativeInfinity).Max();
+        var nearRight = scalars.Where(x => x >= 0).DefaultIfEmpty(double.PositiveInfinity).Min();
+        if (!double.IsFinite(nearLeft) || !double.IsFinite(nearRight)) return false;
+        if (nearRight - nearLeft > text.Height * 8.0) return false;
+
+        var leftPoint = points[Array.IndexOf(scalars, left)];
+        var rightPoint = points[Array.IndexOf(scalars, right)];
+        if (GeometryMath.Distance(leftPoint, rightPoint) <= Math.Max(GeometryMath.Length(v1), GeometryMath.Length(v2))) return false;
+
+        merged = new LinePrimitive(leftPoint, rightPoint, first.Layer == second.Layer ? first.Layer : null);
+        return true;
+    }
+
     public static double ProjectionParameter(Point2 point, Point2 a, Point2 b)
     {
         var ab = GeometryMath.Subtract(b, a);
