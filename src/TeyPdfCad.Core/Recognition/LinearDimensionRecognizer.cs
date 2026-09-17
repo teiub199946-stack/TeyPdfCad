@@ -26,8 +26,6 @@ public sealed class LinearDimensionRecognizer
                 {
                     var clusterOptions = options with { DrawingScale = cluster.Scale };
                     var clusterResult = RecognizeWithResolvedScale(scene, clusterOptions);
-
-                    // A scale cluster is accepted only if strict validation confirms enough dimensions.
                     if (clusterResult.Count < options.ScaleConsensusMinimumVotes) continue;
 
                     foreach (var candidate in clusterResult)
@@ -44,7 +42,6 @@ public sealed class LinearDimensionRecognizer
             }
         }
 
-        // Conservative fallback: fixed scale when supplied, otherwise canonical scales only.
         return RecognizeWithResolvedScale(scene, options);
     }
 
@@ -68,14 +65,12 @@ public sealed class LinearDimensionRecognizer
                 var rawScale = displayedValue / probe.Value.ProjectedDistance;
                 if (!double.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9) continue;
 
-                // This weight intentionally excludes measurement agreement: the raw scale is what we are estimating.
                 var structuralWeight = 0.60 + 0.25 * probe.Value.TextScore + 0.15 * probe.Value.ArrowEvidence;
                 var observation = new ScaleObservation(rawScale, structuralWeight);
                 if (best is null || observation.Weight > best.Value.Weight)
                     best = observation;
             }
 
-            // At most one vote per text object prevents one label from dominating via many nearby line candidates.
             if (best.HasValue) observations.Add(best.Value);
         }
 
@@ -150,7 +145,8 @@ public sealed class LinearDimensionRecognizer
             scale.Value,
             Math.Clamp(confidence, 0.0, 1.0),
             text.Value,
-            probe.Value.ArrowEvidence);
+            probe.Value.ArrowEvidence,
+            probe.Value.SourcePrimitiveIds);
     }
 
     private static GeometryProbe? TryAnalyzeGeometry(
@@ -200,6 +196,11 @@ public sealed class LinearDimensionRecognizer
 
         var textScore = 1.0 - Math.Clamp(textDistance / textTolerance, 0.0, 1.0);
         var arrows = DimensionGeometryAnalysis.ArrowEvidence(scene.Lines, dimensionLine, text.Height, unitDim);
+        var provenanceIds = MergeProvenance(
+            text.ProvenanceIds,
+            dimensionLine.ProvenanceIds,
+            ext1.ProvenanceIds,
+            ext2.ProvenanceIds);
 
         var angle = Math.Atan2(dimVector.Y, dimVector.X) * 180.0 / Math.PI;
         var normalized = NormalizeAngle(angle);
@@ -212,8 +213,16 @@ public sealed class LinearDimensionRecognizer
             GeometryMath.Midpoint(dimensionLine.Start, dimensionLine.End),
             projectedDistance,
             textScore,
-            arrows);
+            arrows,
+            provenanceIds);
     }
+
+    private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
+        => groups
+            .SelectMany(x => x)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     private static void AddOrReplaceEquivalent(List<DimensionCandidate> dimensions, DimensionCandidate candidate)
     {
@@ -268,5 +277,6 @@ public sealed class LinearDimensionRecognizer
         Point2 DimensionLinePoint,
         double ProjectedDistance,
         double TextScore,
-        double ArrowEvidence);
+        double ArrowEvidence,
+        IReadOnlyList<string> SourcePrimitiveIds);
 }
