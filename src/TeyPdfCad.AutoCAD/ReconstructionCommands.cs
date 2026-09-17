@@ -9,6 +9,13 @@ namespace TeyPdfCad.AutoCAD;
 
 public sealed class ReconstructionCommands
 {
+    [CommandMethod("TEYPDFPING", CommandFlags.Modal)]
+    public void Ping()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        document?.Editor.WriteMessage("\nTeyPdfCad PING OK. Plugin commands are registered.\n");
+    }
+
     [CommandMethod("TEYPDFANALYZE", CommandFlags.Modal | CommandFlags.UsePickSet)]
     public void AnalyzeSelectedPdfImportObjects()
     {
@@ -121,17 +128,17 @@ public sealed class ReconstructionCommands
         editor.WriteMessage(
             $"\nTeyPdfCad analysis: lines={lineCount}, texts={textCount}, " +
             $"dimensions={semantic.Dimensions.Count}, chains={semantic.DimensionChains.Count}, " +
-            $"scales=[{scales}], avg confidence={semantic.AverageDimensionConfidence:P2}.");
+            $"scales=[{scales}], avg confidence={semantic.AverageDimensionConfidence:P2}.\n");
 
         foreach (var dimension in semantic.Dimensions.Take(20))
         {
             editor.WriteMessage(
-                $"\n  {dimension.Kind}: text='{dimension.SourceText}', value={dimension.DisplayedValue:G12}, " +
+                $"  {dimension.Kind}: text='{dimension.SourceText}', value={dimension.DisplayedValue:G12}, " +
                 $"scale={dimension.DrawingScale:G8}, confidence={dimension.Confidence:P1}, " +
-                $"sources={dimension.ProvenanceIds.Count}");
+                $"sources={dimension.ProvenanceIds.Count}\n");
         }
 
         if (semantic.Dimensions.Count > 20)
-            editor.WriteMessage($"\n  ... {semantic.Dimensions.Count - 20} more dimensions.");
+            editor.WriteMessage($"  ... {semantic.Dimensions.Count - 20} more dimensions.\n");
     }
 }
