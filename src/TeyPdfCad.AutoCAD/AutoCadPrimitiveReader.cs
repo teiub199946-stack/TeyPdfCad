@@ -60,15 +60,37 @@ internal sealed class AutoCadPrimitiveReader
 
         for (var i = 0; i < segmentCount; i++)
         {
-            if (polyline.GetSegmentType(i) != SegmentType.Line) continue;
+            var sourceId = $"{handle}#segment:{i}";
+            switch (polyline.GetSegmentType(i))
+            {
+                case SegmentType.Line:
+                {
+                    var segment = polyline.GetLineSegmentAt(i);
+                    AddLine(
+                        scene,
+                        segment.StartPoint,
+                        segment.EndPoint,
+                        polyline.Layer,
+                        sourceId);
+                    break;
+                }
 
-            var segment = polyline.GetLineSegmentAt(i);
-            AddLine(
-                scene,
-                segment.StartPoint,
-                segment.EndPoint,
-                polyline.Layer,
-                $"{handle}#segment:{i}");
+                case SegmentType.Arc:
+                {
+                    var arc = polyline.GetArcSegmentAt(i);
+                    var steps = ArcTessellator.BuildSteps(arc.StartAngle, arc.EndAngle, sourceId);
+                    foreach (var step in steps)
+                    {
+                        AddLine(
+                            scene,
+                            arc.EvaluatePoint(step.StartParameter),
+                            arc.EvaluatePoint(step.EndParameter),
+                            polyline.Layer,
+                            step.SourceId);
+                    }
+                    break;
+                }
+            }
         }
     }
 
