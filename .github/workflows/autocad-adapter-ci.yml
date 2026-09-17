@@ -1,0 +1,31 @@
+name: AutoCAD Adapter CI
+
+on:
+  push:
+    branches: [ 'feature/autocad-bridge' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-autocad-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj
+      - run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
+      - run: dotnet test tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj --configuration Release --no-restore
+      - name: Stage AutoCAD test package
+        run: |
+          mkdir -p artifacts/autocad2026
+          cp src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.dll artifacts/autocad2026/
+          cp src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.Core.dll artifacts/autocad2026/
+          cp src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.deps.json artifacts/autocad2026/
+          cp docs/AUTOCAD_MVP_TEST.md artifacts/autocad2026/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeyPdfCad-AutoCAD2026
+          if-no-files-found: error
+          path: artifacts/autocad2026/
