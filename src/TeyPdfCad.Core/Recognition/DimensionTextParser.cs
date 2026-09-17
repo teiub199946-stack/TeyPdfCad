@@ -4,13 +4,15 @@ using TeyPdfCad.Core.Semantics.Dimensions;
 
 namespace TeyPdfCad.Core.Recognition;
 
-public static partial class DimensionTextParser
+public static class DimensionTextParser
 {
-    [GeneratedRegex(@"(?<=\d)[\s\u00A0]+(?=\d)")]
-    private static partial Regex DigitGroupingWhitespaceRegex();
+    private static readonly Regex DigitGroupingWhitespaceRegex = new(
+        @"(?<=\d)[\s\u00A0]+(?=\d)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    [GeneratedRegex(@"[+-]?\d+(?:[\.,]\d+)?")]
-    private static partial Regex FirstNumberRegex();
+    private static readonly Regex FirstNumberRegex = new(
+        @"[+-]?\d+(?:[\.,]\d+)?",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static bool TryParse(string? text, out ParsedDimensionText? parsed)
     {
@@ -18,17 +20,17 @@ public static partial class DimensionTextParser
         if (string.IsNullOrWhiteSpace(text)) return false;
 
         var normalized = text.Trim().Replace('\u00A0', ' ');
-        normalized = DigitGroupingWhitespaceRegex().Replace(normalized, string.Empty);
+        normalized = DigitGroupingWhitespaceRegex.Replace(normalized, string.Empty);
 
-        var match = FirstNumberRegex().Match(normalized);
+        var match = FirstNumberRegex.Match(normalized);
         if (!match.Success) return false;
 
         var numeric = match.Value.Replace(',', '.');
         if (!double.TryParse(numeric, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
             return false;
-        if (!double.IsFinite(value) || value <= 0) return false;
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0) return false;
 
-        var prefix = normalized[..match.Index].Trim();
+        var prefix = normalized.Substring(0, match.Index).Trim();
         var kind = Classify(prefix);
         parsed = new ParsedDimensionText(kind, value, text);
         return true;
@@ -38,7 +40,7 @@ public static partial class DimensionTextParser
     {
         if (prefix.Contains('Ø') || prefix.Contains('⌀')) return DimensionTextKind.Diameter;
 
-        var compact = prefix.Replace(" ", string.Empty, StringComparison.Ordinal);
+        var compact = prefix.Replace(" ", string.Empty);
         if (compact.Equals("R", StringComparison.OrdinalIgnoreCase)) return DimensionTextKind.Radius;
 
         if (prefix.Length == 0 || prefix.All(c => c is '~' or '≈' or '(' or '['))
