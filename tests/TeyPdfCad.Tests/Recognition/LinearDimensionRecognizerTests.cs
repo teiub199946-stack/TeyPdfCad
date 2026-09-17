@@ -104,6 +104,22 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Recognizes_Two_Independent_Scale_Groups_On_One_Drawing()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimension(scene, y: 0, importedLength: 50, displayedValue: "4800");
+        AddHorizontalDimension(scene, y: 30, importedLength: 75, displayedValue: "7200");
+        AddHorizontalDimension(scene, y: 100, importedLength: 50, displayedValue: "2000");
+        AddHorizontalDimension(scene, y: 130, importedLength: 75, displayedValue: "3000");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(4, dimensions.Count);
+        Assert.Equal(2, dimensions.Count(d => Math.Abs(d.DrawingScale - 96) < 1e-6));
+        Assert.Equal(2, dimensions.Count(d => Math.Abs(d.DrawingScale - 40) < 1e-6));
+    }
+
+    [Fact]
     public void Rejects_Number_Next_To_Ordinary_Line_Without_Extension_Lines()
     {
         var scene = new PrimitiveScene();
