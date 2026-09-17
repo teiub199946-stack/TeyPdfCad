@@ -39,4 +39,15 @@ public static class GeometryMath
         var rel = Subtract(point, lineStart);
         return Math.Abs(d.X * rel.Y - d.Y * rel.X) / len;
     }
+
+    public static double DistancePointToSegment(Point2 point, Point2 start, Point2 end)
+    {
+        var segment = Subtract(end, start);
+        var denominator = Dot(segment, segment);
+        if (denominator <= 1e-12) return Distance(point, start);
+
+        var t = Math.Clamp(Dot(Subtract(point, start), segment) / denominator, 0.0, 1.0);
+        var projection = new Point2(start.X + t * segment.X, start.Y + t * segment.Y);
+        return Distance(point, projection);
+    }
 }
