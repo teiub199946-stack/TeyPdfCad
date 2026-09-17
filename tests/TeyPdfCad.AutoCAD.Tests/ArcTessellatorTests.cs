@@ -8,12 +8,13 @@ public sealed class ArcTessellatorTests
     public void Semicircle_IsSplitIntoDeterministicTenDegreeChords()
     {
         var steps = ArcTessellator.BuildSteps(0, Math.PI, "2C0#segment:1");
+        var last = steps[steps.Count - 1];
 
         Assert.Equal(18, steps.Count);
         Assert.Equal(0, steps[0].StartParameter, 12);
-        Assert.Equal(Math.PI, steps[^1].EndParameter, 12);
+        Assert.Equal(Math.PI, last.EndParameter, 12);
         Assert.Equal("2C0#segment:1#arc:0", steps[0].SourceId);
-        Assert.Equal("2C0#segment:1#arc:17", steps[^1].SourceId);
+        Assert.Equal("2C0#segment:1#arc:17", last.SourceId);
 
         for (var i = 1; i < steps.Count; i++)
             Assert.Equal(steps[i - 1].EndParameter, steps[i].StartParameter, 12);
@@ -37,9 +38,10 @@ public sealed class ArcTessellatorTests
     public void FullCircle_IsBoundedAndDeterministic()
     {
         var steps = ArcTessellator.BuildSteps(0, Math.PI * 2.0, "circle#segment:0");
+        var last = steps[steps.Count - 1];
 
         Assert.Equal(36, steps.Count);
-        Assert.Equal("circle#segment:0#arc:35", steps[^1].SourceId);
+        Assert.Equal("circle#segment:0#arc:35", last.SourceId);
         Assert.All(steps, step => Assert.True(step.EndParameter > step.StartParameter));
     }
 }
