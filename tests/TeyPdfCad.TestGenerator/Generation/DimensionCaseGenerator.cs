@@ -19,6 +19,8 @@ public sealed class DimensionCaseGenerator
         1, 2, 5, 10, 20, 25, 50, 100, 200, 500
     };
 
+    private static readonly int[] ChainLengths = { 2, 3, 5, 10, 20 };
+    private static readonly double[] ChainAngles = { 0, 90, 30, 60, 15 };
     private static readonly TextPlacement[] TextPlacements = Enum.GetValues<TextPlacement>();
     private static readonly ArrowType[] ArrowTypes = Enum.GetValues<ArrowType>();
     private static readonly double[] NoiseLevels = { 0, 0.001, 0.01, 0.05, 0.1, 0.5 };
@@ -64,7 +66,7 @@ public sealed class DimensionCaseGenerator
             nextIndex++;
         }
 
-        foreach (var chainLength in new[] { 2, 3, 5, 10, 20 })
+        foreach (var chainLength in ChainLengths)
         {
             if (nextIndex >= count)
             {
@@ -86,9 +88,39 @@ public sealed class DimensionCaseGenerator
             nextIndex++;
         }
 
+        for (var i = 0; i < 2 && nextIndex < count; i++)
+        {
+            cases.Add(BuildAmbiguous(nextIndex, seed));
+            nextIndex++;
+        }
+
+        // The sustained distribution matters more than merely having one example.
+        // 25% negative lookalikes stress false-positive control, 10% chains stress
+        // multi-dimension reconstruction, 5% ambiguous cases exercise abstention,
+        // and the remaining 60% are positive linear/aligned/rotated dimensions.
         while (nextIndex < count)
         {
-            cases.Add(BuildRegular(nextIndex, seed));
+            var slot = nextIndex % 20;
+
+            if (slot < 5)
+            {
+                var pattern = NegativePatterns[(nextIndex / 5) % NegativePatterns.Length];
+                cases.Add(BuildNegative(nextIndex, seed, pattern));
+            }
+            else if (slot < 7)
+            {
+                var chainLength = ChainLengths[(nextIndex / 20 + slot) % ChainLengths.Length];
+                cases.Add(BuildChain(nextIndex, seed, chainLength));
+            }
+            else if (slot == 7)
+            {
+                cases.Add(BuildAmbiguous(nextIndex, seed));
+            }
+            else
+            {
+                cases.Add(BuildRegular(nextIndex, seed));
+            }
+
             nextIndex++;
         }
 
@@ -165,15 +197,8 @@ public sealed class DimensionCaseGenerator
     {
         var caseSeed = DeriveCaseSeed(globalSeed, index);
         var rng = new StableRandom(caseSeed);
-        var angle = segmentCount switch
-        {
-            2 => 0,
-            3 => 90,
-            5 => 30,
-            10 => 60,
-            _ => 15
-        };
-
+        var angle = ChainAngles[index % ChainAngles.Length];
+        var equalLengthSegments = index % 2 == 0;
         var scale = Scales[index % Scales.Length];
         var start = new Point2D(rng.NextRange(1000, 5000), rng.NextRange(1000, 5000));
         var radians = DegreesToRadians(angle);
@@ -183,10 +208,13 @@ public sealed class DimensionCaseGenerator
         var segments = new List<DimensionSegment>(segmentCount);
         var cursor = start;
         var total = 0.0;
+        var equalValue = FixedValues[(index + 7) % FixedValues.Length];
 
         for (var i = 0; i < segmentCount; i++)
         {
-            var value = FixedValues[(index + i + 7) % FixedValues.Length];
+            var value = equalLengthSegments
+                ? equalValue
+                : FixedValues[(index + i + 7) % FixedValues.Length];
             var next = Add(cursor, Scale(direction, value));
             segments.Add(new DimensionSegment
             {
@@ -232,8 +260,32 @@ public sealed class DimensionCaseGenerator
             {
                 "chain",
                 $"segments:{segmentCount}",
+                equalLengthSegments ? "equal-length" : "mixed-length",
                 angle == 0 ? "horizontal" : angle == 90 ? "vertical" : "inclined"
             }
+        };
+    }
+
+    private static DimensionCase BuildAmbiguous(int index, int globalSeed)
+    {
+        var caseSeed = DeriveCaseSeed(globalSeed, index);
+        var angle = Angles[(index + 5) % Angles.Length];
+        var result = BuildPositive(
+            index,
+            caseSeed,
+            FixedValues[(index + 11) % FixedValues.Length],
+            angle,
+            Scales[(index + 3) % Scales.Length],
+            TextPlacements[index % TextPlacements.Length],
+            ArrowTypes[(index + 2) % ArrowTypes.Length],
+            0.5,
+            angle == 0 || angle == 90 ? DimensionType.Linear : DimensionType.Aligned,
+            new List<string> { "ambiguous", "borderline-evidence" });
+
+        return result with
+        {
+            ExpectedResult = ExpectedResult.Ambiguous,
+            ExpectedConfidenceClass = ConfidenceClass.Low
         };
     }
 

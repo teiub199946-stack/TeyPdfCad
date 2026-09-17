@@ -15,9 +15,19 @@ The corpus includes:
 - centered/above/below/offset/outside text placement;
 - ClosedFilled, ClosedBlank, Open, ArchitecturalTick, Oblique and Dot arrows;
 - adversarial short/long, broken-line, flipped-text and dense/intersecting targets;
-- dimension chains with 2, 3, 5, 10 and 20 dimensions;
+- dimension chains with 2, 3, 5, 10 and 20 dimensions, both equal and mixed segment lengths;
 - negative lookalikes that must be rejected;
+- ambiguous borderline evidence targets where the correct action is to abstain;
 - controlled coordinate noise at 0, 0.001, 0.01, 0.05, 0.1 and 0.5.
+
+After the mandatory bootstrap cases, the sustained corpus mix is approximately
+25% negative lookalikes, 10% dimension chains, 5% ambiguous targets and 60%
+positive single dimensions. This makes false-positive and chain regressions
+statistically visible instead of representing them with only a handful of fixtures.
+
+Chain orientation varies independently across horizontal, vertical and inclined
+cases. Chains alternate equal-length and mixed-length segments, so spacing between
+centered dimension texts varies naturally with segment geometry.
 
 Each `DimensionCase` stores two geometries:
 

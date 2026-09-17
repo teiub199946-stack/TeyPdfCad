@@ -25,7 +25,10 @@ public sealed class TestGeneratorTests
         var corpus = new DimensionCaseGenerator().Generate(2000, 12345);
 
         Assert.Contains(corpus.Cases, x => x.ExpectedResult == ExpectedResult.Rejected);
+        Assert.Contains(corpus.Cases, x => x.ExpectedResult == ExpectedResult.Ambiguous);
         Assert.Contains(corpus.Cases, x => x.DimensionType == DimensionType.Chain && x.ExpectedDimensions == 20);
+        Assert.Contains(corpus.Cases, x => x.DimensionType == DimensionType.Chain && x.Tags.Contains("equal-length"));
+        Assert.Contains(corpus.Cases, x => x.DimensionType == DimensionType.Chain && x.Tags.Contains("mixed-length"));
         Assert.Contains(corpus.Cases, x => x.Noise.CoordinateJitter >= 0.5);
         Assert.Contains(corpus.Cases, x => x.Tags.Contains("broken-dimension-line"));
         Assert.Contains(corpus.Cases, x => x.TextPlacement == TextPlacement.OutsideRight);
@@ -34,6 +37,19 @@ public sealed class TestGeneratorTests
         {
             Assert.Contains(corpus.Cases, x => x.ArrowType == arrowType);
         }
+    }
+
+    [Fact]
+    public void LargeCorpusHasSustainedNegativeChainAndAmbiguousCoverage()
+    {
+        var corpus = new DimensionCaseGenerator().Generate(10000, 12345);
+        var negatives = corpus.Cases.Count(x => x.ExpectedResult == ExpectedResult.Rejected);
+        var chains = corpus.Cases.Count(x => x.DimensionType == DimensionType.Chain);
+        var ambiguous = corpus.Cases.Count(x => x.ExpectedResult == ExpectedResult.Ambiguous);
+
+        Assert.True(negatives >= 2400, $"Expected at least 2400 negative cases, got {negatives}.");
+        Assert.True(chains >= 950, $"Expected at least 950 chain cases, got {chains}.");
+        Assert.True(ambiguous >= 450, $"Expected at least 450 ambiguous cases, got {ambiguous}.");
     }
 
     [Fact]
