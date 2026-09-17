@@ -1,0 +1,105 @@
+name: Full Project Backup
+
+on:
+  push:
+    branches: [ 'ops/full-project-backup' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  actions: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all repository refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin \
+            '+refs/heads/*:refs/remotes/origin/*' \
+            '+refs/tags/*:refs/tags/*' \
+            '+refs/pull/*/head:refs/remotes/pull/*'
+
+      - name: Build complete backup payload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p backup/source-branches backup/source-prs backup/github-metadata
+
+          git show-ref | sort > backup/all_refs.txt
+          git for-each-ref refs/remotes/origin --format='%(refname:short) %(objectname)' | sort > backup/branches.txt
+          git for-each-ref refs/tags --format='%(refname:short) %(objectname)' | sort > backup/tags.txt
+          git for-each-ref refs/remotes/pull --format='%(refname:short) %(objectname)' | sort > backup/pull_refs.txt
+          git log --all --date=iso-strict --pretty=format:'%H%x09%ad%x09%an%x09%s' > backup/commits.tsv
+
+          git bundle create backup/TeyPdfCad-all-refs.bundle --all
+          git bundle verify backup/TeyPdfCad-all-refs.bundle > backup/bundle-verify.txt 2>&1
+
+          while read -r ref; do
+            [ "$ref" = "origin/HEAD" ] && continue
+            safe=$(echo "$ref" | sed 's#^origin/##; s#/#__#g')
+            git archive --format=zip --output="backup/source-branches/${safe}.zip" "$ref"
+          done < <(git for-each-ref refs/remotes/origin --format='%(refname:short)' | sort)
+
+          while read -r ref; do
+            safe=$(echo "$ref" | sed 's#^pull/##; s#/#__#g')
+            git archive --format=zip --output="backup/source-prs/PR_${safe}.zip" "$ref"
+          done < <(git for-each-ref refs/remotes/pull --format='%(refname:short)' | sort)
+
+          gh api "repos/${GITHUB_REPOSITORY}" > backup/github-metadata/repository.json
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls?state=all&per_page=100" | jq 'add' > backup/github-metadata/pulls.json
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues?state=all&per_page=100" | jq 'add' > backup/github-metadata/issues.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows" > backup/github-metadata/workflows.json
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" | jq '[.[].workflow_runs[]]' > backup/github-metadata/workflow-runs.json
+
+          mkdir -p backup/github-metadata/pr-details
+          jq -r '.[].number' backup/github-metadata/pulls.json | while read -r n; do
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${n}" > "backup/github-metadata/pr-details/pr-${n}.json"
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${n}/comments?per_page=100" | jq 'add' > "backup/github-metadata/pr-details/pr-${n}-conversation-comments.json"
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${n}/reviews?per_page=100" | jq 'add' > "backup/github-metadata/pr-details/pr-${n}-reviews.json"
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/pulls/${n}/comments?per_page=100" | jq 'add' > "backup/github-metadata/pr-details/pr-${n}-review-comments.json"
+          done
+
+          cat > backup/RESTORE.md <<'EOF'
+          # TeyPdfCad full GitHub backup
+
+          This payload contains:
+          - `TeyPdfCad-all-refs.bundle`: complete Git history/refs captured by the workflow;
+          - ZIP source snapshots for every remote branch;
+          - ZIP source snapshots for every fetched pull-request head;
+          - branch/tag/ref/commit manifests;
+          - repository, PR, issue, review/comment and workflow-run metadata.
+
+          ## Restore the Git repository
+
+          ```bash
+          git clone TeyPdfCad-all-refs.bundle TeyPdfCad-restored
+          cd TeyPdfCad-restored
+          git branch -a
+          git tag
+          ```
+
+          The source ZIPs are convenience snapshots; the `.bundle` is the canonical Git backup.
+          EOF
+
+          find backup -type f -print0 | sort -z | xargs -0 sha256sum > backup/SHA256SUMS.txt
+          du -ah backup | sort -h > backup/SIZES.txt
+
+      - name: Upload complete project backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeyPdfCad-FULL-GitHub-Backup
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 90
+          path: backup/
