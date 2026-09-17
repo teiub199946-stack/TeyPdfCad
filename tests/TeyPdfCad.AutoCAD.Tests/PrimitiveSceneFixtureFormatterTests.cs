@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
@@ -29,6 +30,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
     [Fact]
     public void Format_preserves_geometry_layer_provenance_and_units()
     {
+        const double expectedRotation = 0.7853981633974483;
         var scene = new PrimitiveScene();
         scene.Lines.Add(new LinePrimitive(
             new Point2(1.25, -2.5),
@@ -39,7 +41,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
             "5200",
             new Point2(8.5, 9.25),
             2.5,
-            0.7853981633974483,
+            expectedRotation,
             "TEXT",
             new[] { "CD" }));
 
@@ -55,7 +57,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
         Assert.Contains("\"value\":\"5200\"", json);
         Assert.Contains("\"position\":[8.5,9.25]", json);
         Assert.Contains("\"height\":2.5", json);
-        Assert.Contains("\"rotation\":0.7853981633974483", json);
+        Assert.Equal(expectedRotation, ExtractNumber(json, "\"rotation\":"));
     }
 
     [Fact]
@@ -73,6 +75,26 @@ public sealed class PrimitiveSceneFixtureFormatterTests
         Assert.Contains("A\\\"B\\\\C\\nD", json);
         Assert.Contains("S\\\"1\\\\2", json);
         Assert.Contains("\"texts\":[]", json);
+    }
+
+    private static double ExtractNumber(string json, string marker)
+    {
+        var start = json.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Marker '{marker}' was not found.");
+        start += marker.Length;
+
+        var end = start;
+        while (end < json.Length && "-+0123456789.eE".IndexOf(json[end]) >= 0)
+            end++;
+
+        var token = json.Substring(start, end - start);
+        Assert.True(double.TryParse(
+            token,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var value),
+            $"'{token}' is not a valid invariant floating-point number.");
+        return value;
     }
 
     private static string InvokeFormat(PrimitiveScene scene, int selectedCount, int insunits)
