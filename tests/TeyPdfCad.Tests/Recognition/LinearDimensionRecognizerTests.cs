@@ -1,5 +1,4 @@
 using Xunit;
-using TeyPdfCad.Core;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Recognition;
@@ -75,6 +74,36 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Recognizes_NonCanonical_Scale_From_Two_Dimension_Consensus()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimension(scene, y: 0, importedLength: 50, displayedValue: "4800");
+        AddHorizontalDimension(scene, y: 30, importedLength: 75, displayedValue: "7200");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(2, dimensions.Count);
+        Assert.All(dimensions, d => Assert.Equal(96, d.DrawingScale, 6));
+        Assert.Contains(dimensions, d => Math.Abs(d.DisplayedValue - 4800) < 1e-6);
+        Assert.Contains(dimensions, d => Math.Abs(d.DisplayedValue - 7200) < 1e-6);
+    }
+
+    [Fact]
+    public void Scale_Consensus_Rejects_Single_Outlier_With_Different_Scale()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimension(scene, y: 0, importedLength: 50, displayedValue: "4800");
+        AddHorizontalDimension(scene, y: 30, importedLength: 75, displayedValue: "7200");
+        AddHorizontalDimension(scene, y: 60, importedLength: 10, displayedValue: "5000");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(2, dimensions.Count);
+        Assert.All(dimensions, d => Assert.Equal(96, d.DrawingScale, 6));
+        Assert.DoesNotContain(dimensions, d => Math.Abs(d.DisplayedValue - 5000) < 1e-6);
+    }
+
+    [Fact]
     public void Rejects_Number_Next_To_Ordinary_Line_Without_Extension_Lines()
     {
         var scene = new PrimitiveScene();
@@ -92,5 +121,17 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(52, 100), new Point2(52, 120)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
         Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    private static void AddHorizontalDimension(
+        PrimitiveScene scene,
+        double y,
+        double importedLength,
+        string displayedValue)
+    {
+        scene.Lines.Add(new LinePrimitive(new Point2(0, y), new Point2(importedLength, y)));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, y - 12), new Point2(0, y + 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(importedLength, y - 12), new Point2(importedLength, y + 1)));
+        scene.Texts.Add(new TextPrimitive(displayedValue, new Point2(importedLength / 2.0, y + 3), 2.5, 0));
     }
 }
