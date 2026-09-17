@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using TeyPdfCad.TestGenerator.Diagnostics;
 using TeyPdfCad.TestGenerator.Generation;
 using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Pipelines;
@@ -23,6 +24,7 @@ public static class Program
                 "generate" => await GenerateAsync(cli, config),
                 "self-check" => await SelfCheckAsync(cli, config),
                 "core-run" => await CoreRunAsync(cli, config),
+                "diagnose-core" => await DiagnoseCoreAsync(cli, config),
                 "compare" => await CompareAsync(cli, config),
                 "baseline" => await BaselineAsync(cli),
                 "verify" => await VerifyAsync(cli, config),
@@ -112,6 +114,27 @@ public static class Program
         }
 
         return report.ReleaseGate.Status == "PASS" ? 0 : 2;
+    }
+
+    private static async Task<int> DiagnoseCoreAsync(CliArgs cli, TestConfig config)
+    {
+        var count = cli.GetInt("--count", config.DefaultCount);
+        var seed = cli.GetInt("--seed", config.DefaultSeed);
+        var output = cli.Get("--output") ?? "artifacts/test-003/diagnose-core";
+
+        var corpus = new DimensionCaseGenerator().Generate(count, seed);
+        var report = await new DiagnosticRunner().RunAsync(corpus, config);
+        var worst = new WorstCaseSelector().Select(report, 20);
+        await DiagnosticArtifactWriter.WriteAsync(report, worst, output);
+
+        Console.WriteLine("TEST-003 Semantic Core diagnostics");
+        Console.WriteLine($"Cases: {report.Total}; seed: {seed}");
+        Console.WriteLine($"Detection Precision: {report.DetectionPrecision:P4}; Recall: {report.DetectionRecall:P4}; F1: {report.F1:P4}");
+        Console.WriteLine($"FP: {report.FalsePositive}; FN: {report.FalseNegative}");
+        Console.WriteLine($"Legacy WrongPoints: {report.LegacyWrongPoints.Total}; real Core: {report.LegacyWrongPoints.RealCoreDefects}; noise: {report.LegacyWrongPoints.ExpectedNoisePropagation}; numeric: {report.LegacyWrongPoints.NumericTolerance}; other: {report.LegacyWrongPoints.Other}");
+        Console.WriteLine($"Worst real Core defects written: {worst.Count}");
+        Console.WriteLine($"Report: {Path.GetFullPath(Path.Combine(output, "report.json"))}");
+        return 0;
     }
 
     private static async Task<int> CompareAsync(CliArgs cli, TestConfig config)
@@ -236,19 +259,22 @@ public static class Program
             TeyPdfCad.TestGenerator
 
             Commands:
-              generate   --count N --seed N --output DIR [--split]
-              self-check --count N --seed N --output DIR [--baseline FILE]
-              core-run   --count N --seed N --output DIR [--baseline FILE] [--split]
-              compare    --cases FILE --actual FILE --output DIR [--baseline FILE]
-              baseline   --report FILE --output FILE
-              verify     --output DIR
+              generate      --count N --seed N --output DIR [--split]
+              self-check    --count N --seed N --output DIR [--baseline FILE]
+              core-run      --count N --seed N --output DIR [--baseline FILE] [--split]
+              diagnose-core --count N --seed N --output DIR
+              compare       --cases FILE --actual FILE --output DIR [--baseline FILE]
+              baseline      --report FILE --output FILE
+              verify        --output DIR
 
             Common:
               --config FILE   Override testconfig.json.
 
             self-check/verify use ExpectedEchoPipeline and validate only the test infrastructure.
-            core-run uses the real SemanticReconstructionEngine. Without --baseline it records an honest baseline
-            even when the current Core does not satisfy the configured release thresholds.
+            core-run is the legacy TEST-002 regression path.
+            diagnose-core is TEST-003: SemanticCoreTestPipeline.RunDetailedAsync -> ErrorClassifier ->
+            DiagnosticReportBuilder -> deterministic WorstCaseSelector. It writes report.json, report.md,
+            and worst_cases.json without changing expected labels or Semantic Core thresholds.
             """);
         return 0;
     }
