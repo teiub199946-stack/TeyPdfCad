@@ -8,8 +8,8 @@ internal sealed class AutoCadPrimitiveReader
 {
     public PrimitiveScene Read(Transaction transaction, IEnumerable<ObjectId> objectIds)
     {
-        ArgumentNullException.ThrowIfNull(transaction);
-        ArgumentNullException.ThrowIfNull(objectIds);
+        if (transaction is null) throw new ArgumentNullException(nameof(transaction));
+        if (objectIds is null) throw new ArgumentNullException(nameof(objectIds));
 
         var scene = new PrimitiveScene();
 
