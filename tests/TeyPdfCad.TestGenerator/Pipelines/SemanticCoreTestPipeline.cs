@@ -2,6 +2,7 @@ using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics.Dimensions;
+using TeyPdfCad.TestGenerator.Diagnostics;
 using TeyPdfCad.TestGenerator.Models;
 
 namespace TeyPdfCad.TestGenerator.Pipelines;
@@ -9,27 +10,40 @@ namespace TeyPdfCad.TestGenerator.Pipelines;
 /// <summary>
 /// Executes TEST-001 cases against the real CAD-neutral Semantic Core.
 /// It never returns the expected answer merely because the case says so.
+/// TEST-003 additionally exposes a test-only paper/world geometry trace.
 /// </summary>
 public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 {
     private readonly DimensionCasePrimitiveSceneBuilder _sceneBuilder;
     private readonly SemanticReconstructionEngine _engine;
+    private readonly SceneTraceBuilder _traceBuilder;
 
     public SemanticCoreTestPipeline(
         DimensionCasePrimitiveSceneBuilder? sceneBuilder = null,
-        SemanticReconstructionEngine? engine = null)
+        SemanticReconstructionEngine? engine = null,
+        SceneTraceBuilder? traceBuilder = null)
     {
         _sceneBuilder = sceneBuilder ?? new DimensionCasePrimitiveSceneBuilder();
         _engine = engine ?? new SemanticReconstructionEngine();
+        _traceBuilder = traceBuilder ?? new SceneTraceBuilder();
     }
 
-    public ValueTask<ActualDimensionResult> RunAsync(
+    public async ValueTask<ActualDimensionResult> RunAsync(
+        DimensionCase testCase,
+        CancellationToken cancellationToken = default)
+    {
+        var run = await RunDetailedAsync(testCase, cancellationToken);
+        return run.Actual;
+    }
+
+    public ValueTask<SemanticCoreDiagnosticRun> RunDetailedAsync(
         DimensionCase testCase,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var scene = _sceneBuilder.Build(testCase);
+        var trace = _traceBuilder.Build(testCase, scene);
         var semantic = _engine.Analyze(scene);
         var dimensions = semantic.Dimensions;
         var diagnostics = new List<string>
@@ -43,13 +57,19 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 
         if (dimensions.Count == 0)
         {
-            return ValueTask.FromResult(new ActualDimensionResult
+            var rejected = new ActualDimensionResult
             {
                 CaseId = testCase.Id,
                 Result = ExpectedResult.Rejected,
                 DetectedDimensions = 0,
                 ConfidenceClass = ConfidenceClass.None,
                 Diagnostics = diagnostics
+            };
+
+            return ValueTask.FromResult(new SemanticCoreDiagnosticRun
+            {
+                Actual = rejected,
+                Trace = trace with { CoreResult = new CoreGeometrySnapshot() }
             });
         }
 
@@ -67,23 +87,27 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 
         double value;
         double drawingScale;
-        Point2D p1;
-        Point2D p2;
-        Point2D dimensionLinePoint;
+        Point2 paperP1;
+        Point2 paperP2;
+        Point2 paperDimensionLinePoint;
         DimensionType dimensionType;
         double confidence;
         var isDimensionTypeAmbiguous = false;
+        List<string> provenance;
 
         if (useChain)
         {
             value = chain!.TotalDisplayedValue;
             drawingScale = chain.DrawingScale;
             confidence = chain.Confidence;
-            (p1, p2) = FarthestDefinitionEndpoints(chain.Dimensions, drawingScale);
-            dimensionLinePoint = ToDrawing(
-                Midpoint(chain.Dimensions[0].DimensionLinePoint, chain.Dimensions[^1].DimensionLinePoint),
-                drawingScale);
+            (paperP1, paperP2) = FarthestDefinitionEndpointsPaper(chain.Dimensions);
+            paperDimensionLinePoint = Midpoint(chain.Dimensions[0].DimensionLinePoint, chain.Dimensions[^1].DimensionLinePoint);
             dimensionType = DimensionType.Chain;
+            provenance = chain.Dimensions
+                .SelectMany(x => x.ProvenanceIds)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(x => x, StringComparer.Ordinal)
+                .ToList();
             diagnostics.Add($"Mapped as chain with {chain.Dimensions.Count} members.");
         }
         else
@@ -91,10 +115,14 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             value = representative.DisplayedValue;
             drawingScale = representative.DrawingScale;
             confidence = representative.Confidence;
-            p1 = ToDrawing(representative.DefinitionPoint1, drawingScale);
-            p2 = ToDrawing(representative.DefinitionPoint2, drawingScale);
-            dimensionLinePoint = ToDrawing(representative.DimensionLinePoint, drawingScale);
+            paperP1 = representative.DefinitionPoint1;
+            paperP2 = representative.DefinitionPoint2;
+            paperDimensionLinePoint = representative.DimensionLinePoint;
             dimensionType = MapType(representative);
+            provenance = representative.ProvenanceIds
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(x => x, StringComparer.Ordinal)
+                .ToList();
             isDimensionTypeAmbiguous = IsAlignedRotatedVisuallyAmbiguous(scene, representative);
 
             if (isDimensionTypeAmbiguous)
@@ -104,7 +132,18 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             }
         }
 
-        return ValueTask.FromResult(new ActualDimensionResult
+        var p1 = ToDrawing(paperP1, drawingScale);
+        var p2 = ToDrawing(paperP2, drawingScale);
+        var dimensionLinePoint = ToDrawing(paperDimensionLinePoint, drawingScale);
+        var sourceText = useChain ? null : representative.SourceText;
+        var coreText = FindCoreText(scene, provenance, sourceText, paperDimensionLinePoint);
+        var textPaper = coreText?.Position;
+        Point2D? textWorld = textPaper is null ? null : ToDrawing(textPaper.Value, drawingScale);
+        var broken = provenance.Any(id =>
+            id.Contains(":dimline:left", StringComparison.Ordinal) ||
+            id.Contains(":dimline:right", StringComparison.Ordinal));
+
+        var actual = new ActualDimensionResult
         {
             CaseId = testCase.Id,
             Result = ExpectedResult.Recognized,
@@ -118,28 +157,64 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             ConfidenceClass = MapConfidence(confidence),
             IsDimensionTypeAmbiguous = isDimensionTypeAmbiguous,
             Diagnostics = diagnostics
+        };
+
+        var snapshot = new CoreGeometrySnapshot
+        {
+            DefinitionPoint1Paper = ToDiagnostic(paperP1),
+            DefinitionPoint2Paper = ToDiagnostic(paperP2),
+            DimensionLinePointPaper = ToDiagnostic(paperDimensionLinePoint),
+            TextAnchorPaper = textPaper is null ? null : ToDiagnostic(textPaper.Value),
+            DefinitionPoint1World = p1,
+            DefinitionPoint2World = p2,
+            DimensionLinePointWorld = dimensionLinePoint,
+            TextAnchorWorld = textWorld,
+            TextRotationDegrees = coreText?.Rotation,
+            BrokenDimensionLine = broken,
+            ProvenanceIds = provenance
+        };
+
+        return ValueTask.FromResult(new SemanticCoreDiagnosticRun
+        {
+            Actual = actual,
+            Trace = trace with { CoreResult = snapshot }
         });
+    }
+
+    private static TextPrimitive? FindCoreText(
+        PrimitiveScene scene,
+        IReadOnlyCollection<string> provenance,
+        string? sourceText,
+        Point2 reference)
+    {
+        var provenanceSet = provenance.ToHashSet(StringComparer.Ordinal);
+        var candidates = scene.Texts
+            .Where(text => text.ProvenanceIds.Any(provenanceSet.Contains))
+            .ToList();
+
+        if (candidates.Count == 0 && !string.IsNullOrWhiteSpace(sourceText))
+        {
+            candidates = scene.Texts
+                .Where(text => string.Equals(text.Value, sourceText, StringComparison.Ordinal))
+                .ToList();
+        }
+
+        return candidates
+            .OrderBy(text => Distance(text.Position, reference))
+            .FirstOrDefault();
     }
 
     private static bool IsAlignedRotatedVisuallyAmbiguous(
         PrimitiveScene scene,
         DimensionCandidate candidate)
     {
-        // A non-axis exploded dimension whose definition vector is parallel to its
-        // dimension line can originate from either AutoCAD AlignedDimension or a
-        // RotatedDimension with the same rotation. The visual evidence alone does
-        // not preserve the native class, so TEST-002 records this instead of guessing.
         if (candidate.Kind != DimensionKind.Aligned)
-        {
             return false;
-        }
 
         var definitionVector = Subtract(candidate.DefinitionPoint2, candidate.DefinitionPoint1);
         var definitionLength = Length(definitionVector);
         if (definitionLength <= 1e-9)
-        {
             return false;
-        }
 
         var provenance = candidate.ProvenanceIds.ToHashSet(StringComparer.Ordinal);
         var dimensionLine = scene.Lines
@@ -149,16 +224,12 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             .FirstOrDefault();
 
         if (dimensionLine is null)
-        {
             return false;
-        }
 
         var lineVector = Subtract(dimensionLine.End, dimensionLine.Start);
         var lineLength = Length(lineVector);
         if (lineLength <= 1e-9)
-        {
             return false;
-        }
 
         var cosine = Math.Abs(Dot(
             Scale(definitionVector, 1.0 / definitionLength),
@@ -178,9 +249,8 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
         return ConfidenceClass.None;
     }
 
-    private static (Point2D P1, Point2D P2) FarthestDefinitionEndpoints(
-        IReadOnlyList<DimensionCandidate> dimensions,
-        double drawingScale)
+    private static (Point2 P1, Point2 P2) FarthestDefinitionEndpointsPaper(
+        IReadOnlyList<DimensionCandidate> dimensions)
     {
         var points = dimensions
             .SelectMany(x => new[] { x.DefinitionPoint1, x.DefinitionPoint2 })
@@ -202,7 +272,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             bestB = points[j];
         }
 
-        return (ToDrawing(bestA, drawingScale), ToDrawing(bestB, drawingScale));
+        return (bestA, bestB);
     }
 
     private static Point2 Midpoint(Point2 a, Point2 b)
@@ -225,4 +295,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 
     private static Point2D ToDrawing(Point2 point, double scale)
         => new(point.X * scale, point.Y * scale);
+
+    private static Point2D ToDiagnostic(Point2 point)
+        => new(point.X, point.Y);
 }

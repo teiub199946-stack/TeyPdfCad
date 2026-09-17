@@ -5,6 +5,7 @@ on:
     branches:
       - feature/test-generator
       - feature/core-regression-integration
+      - feature/test-003-error-classification
   pull_request:
     paths:
       - "src/**"
@@ -83,7 +84,68 @@ jobs:
           --seed 12345
           --output artifacts/semantic-core/10000
 
-      - name: Publish 10,000-case summary
+      - name: TEST-003 diagnostics - 100 cases
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          diagnose-core
+          --count 100
+          --seed 12345
+          --output artifacts/test-003/100
+
+      - name: TEST-003 diagnostics - 1,000 cases
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          diagnose-core
+          --count 1000
+          --seed 12345
+          --output artifacts/test-003/1000
+
+      - name: TEST-003 diagnostics - 10,000 cases
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          diagnose-core
+          --count 10000
+          --seed 12345
+          --output artifacts/test-003/10000
+
+      - name: Publish TEST-003 10,000-case summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f artifacts/test-003/10000/report.md ]; then
+            cat artifacts/test-003/10000/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload TEST-003 diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-003-diagnostics
+          path: |
+            artifacts/test-003/100/report.json
+            artifacts/test-003/100/report.md
+            artifacts/test-003/100/worst_cases.json
+            artifacts/test-003/1000/report.json
+            artifacts/test-003/1000/report.md
+            artifacts/test-003/1000/worst_cases.json
+            artifacts/test-003/10000/report.json
+            artifacts/test-003/10000/report.md
+            artifacts/test-003/10000/worst_cases.json
+          if-no-files-found: error
+
+      - name: Publish legacy 10,000-case summary
         if: always()
         shell: bash
         run: |
