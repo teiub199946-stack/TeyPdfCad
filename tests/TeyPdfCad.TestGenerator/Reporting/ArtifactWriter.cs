@@ -114,6 +114,7 @@ public static class ArtifactWriter
         writer.WriteLine($"| Wrong scale | {report.WrongScale} |");
         writer.WriteLine($"| Wrong confidence | {report.WrongConfidence} |");
         writer.WriteLine($"| Missing actual | {report.MissingActual} |");
+        writer.WriteLine($"| Semantic type ambiguity | {report.SemanticTypeAmbiguity} |");
         writer.WriteLine($"| Precision | {report.Precision:P3} |");
         writer.WriteLine($"| Recall | {report.Recall:P3} |");
         writer.WriteLine($"| F1 | {report.F1:P3} |");

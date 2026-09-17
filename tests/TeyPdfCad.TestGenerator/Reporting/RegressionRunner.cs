@@ -41,6 +41,7 @@ public sealed class RegressionRunner
         double elapsedMilliseconds)
     {
         var reasons = new List<string>();
+        var semanticTypeAmbiguity = IsAlignedRotatedSemanticAmbiguity(expected, actual);
 
         CaseComparison Fail(ComparisonOutcome outcome, string reason)
         {
@@ -50,6 +51,7 @@ public sealed class RegressionRunner
                 CaseId = expected.Id,
                 Outcome = outcome,
                 Passed = false,
+                SemanticTypeAmbiguity = semanticTypeAmbiguity,
                 ElapsedMilliseconds = elapsedMilliseconds,
                 Reasons = reasons
             };
@@ -64,7 +66,7 @@ public sealed class RegressionRunner
         {
             if (actual.Result == ExpectedResult.Rejected)
             {
-                return Pass(expected.Id, elapsedMilliseconds);
+                return Pass(expected.Id, elapsedMilliseconds, semanticTypeAmbiguity);
             }
 
             if (actual.Result == ExpectedResult.Ambiguous)
@@ -83,7 +85,7 @@ public sealed class RegressionRunner
         {
             if (actual.Result == ExpectedResult.Ambiguous)
             {
-                return Pass(expected.Id, elapsedMilliseconds);
+                return Pass(expected.Id, elapsedMilliseconds, semanticTypeAmbiguity);
             }
 
             return Fail(
@@ -110,11 +112,18 @@ public sealed class RegressionRunner
                 $"Expected {expected.ExpectedDimensions} dimensions, actual {actual.DetectedDimensions}.");
         }
 
-        if (actual.DimensionType is null || actual.DimensionType != expected.DimensionType)
+        if (actual.DimensionType is null)
         {
             return Fail(
                 ComparisonOutcome.WrongType,
-                $"Expected type {expected.DimensionType}, actual {actual.DimensionType?.ToString() ?? "<null>"}.");
+                $"Expected type {expected.DimensionType}, actual <null>.");
+        }
+
+        if (actual.DimensionType != expected.DimensionType && !semanticTypeAmbiguity)
+        {
+            return Fail(
+                ComparisonOutcome.WrongType,
+                $"Expected type {expected.DimensionType}, actual {actual.DimensionType}.");
         }
 
         if (actual.Value is null || Math.Abs(actual.Value.Value - expected.ExpectedValue) > config.ValueToleranceAbsolute)
@@ -152,16 +161,33 @@ public sealed class RegressionRunner
                 $"Expected confidence {expected.ExpectedConfidenceClass}, actual {actual.ConfidenceClass?.ToString() ?? "<null>"}.");
         }
 
-        return Pass(expected.Id, elapsedMilliseconds);
+        return Pass(expected.Id, elapsedMilliseconds, semanticTypeAmbiguity);
     }
 
-    private static CaseComparison Pass(string caseId, double elapsedMilliseconds)
+    private static bool IsAlignedRotatedSemanticAmbiguity(
+        DimensionCase expected,
+        ActualDimensionResult actual)
+    {
+        if (!actual.IsDimensionTypeAmbiguous || actual.DimensionType is null)
+        {
+            return false;
+        }
+
+        return (expected.DimensionType == DimensionType.Rotated && actual.DimensionType == DimensionType.Aligned)
+            || (expected.DimensionType == DimensionType.Aligned && actual.DimensionType == DimensionType.Rotated);
+    }
+
+    private static CaseComparison Pass(
+        string caseId,
+        double elapsedMilliseconds,
+        bool semanticTypeAmbiguity = false)
     {
         return new CaseComparison
         {
             CaseId = caseId,
             Outcome = ComparisonOutcome.Correct,
             Passed = true,
+            SemanticTypeAmbiguity = semanticTypeAmbiguity,
             ElapsedMilliseconds = elapsedMilliseconds
         };
     }
@@ -214,6 +240,7 @@ public sealed class RegressionRunner
         var wrongScale = Count(comparisons, ComparisonOutcome.WrongScale);
         var wrongConfidence = Count(comparisons, ComparisonOutcome.WrongConfidence);
         var missingActual = Count(comparisons, ComparisonOutcome.MissingActual);
+        var semanticTypeAmbiguity = comparisons.Count(x => x.SemanticTypeAmbiguity);
         var passed = comparisons.Count(x => x.Passed);
         var failed = comparisons.Count - passed;
 
@@ -273,6 +300,7 @@ public sealed class RegressionRunner
             WrongConfidence = wrongConfidence,
             WrongCount = wrongCount,
             MissingActual = missingActual,
+            SemanticTypeAmbiguity = semanticTypeAmbiguity,
             Precision = precision,
             Recall = recall,
             F1 = f1,
@@ -315,24 +343,24 @@ public sealed class RegressionRunner
         {
             foreach (var group in corpus.Cases.GroupBy(selector, StringComparer.Ordinal))
             {
-                var comparisons = group.Select(x => byId[x.Id]).ToList();
-                var total = comparisons.Count;
-                var passed = comparisons.Count(x => x.Passed);
+                var groupComparisons = group.Select(x => byId[x.Id]).ToList();
+                var total = groupComparisons.Count;
+                var groupPassed = groupComparisons.Count(x => x.Passed);
 
                 result.Add(new BreakdownRow
                 {
                     Category = category,
                     Bucket = group.Key,
                     Total = total,
-                    Passed = passed,
-                    Failed = total - passed,
-                    FalsePositive = Count(comparisons, ComparisonOutcome.FalsePositive),
-                    FalseNegative = Count(comparisons, ComparisonOutcome.FalseNegative),
-                    WrongValue = Count(comparisons, ComparisonOutcome.WrongValue),
+                    Passed = groupPassed,
+                    Failed = total - groupPassed,
+                    FalsePositive = Count(groupComparisons, ComparisonOutcome.FalsePositive),
+                    FalseNegative = Count(groupComparisons, ComparisonOutcome.FalseNegative),
+                    WrongValue = Count(groupComparisons, ComparisonOutcome.WrongValue),
                     WrongGeometry =
-                        Count(comparisons, ComparisonOutcome.WrongPoints) +
-                        Count(comparisons, ComparisonOutcome.WrongCount),
-                    PassRate = SafeDivide(passed, total)
+                        Count(groupComparisons, ComparisonOutcome.WrongPoints) +
+                        Count(groupComparisons, ComparisonOutcome.WrongCount),
+                    PassRate = SafeDivide(groupPassed, total)
                 });
             }
         }

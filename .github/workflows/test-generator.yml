@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/test-generator
+      - feature/core-regression-integration
   pull_request:
     paths:
       - "src/**"
@@ -45,6 +46,64 @@ jobs:
           --
           verify
           --output artifacts/generated/ci
+
+      - name: Semantic Core baseline - 100 cases
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          core-run
+          --count 100
+          --seed 12345
+          --output artifacts/semantic-core/100
+
+      - name: Semantic Core baseline - 1,000 cases
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          core-run
+          --count 1000
+          --seed 12345
+          --output artifacts/semantic-core/1000
+
+      - name: Semantic Core baseline - 10,000 cases
+        run: >
+          dotnet run
+          --project tests/TeyPdfCad.TestGenerator
+          --configuration Release
+          --no-build
+          --
+          core-run
+          --count 10000
+          --seed 12345
+          --output artifacts/semantic-core/10000
+
+      - name: Publish 10,000-case summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f artifacts/semantic-core/10000/report.md ]; then
+            cat artifacts/semantic-core/10000/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Semantic Core regression reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semantic-core-regression
+          path: |
+            artifacts/semantic-core/100/report.json
+            artifacts/semantic-core/100/report.md
+            artifacts/semantic-core/1000/report.json
+            artifacts/semantic-core/1000/report.md
+            artifacts/semantic-core/10000/report.json
+            artifacts/semantic-core/10000/report.md
+          if-no-files-found: error
 
       - name: Upload verification report
         if: always()
