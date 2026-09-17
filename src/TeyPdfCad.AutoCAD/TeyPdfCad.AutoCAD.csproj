@@ -1,15 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework Condition="'$(TeyAutoCadTargetFramework)' == ''">net8.0</TargetFramework>
-    <TargetFramework Condition="'$(TeyAutoCadTargetFramework)' != ''">$(TeyAutoCadTargetFramework)</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
     <RootNamespace>TeyPdfCad.AutoCAD</RootNamespace>
     <AssemblyName>TeyPdfCad.AutoCAD</AssemblyName>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <AutoCADApiVersion Condition="'$(AutoCADApiVersion)' == ''">25.1.0</AutoCADApiVersion>
+    <AutoCADApiVersion>24.1.51000</AutoCADApiVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
     <PackageReference Include="AutoCAD.NET" Version="$(AutoCADApiVersion)" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 </Project>
