@@ -13,7 +13,7 @@ public sealed class SemanticReconstructionEngine
         PrimitiveScene scene,
         DimensionRecognitionOptions? dimensionOptions = null)
     {
-        ArgumentNullException.ThrowIfNull(scene);
+        if (scene is null) throw new ArgumentNullException(nameof(scene));
 
         var dimensions = _dimensionRecognizer.Recognize(scene, dimensionOptions);
         var chains = _chainDetector.Detect(dimensions);
