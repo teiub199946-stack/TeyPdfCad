@@ -9,4 +9,10 @@ public sealed record SemanticReconstructionResult(
     double AverageDimensionConfidence)
 {
     public int ReconstructedObjectCount => Dimensions.Count;
+
+    public IReadOnlyList<double> DetectedDrawingScales => Dimensions
+        .Select(x => Math.Round(x.DrawingScale, 6))
+        .Distinct()
+        .OrderBy(x => x)
+        .ToArray();
 }
