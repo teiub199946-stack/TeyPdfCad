@@ -35,6 +35,13 @@ Expected files:
 
 Keep the DLL files together in the same folder.
 
+Current diagnostic commands:
+
+- `TEYPDFPING` — confirms plugin registration;
+- `TEYPDFANALYZE` — read-only semantic analysis;
+- `TEYPDFDUMP` — read-only export of the exact `PrimitiveScene` supplied by the AutoCAD adapter to a deterministic JSON fixture under `%TEMP%\TeyPdfCad\`;
+- `TEYPDFRECONSTRUCT` — validated native dimension reconstruction.
+
 ## Test drawing
 
 Use a simple vector PDF exported from CAD containing at least three dimensions, preferably including an angled one. The current real smoke drawing uses approximately:
@@ -81,6 +88,18 @@ Expected analysis result for the TrueType proof:
     - reject/roll back the operation with an explicit reason.
 
 It must never silently commit a native dimension whose measured value disagrees with the semantic value outside the validation tolerance.
+
+## Vector-glyph failure capture
+
+For a real PDF where `TEYPDFANALYZE` reports `texts=0` despite visible dimension labels:
+
+1. Preserve the PDF unchanged as a regression input.
+2. Run `TEYPDFDUMP`.
+3. Select the entire same PDFIMPORT fragment and press Enter.
+4. The command writes a versioned JSON fixture under `%TEMP%\TeyPdfCad\` and prints the full file path plus `selected`, `lines`, `texts`, and `INSUNITS` counts.
+5. Preserve/upload that JSON fixture before changing any recognition thresholds or implementing glyph templates.
+
+`TEYPDFDUMP` is intentionally read-only and records the adapter's exact `PrimitiveScene`. It does not recognize vector text and does not modify the drawing.
 
 ## Native dimension acceptance check
 

@@ -42,7 +42,7 @@ jobs:
           TeyPdfCad AutoCAD 2022 test build
           Target: AutoCAD 2022 (release 24.1)
           Runtime: .NET Framework 4.8
-          Commands: TEYPDFPING, TEYPDFANALYZE, TEYPDFRECONSTRUCT
+          Commands: TEYPDFPING, TEYPDFANALYZE, TEYPDFDUMP, TEYPDFRECONSTRUCT
           '@ | Set-Content artifacts/autocad2022/BUILD_INFO.txt
 
       - uses: actions/upload-artifact@v4

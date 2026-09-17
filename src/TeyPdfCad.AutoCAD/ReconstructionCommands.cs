@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.IO;
+using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -33,6 +36,46 @@ public sealed class ReconstructionCommands
         WriteAnalysisReport(editor, objectIds.Length, scene.Lines.Count, scene.Texts.Count, semantic);
         editor.WriteMessage($"\n{DrawingUnitDiagnostics.Format(document.Database.Insunits)}\n");
         // No commit: analysis is intentionally read-only.
+    }
+
+    [CommandMethod("TEYPDFDUMP", CommandFlags.Modal | CommandFlags.UsePickSet)]
+    public void DumpSelectedPdfImportObjects()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null) return;
+
+        var editor = document.Editor;
+        var database = document.Database;
+        var objectIds = GetPdfImportSelection(editor);
+        if (objectIds is null) return;
+
+        using var transaction = database.TransactionManager.StartTransaction();
+        var scene = new AutoCadPrimitiveReader().Read(transaction, objectIds);
+        var fixture = PrimitiveSceneFixtureFormatter.Format(
+            scene,
+            objectIds.Length,
+            (int)database.Insunits);
+
+        try
+        {
+            var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
+            Directory.CreateDirectory(outputDirectory);
+
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmssfff", CultureInfo.InvariantCulture);
+            var outputPath = Path.Combine(outputDirectory, $"PrimitiveScene_{timestamp}.json");
+            File.WriteAllText(outputPath, fixture, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            editor.WriteMessage(
+                $"\nTeyPdfCad fixture saved: {outputPath}\n" +
+                $"selected={objectIds.Length}, lines={scene.Lines.Count}, texts={scene.Texts.Count}, " +
+                $"INSUNITS={(int)database.Insunits}. Drawing was not changed.\n");
+        }
+        catch (System.Exception ex)
+        {
+            editor.WriteMessage($"\nTeyPdfCad fixture export failed: {ex.Message}\n");
+        }
+
+        // No commit: fixture capture is intentionally read-only.
     }
 
     [CommandMethod("TEYPDFRECONSTRUCT", CommandFlags.Modal | CommandFlags.UsePickSet)]

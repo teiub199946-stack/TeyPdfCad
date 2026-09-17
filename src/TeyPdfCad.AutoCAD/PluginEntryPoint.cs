@@ -12,7 +12,7 @@ public sealed class PluginEntryPoint : IExtensionApplication
     {
         var document = Application.DocumentManager.MdiActiveDocument;
         document?.Editor.WriteMessage(
-            "\nTeyPdfCad loaded successfully. Commands: TEYPDFPING, TEYPDFANALYZE, TEYPDFRECONSTRUCT.\n");
+            "\nTeyPdfCad loaded successfully. Commands: TEYPDFPING, TEYPDFANALYZE, TEYPDFDUMP, TEYPDFRECONSTRUCT.\n");
     }
 
     public void Terminate()
