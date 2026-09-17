@@ -1,3 +1,4 @@
+using Xunit;
 using TeyPdfCad.Core;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
