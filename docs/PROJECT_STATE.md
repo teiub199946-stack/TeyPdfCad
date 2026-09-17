@@ -83,11 +83,11 @@ Evidence:
 
 Engineering conclusion: the current pure C# managed writer can create correct native dimensions, but full native geometry association is not available through the public managed types probed here. Do not fake this by merely setting `DIMASSOC=2`. If full associative reconstruction becomes an MVP requirement, evaluate a narrow ObjectARX/C++ bridge or another verified native API path as a separate architectural task. Keep this concern outside Semantic Core.
 
-## Units / INSUNITS diagnostics — implemented and CI-verified
+## Units / INSUNITS diagnostics — implemented, CI-verified, and real-run verified
 
 AutoCAD drawing coordinates are drawing units; they are not intrinsically millimeters. Autodesk defines `INSUNITS=4` as millimeters, `INSUNITS=6` as meters, and `INSUNITS=0` as undefined/unitless context.
 
-A new adapter diagnostic now reports the current drawing units in both `TEYPDFANALYZE` and `TEYPDFRECONSTRUCT` without silently changing them:
+A new adapter diagnostic reports the current drawing units in both `TEYPDFANALYZE` and `TEYPDFRECONSTRUCT` without silently changing them:
 
 - `Millimeters`: explicitly reports `INSUNITS=4` and `1 drawing unit = 1 mm`.
 - `Undefined`: explicitly reports the engineering-unit interpretation as unverified and does not claim millimeters.
@@ -97,6 +97,13 @@ TDD evidence:
 
 - RED run: AutoCAD 2022 CI run `35258145634`; 3 new unit-diagnostic tests failed because `DrawingUnitDiagnostics` did not yet exist while the previous 7 tests passed.
 - GREEN run: AutoCAD 2022 CI run `35258421175`; build, all tests, net48 output verification, package staging and artifact upload passed.
+
+Real AutoCAD 2022 units gate — verified 2026-09-17 using the latest units-enabled DLL and the same TrueType control PDF:
+
+- `TEYPDFANALYZE` again returned `selected=16, lines=13, texts=3, dimensions=3, chains=0, scales=[7200.0015], avg confidence=93.57%`;
+- the adapter printed exactly: `TeyPdfCad units: INSUNITS=4 (Millimeters). Engineering interpretation verified: 1 drawing unit = 1 mm.`
+
+Therefore, in this verified control drawing, the reconstructed native measurements are explicitly millimeter-context values: `5200` means approximately `5200 mm` and `7200` means approximately `7200 mm`. This conclusion is tied to the observed `INSUNITS=4`; it must not be generalized to drawings whose unit context is different or undefined.
 
 No automatic unit conversion and no Semantic Core change were introduced by this step.
 
@@ -129,7 +136,7 @@ This PDF must be preserved as a required future regression fixture. Do not weake
 
 ## Near-term priorities
 
-1. Real-run the new `INSUNITS` diagnostics in AutoCAD 2022 and record the current drawing's unit context. Do not infer mm from the displayed number alone.
+1. Final-review PR #13 now that the real AutoCAD 2022 units gate is verified; keep merge gated on fresh CI/review evidence.
 2. Keep native dimension associativity outside the current C# MVP unless a verified native bridge is explicitly approved. The next associativity fixture with explicit measured geometry remains useful for future bridge validation.
 3. Review and integrate TEST-003 findings before changing Semantic Core thresholds or algorithms.
 4. Add the real vector-glyph PDF as a regression fixture and implement `VectorTextRecognizer` as an upstream module, not as ad-hoc changes inside Semantic Core.
