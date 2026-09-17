@@ -1,0 +1,40 @@
+{
+  "id": "case_000001",
+  "seed": 12345,
+  "dimensionType": "linear",
+  "expectedValue": 5200,
+  "p1": { "x": 0, "y": 0 },
+  "p2": { "x": 5200, "y": 0 },
+  "dimensionLinePoint": { "x": 2600, "y": 350 },
+  "rotation": 0,
+  "textPosition": { "x": 2600, "y": 350 },
+  "textPlacement": "centered",
+  "textHeight": 250,
+  "arrowType": "closedFilled",
+  "arrowSize": 250,
+  "extensionLineOffset": 150,
+  "extensionLineExtension": 125,
+  "drawingScale": 100,
+  "expectedConfidenceClass": "high",
+  "expectedResult": "recognized",
+  "expectedDimensions": 1,
+  "negativePattern": "none",
+  "noise": {
+    "coordinateJitter": 0,
+    "microBreak": false,
+    "endpointMismatch": false,
+    "angularSkewDegrees": 0,
+    "textOffset": { "x": 0, "y": 0 }
+  },
+  "observedGeometry": {
+    "p1": { "x": 0, "y": 0 },
+    "p2": { "x": 5200, "y": 0 },
+    "dimensionLinePoint": { "x": 2600, "y": 350 },
+    "textPosition": { "x": 2600, "y": 350 }
+  },
+  "isTextFlipped": false,
+  "isDimensionLineBroken": false,
+  "isInsideGeometry": false,
+  "segments": [],
+  "tags": ["fixture", "linear"]
+}

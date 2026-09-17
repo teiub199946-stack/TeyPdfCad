@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeyPdfCad.Core", "src\TeyPdfCad.Core\TeyPdfCad.Core.csproj", "{D4D4E74B-3C44-4C9E-9C01-6C1A2B8F1A01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeyPdfCad.Tests", "tests\TeyPdfCad.Tests\TeyPdfCad.Tests.csproj", "{B7A73114-1E38-44A9-B4FE-42054D7C2A02}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeyPdfCad.TestGenerator", "tests\TeyPdfCad.TestGenerator\TeyPdfCad.TestGenerator.csproj", "{53F3EAB1-2175-48F1-A53E-502F2F191A03}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D4D4E74B-3C44-4C9E-9C01-6C1A2B8F1A01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4D4E74B-3C44-4C9E-9C01-6C1A2B8F1A01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4D4E74B-3C44-4C9E-9C01-6C1A2B8F1A01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4D4E74B-3C44-4C9E-9C01-6C1A2B8F1A01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B7A73114-1E38-44A9-B4FE-42054D7C2A02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B7A73114-1E38-44A9-B4FE-42054D7C2A02}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B7A73114-1E38-44A9-B4FE-42054D7C2A02}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B7A73114-1E38-44A9-B4FE-42054D7C2A02}.Release|Any CPU.Build.0 = Release|Any CPU
+		{53F3EAB1-2175-48F1-A53E-502F2F191A03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{53F3EAB1-2175-48F1-A53E-502F2F191A03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{53F3EAB1-2175-48F1-A53E-502F2F191A03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{53F3EAB1-2175-48F1-A53E-502F2F191A03}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

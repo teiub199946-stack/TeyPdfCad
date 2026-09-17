@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teypdfcad.local/schemas/report.schema.json",
+  "title": "TeyPdfCad regression report",
+  "type": "object",
+  "required": [
+    "seed",
+    "total",
+    "passed",
+    "failed",
+    "falsePositive",
+    "falseNegative",
+    "precision",
+    "recall",
+    "f1",
+    "performance",
+    "releaseGate"
+  ],
+  "properties": {
+    "seed": { "type": "integer" },
+    "total": { "type": "integer", "minimum": 0 },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "falsePositive": { "type": "integer", "minimum": 0 },
+    "falseNegative": { "type": "integer", "minimum": 0 },
+    "precision": { "type": "number", "minimum": 0, "maximum": 1 },
+    "recall": { "type": "number", "minimum": 0, "maximum": 1 },
+    "f1": { "type": "number", "minimum": 0, "maximum": 1 },
+    "releaseGate": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["PASS", "FAIL"] }
+      }
+    }
+  },
+  "additionalProperties": true
+}
