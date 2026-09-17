@@ -11,9 +11,14 @@ internal static class DimensionGeometryAnalysis
     {
         foreach (var line in lines) yield return line;
 
-        for (var i = 0; i < lines.Count; i++)
-        for (var j = i + 1; j < lines.Count; j++)
-            if (TryMergeAcrossText(lines[i], lines[j], text, out var merged))
+        var localRadius = Math.Max(text.Height * 8.0, 1e-6);
+        var localFragments = lines
+            .Where(line => GeometryMath.DistancePointToSegment(text.Position, line.Start, line.End) <= localRadius)
+            .ToArray();
+
+        for (var i = 0; i < localFragments.Length; i++)
+        for (var j = i + 1; j < localFragments.Length; j++)
+            if (TryMergeAcrossText(localFragments[i], localFragments[j], text, out var merged))
                 yield return merged;
     }
 
