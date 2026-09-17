@@ -1,0 +1,52 @@
+name: AutoCAD 2022 Adapter CI
+
+on:
+  push:
+    branches: [ 'feature/autocad-2022-host' ]
+  workflow_dispatch:
+
+jobs:
+  build-autocad-2022:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore AutoCAD 2022 tests
+        run: dotnet restore tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj
+
+      - name: Build AutoCAD 2022 bridge
+        run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
+
+      - name: Test AutoCAD 2022 bridge
+        run: dotnet test tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj --configuration Release --no-restore
+
+      - name: Verify expected net48 outputs
+        shell: pwsh
+        run: |
+          $dir = 'src/TeyPdfCad.AutoCAD/bin/Release/net48'
+          if (!(Test-Path "$dir/TeyPdfCad.AutoCAD.dll")) { throw 'Missing AutoCAD bridge DLL' }
+          if (!(Test-Path "$dir/TeyPdfCad.Core.dll")) { throw 'Missing Core DLL' }
+          Write-Host 'AutoCAD 2022 net48 output verified.'
+
+      - name: Stage AutoCAD 2022 test package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/autocad2022 | Out-Null
+          Copy-Item src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.AutoCAD.dll artifacts/autocad2022/
+          Copy-Item src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.Core.dll artifacts/autocad2022/
+          Copy-Item docs/AUTOCAD_MVP_TEST.md artifacts/autocad2022/
+          @'
+          TeyPdfCad AutoCAD 2022 test build
+          Target: AutoCAD 2022 (release 24.1)
+          Runtime: .NET Framework 4.8
+          Commands: TEYPDFPING, TEYPDFANALYZE, TEYPDFRECONSTRUCT
+          '@ | Set-Content artifacts/autocad2022/BUILD_INFO.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeyPdfCad-AutoCAD2022
+          if-no-files-found: error
+          path: artifacts/autocad2022/
