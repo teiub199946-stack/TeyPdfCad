@@ -10,7 +10,10 @@ internal static class ScaleConsensusEstimator
         IReadOnlyList<ScaleObservation> observations,
         double relativeTolerance,
         int minimumVotes)
-        => EstimateClusters(observations, relativeTolerance, minimumVotes).FirstOrDefault();
+    {
+        var clusters = EstimateClusters(observations, relativeTolerance, minimumVotes);
+        return clusters.Count == 0 ? null : clusters[0];
+    }
 
     public static IReadOnlyList<ScaleConsensus> EstimateClusters(
         IReadOnlyList<ScaleObservation> observations,
