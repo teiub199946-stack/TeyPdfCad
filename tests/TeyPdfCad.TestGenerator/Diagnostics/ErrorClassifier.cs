@@ -69,7 +69,7 @@ public sealed class ErrorClassifier
                 : DiagnosticCategory.WrongDimensionCount;
             return SemanticTerminal(expected, actual, category, legacyWrongPoints,
                 countCorrect: false,
-                $"Expected {expected.ExpectedDimensions} dimensions, Core returned {actual.DetectedDimensions}.");
+                reason: $"Expected {expected.ExpectedDimensions} dimensions, Core returned {actual.DetectedDimensions}.");
         }
 
         var valueCorrect = actual.Value is not null &&
@@ -77,14 +77,14 @@ public sealed class ErrorClassifier
         if (!valueCorrect)
             return SemanticTerminal(expected, actual, DiagnosticCategory.WrongValue, legacyWrongPoints,
                 valueCorrect: false,
-                $"Expected value {expected.ExpectedValue:0.######}, Core returned {actual.Value?.ToString("0.######") ?? "<null>"}.");
+                reason: $"Expected value {expected.ExpectedValue:0.######}, Core returned {actual.Value?.ToString("0.######") ?? "<null>"}.");
 
         var scaleCorrect = actual.DrawingScale is not null &&
                            Math.Abs(actual.DrawingScale.Value - expected.DrawingScale) <= _config.ScaleTolerance;
         if (!scaleCorrect)
             return SemanticTerminal(expected, actual, DiagnosticCategory.WrongScale, legacyWrongPoints,
                 valueCorrect: true, scaleCorrect: false,
-                $"Expected scale 1:{expected.DrawingScale:0.######}, Core returned {actual.DrawingScale?.ToString("0.######") ?? "<null>"}.");
+                reason: $"Expected scale 1:{expected.DrawingScale:0.######}, Core returned {actual.DrawingScale?.ToString("0.######") ?? "<null>"}.");
 
         var typeCorrect = TypesEquivalent(expected, actual);
         if (!typeCorrect)
@@ -94,7 +94,7 @@ public sealed class ErrorClassifier
                 : DiagnosticCategory.WrongDimensionType;
             return SemanticTerminal(expected, actual, category, legacyWrongPoints,
                 valueCorrect: true, scaleCorrect: true, typeCorrect: false,
-                $"Expected type {expected.DimensionType}, Core returned {actual.DimensionType?.ToString() ?? "<null>"}.");
+                reason: $"Expected type {expected.DimensionType}, Core returned {actual.DimensionType?.ToString() ?? "<null>"}.");
         }
 
         var geometry = ClassifyGeometry(expected, actual, trace);
@@ -109,7 +109,7 @@ public sealed class ErrorClassifier
         var errors = geometry.Where(x => x.Error is not null).Select(x => x.Error!).ToList();
         var maxPaper = errors.Count == 0 ? 0 : errors.Max(x => x.ActualPaperError);
         var maxWorld = errors.Count == 0 ? 0 : errors.Max(x => x.ActualWorldError);
-        var bias = CalculateResidualBias(trace, geometry);
+        var bias = CalculateResidualBias(trace);
         var geometryCorrect = primary is DiagnosticCategory.Correct
             or DiagnosticCategory.ExpectedNoisePropagation
             or DiagnosticCategory.NumericTolerance;
@@ -171,9 +171,6 @@ public sealed class ErrorClassifier
         checks.Add(CheckPoint("dimension-line location", trace.DimensionLineLocation,
             snapshot.DimensionLinePointPaper, snapshot.DimensionLinePointWorld, expected.DrawingScale));
 
-        // The current DimensionCandidate API exposes definition points and dimension-line location,
-        // but not a reconstructed semantic text anchor/orientation. Do not pretend the source text
-        // primitive is a Core output merely to improve coverage.
         checks.Add(Unavailable("text anchor", "DimensionCandidate does not expose a reconstructed text anchor."));
         checks.Add(Unavailable("rotation/orientation", "DimensionCandidate does not expose reconstructed text orientation."));
 
@@ -282,9 +279,7 @@ public sealed class ErrorClassifier
                 trace.DefinitionPoint2, a1, snapshot.DefinitionPoint1World);
     }
 
-    private static (double Dx, double Dy) CalculateResidualBias(
-        CaseGeometryTrace trace,
-        IReadOnlyList<GeometrySubcheck> checks)
+    private static (double Dx, double Dy) CalculateResidualBias(CaseGeometryTrace trace)
     {
         var snapshot = trace.CoreResult;
         if (snapshot is null)
