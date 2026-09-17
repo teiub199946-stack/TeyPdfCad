@@ -1,4 +1,5 @@
 using TeyPdfCad.Core.Geometry;
+using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics.Dimensions;
 using TeyPdfCad.TestGenerator.Models;
@@ -71,6 +72,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
         Point2D dimensionLinePoint;
         DimensionType dimensionType;
         double confidence;
+        var isDimensionTypeAmbiguous = false;
 
         if (useChain)
         {
@@ -93,6 +95,13 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             p2 = ToDrawing(representative.DefinitionPoint2, drawingScale);
             dimensionLinePoint = ToDrawing(representative.DimensionLinePoint, drawingScale);
             dimensionType = MapType(representative);
+            isDimensionTypeAmbiguous = IsAlignedRotatedVisuallyAmbiguous(scene, representative);
+
+            if (isDimensionTypeAmbiguous)
+            {
+                diagnostics.Add(
+                    "Semantic type ambiguity: exploded non-axis primitives are compatible with both aligned and rotated native dimensions.");
+            }
         }
 
         return ValueTask.FromResult(new ActualDimensionResult
@@ -107,8 +116,55 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             DimensionType = dimensionType,
             DrawingScale = drawingScale,
             ConfidenceClass = MapConfidence(confidence),
+            IsDimensionTypeAmbiguous = isDimensionTypeAmbiguous,
             Diagnostics = diagnostics
         });
+    }
+
+    private static bool IsAlignedRotatedVisuallyAmbiguous(
+        PrimitiveScene scene,
+        DimensionCandidate candidate)
+    {
+        // A non-axis exploded dimension whose definition vector is parallel to its
+        // dimension line can originate from either AutoCAD AlignedDimension or a
+        // RotatedDimension with the same rotation. The visual evidence alone does
+        // not preserve the native class, so TEST-002 records this instead of guessing.
+        if (candidate.Kind != DimensionKind.Aligned)
+        {
+            return false;
+        }
+
+        var definitionVector = Subtract(candidate.DefinitionPoint2, candidate.DefinitionPoint1);
+        var definitionLength = Length(definitionVector);
+        if (definitionLength <= 1e-9)
+        {
+            return false;
+        }
+
+        var provenance = candidate.ProvenanceIds.ToHashSet(StringComparer.Ordinal);
+        var dimensionLine = scene.Lines
+            .Where(line => line.ProvenanceIds.Any(id =>
+                provenance.Contains(id) && id.Contains(":dimline", StringComparison.Ordinal)))
+            .OrderByDescending(line => Distance(line.Start, line.End))
+            .FirstOrDefault();
+
+        if (dimensionLine is null)
+        {
+            return false;
+        }
+
+        var lineVector = Subtract(dimensionLine.End, dimensionLine.Start);
+        var lineLength = Length(lineVector);
+        if (lineLength <= 1e-9)
+        {
+            return false;
+        }
+
+        var cosine = Math.Abs(Dot(
+            Scale(definitionVector, 1.0 / definitionLength),
+            Scale(lineVector, 1.0 / lineLength)));
+
+        return cosine >= Math.Cos(Math.PI / 180.0);
     }
 
     private static DimensionType MapType(DimensionCandidate candidate)
@@ -151,6 +207,21 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 
     private static Point2 Midpoint(Point2 a, Point2 b)
         => new((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
+
+    private static Point2 Subtract(Point2 a, Point2 b)
+        => new(a.X - b.X, a.Y - b.Y);
+
+    private static Point2 Scale(Point2 p, double scalar)
+        => new(p.X * scalar, p.Y * scalar);
+
+    private static double Dot(Point2 a, Point2 b)
+        => a.X * b.X + a.Y * b.Y;
+
+    private static double Length(Point2 p)
+        => Math.Sqrt(Dot(p, p));
+
+    private static double Distance(Point2 a, Point2 b)
+        => Length(Subtract(a, b));
 
     private static Point2D ToDrawing(Point2 point, double scale)
         => new(point.X * scale, point.Y * scale);
