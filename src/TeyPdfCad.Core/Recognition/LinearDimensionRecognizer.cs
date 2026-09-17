@@ -14,19 +14,34 @@ public sealed class LinearDimensionRecognizer
         if (!options.DrawingScale.HasValue)
         {
             var observations = CollectScaleObservations(scene, options);
-            var consensus = ScaleConsensusEstimator.Estimate(
+            var clusters = ScaleConsensusEstimator.EstimateClusters(
                 observations,
                 options.ScaleConsensusRelativeTolerance,
                 options.ScaleConsensusMinimumVotes);
 
-            if (consensus.HasValue)
+            if (clusters.Count > 0)
             {
-                var consensusOptions = options with { DrawingScale = consensus.Value.Scale };
-                var consensusResult = RecognizeWithResolvedScale(scene, consensusOptions);
+                var combined = new List<DimensionCandidate>();
 
-                // A consensus is useful only if it survives strict measurement validation.
-                if (consensusResult.Count >= options.ScaleConsensusMinimumVotes)
-                    return consensusResult;
+                foreach (var cluster in clusters)
+                {
+                    var clusterOptions = options with { DrawingScale = cluster.Scale };
+                    var clusterResult = RecognizeWithResolvedScale(scene, clusterOptions);
+
+                    // A scale cluster is accepted only if strict validation confirms enough dimensions.
+                    if (clusterResult.Count < options.ScaleConsensusMinimumVotes) continue;
+
+                    foreach (var candidate in clusterResult)
+                        AddOrReplaceEquivalent(combined, candidate);
+                }
+
+                if (combined.Count > 0)
+                {
+                    return combined
+                        .OrderBy(x => x.DimensionLinePoint.Y)
+                        .ThenBy(x => x.DimensionLinePoint.X)
+                        .ToArray();
+                }
             }
         }
 
@@ -199,6 +214,33 @@ public sealed class LinearDimensionRecognizer
             projectedDistance,
             textScore,
             arrows);
+    }
+
+    private static void AddOrReplaceEquivalent(List<DimensionCandidate> dimensions, DimensionCandidate candidate)
+    {
+        var index = dimensions.FindIndex(existing => SameDimensionGeometry(existing, candidate));
+        if (index < 0)
+        {
+            dimensions.Add(candidate);
+            return;
+        }
+
+        if (candidate.Confidence > dimensions[index].Confidence)
+            dimensions[index] = candidate;
+    }
+
+    private static bool SameDimensionGeometry(DimensionCandidate a, DimensionCandidate b)
+    {
+        if (!string.Equals(a.SourceText, b.SourceText, StringComparison.Ordinal)) return false;
+
+        const double tolerance = 1e-5;
+        var direct = GeometryMath.Distance(a.DefinitionPoint1, b.DefinitionPoint1) <= tolerance
+            && GeometryMath.Distance(a.DefinitionPoint2, b.DefinitionPoint2) <= tolerance;
+        var reversed = GeometryMath.Distance(a.DefinitionPoint1, b.DefinitionPoint2) <= tolerance
+            && GeometryMath.Distance(a.DefinitionPoint2, b.DefinitionPoint1) <= tolerance;
+
+        return (direct || reversed)
+            && GeometryMath.Distance(a.DimensionLinePoint, b.DimensionLinePoint) <= tolerance;
     }
 
     private static double NormalizeAngle(double degrees)
