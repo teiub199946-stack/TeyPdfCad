@@ -41,8 +41,18 @@ public sealed class SemanticReconstructionEngine
         if (vectorText.Texts.Count == 0)
             return source;
 
+        var consumedSourceIds = new HashSet<string>(
+            vectorText.Texts.SelectMany(text => text.ProvenanceIds),
+            StringComparer.Ordinal);
+
         var augmented = new PrimitiveScene();
-        augmented.Lines.AddRange(source.Lines);
+
+        foreach (var line in source.Lines)
+        {
+            if (!HasAnyProvenance(line.ProvenanceIds, consumedSourceIds))
+                augmented.Lines.Add(line);
+        }
+
         augmented.Texts.AddRange(source.Texts);
 
         foreach (var recognized in vectorText.Texts)
@@ -52,6 +62,16 @@ public sealed class SemanticReconstructionEngine
         }
 
         return augmented;
+    }
+
+    private static bool HasAnyProvenance(
+        IReadOnlyList<string> provenanceIds,
+        HashSet<string> consumedSourceIds)
+    {
+        if (provenanceIds.Count == 0 || consumedSourceIds.Count == 0)
+            return false;
+
+        return provenanceIds.Any(consumedSourceIds.Contains);
     }
 
     private static bool ContainsEquivalentText(
