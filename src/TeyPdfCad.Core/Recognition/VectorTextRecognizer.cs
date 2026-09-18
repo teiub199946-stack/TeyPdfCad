@@ -342,18 +342,38 @@ public sealed class VectorTextRecognizer
         if (best.Score < options.MinGlyphConfidence)
             return false;
 
-        var equalScoreCompetitors = ordered
-            .Skip(1)
-            .Where(match => Math.Abs(best.Score - match.Score) <= 1e-10)
-            .Where(match => !string.Equals(best.Template.Value, match.Template.Value, StringComparison.Ordinal))
+        var ambiguityWindow = ordered
+            .Where(match => match.Score >= options.MinGlyphConfidence)
+            .Where(match => best.Score - match.Score
+                <= options.HalfTurnAmbiguityScoreTolerance + 1e-12)
             .ToArray();
 
-        if (equalScoreCompetitors.Length > 0)
+        if (ambiguityWindow.Length > 1)
         {
-            var canResolveAsHalfTurn = options.ResolveHalfTurnAmbiguityAsUpright
-                && equalScoreCompetitors.All(match => IsHalfTurnSeparated(best.Rotation, match.Rotation));
-            if (!canResolveAsHalfTurn)
-                return false;
+            var upright = ambiguityWindow
+                .OrderBy(match => RotationPriority(match.Rotation))
+                .ThenByDescending(match => match.Score)
+                .ThenBy(match => match.Template.Value, StringComparer.Ordinal)
+                .First();
+
+            var distinctCompetitors = ambiguityWindow
+                .Where(match => !string.Equals(
+                    match.Template.Value,
+                    upright.Template.Value,
+                    StringComparison.Ordinal))
+                .ToArray();
+
+            if (distinctCompetitors.Length > 0)
+            {
+                var canResolveAsHalfTurn = options.ResolveHalfTurnAmbiguityAsUpright
+                    && distinctCompetitors.All(match =>
+                        IsHalfTurnSeparated(upright.Rotation, match.Rotation));
+
+                if (!canResolveAsHalfTurn)
+                    return false;
+
+                best = upright;
+            }
         }
 
         var sourceIds = component
