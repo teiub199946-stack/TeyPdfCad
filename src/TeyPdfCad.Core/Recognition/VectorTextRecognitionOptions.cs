@@ -15,11 +15,38 @@ public sealed record VectorTextRecognitionOptions
     /// <summary>Minimum template match score accepted for a glyph.</summary>
     public double MinGlyphConfidence { get; init; } = 0.90;
 
-    /// <summary>Maximum vertical baseline deviation relative to glyph height.</summary>
+    /// <summary>Maximum baseline deviation relative to glyph height.</summary>
     public double BaselineToleranceHeightMultiplier { get; init; } = 0.35;
 
     /// <summary>Maximum gap between adjacent glyphs relative to glyph height.</summary>
     public double CharacterGapHeightMultiplier { get; init; } = 1.5;
+
+    /// <summary>Maximum difference between glyph baseline directions inside one text run.</summary>
+    public double MaxRunRotationDifferenceRadians { get; init; } = 7.0 * Math.PI / 180.0;
+
+    /// <summary>
+    /// Prefer grouping segments emitted from the same PDFIMPORT polyline handle before
+    /// falling back to endpoint-connected components.
+    /// </summary>
+    public bool UsePdfImportProvenanceGrouping { get; init; } = true;
+
+    /// <summary>
+    /// Engineering dimension text is normally kept readable within +/-90 degrees.
+    /// When two different glyph values are exact 180-degree rotations of one another
+    /// (for example seven-segment 6/9), prefer the upright interpretation. Ambiguities
+    /// at the same orientation still fail closed.
+    /// </summary>
+    public bool ResolveHalfTurnAmbiguityAsUpright { get; init; } = true;
+
+    /// <summary>
+    /// Score window in which 180-degree alternatives are treated as the same noisy
+    /// geometric glyph and resolved by readable orientation rather than by tiny
+    /// floating-point/noise score differences.
+    /// </summary>
+    public double HalfTurnAmbiguityScoreTolerance { get; init; } = 0.02;
+
+    /// <summary>Hard safety cap for one glyph candidate.</summary>
+    public int MaxGlyphStrokeCount { get; init; } = 64;
 
     public bool IsValid
         => EndpointJoinTolerance >= 0
@@ -28,5 +55,10 @@ public sealed record VectorTextRecognitionOptions
             && MinGlyphConfidence is >= 0 and <= 1
             && BaselineToleranceHeightMultiplier >= 0
             && CharacterGapHeightMultiplier >= 0
+            && MaxRunRotationDifferenceRadians >= 0
+            && MaxRunRotationDifferenceRadians <= Math.PI / 2.0
+            && HalfTurnAmbiguityScoreTolerance >= 0
+            && HalfTurnAmbiguityScoreTolerance <= 1
+            && MaxGlyphStrokeCount >= 1
             && Templates is not null;
 }
