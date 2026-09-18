@@ -76,6 +76,12 @@ internal static class PrimitiveSceneFixtureFormatter
         builder.Append(',');
         AppendPropertyName(builder, "end");
         AppendPoint(builder, line.End.X, line.End.Y);
+        if (line.StrokeWidthMm is { } strokeWidthMm)
+        {
+            builder.Append(',');
+            AppendPropertyName(builder, "strokeWidthMm");
+            AppendDouble(builder, strokeWidthMm);
+        }
         builder.Append(',');
         AppendPropertyName(builder, "layer");
         AppendNullableJsonString(builder, line.Layer);

@@ -1,0 +1,27 @@
+name: Primitive Style CI
+
+on:
+  push:
+    branches: [ 'integration/codex-20260918-stroke-width' ]
+  pull_request:
+    branches: [ 'feature/autocad-2022-arc-tessellation' ]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore Core tests
+        run: dotnet restore tests/TeyPdfCad.Tests/TeyPdfCad.Tests.csproj
+      - name: Test Core
+        run: dotnet test tests/TeyPdfCad.Tests/TeyPdfCad.Tests.csproj --configuration Release --no-restore
+      - name: Restore AutoCAD adapter tests
+        run: dotnet restore tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj
+      - name: Build AutoCAD 2022 adapter
+        run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
+      - name: Test AutoCAD adapter
+        run: dotnet test tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj --configuration Release --no-restore

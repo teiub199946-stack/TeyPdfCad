@@ -21,7 +21,7 @@ internal sealed class AutoCadPrimitiveReader
             switch (entity)
             {
                 case Line line:
-                    AddLine(scene, line.StartPoint, line.EndPoint, line.Layer, SourceId(line));
+                    AddLine(scene, line.StartPoint, line.EndPoint, line.Layer, SourceId(line), StrokeWidthMm(line));
                     break;
 
                 case Polyline polyline:
@@ -71,7 +71,8 @@ internal sealed class AutoCadPrimitiveReader
                         segment.StartPoint,
                         segment.EndPoint,
                         polyline.Layer,
-                        sourceId);
+                        sourceId,
+                        StrokeWidthMm(polyline));
                     break;
                 }
 
@@ -86,7 +87,8 @@ internal sealed class AutoCadPrimitiveReader
                             arc.EvaluatePoint(step.StartParameter),
                             arc.EvaluatePoint(step.EndParameter),
                             polyline.Layer,
-                            step.SourceId);
+                            step.SourceId,
+                            StrokeWidthMm(polyline));
                     }
                     break;
                 }
@@ -99,13 +101,21 @@ internal sealed class AutoCadPrimitiveReader
         Autodesk.AutoCAD.Geometry.Point3d start,
         Autodesk.AutoCAD.Geometry.Point3d end,
         string? layer,
-        string sourceId)
+        string sourceId,
+        double? strokeWidthMm)
     {
         scene.Lines.Add(new LinePrimitive(
             ToPoint2(start),
             ToPoint2(end),
             layer,
-            [sourceId]));
+            [sourceId],
+            strokeWidthMm));
+    }
+
+    private static double? StrokeWidthMm(Entity entity)
+    {
+        var raw = (short)entity.LineWeight;
+        return raw > 0 ? raw / 100.0 : null;
     }
 
     private static Point2 ToPoint2(Autodesk.AutoCAD.Geometry.Point3d point)
