@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>TeyPdfCad.Web</RootNamespace>
+    <AssemblyName>TeyPdfCad.Web</AssemblyName>
+  </PropertyGroup>
+</Project>
