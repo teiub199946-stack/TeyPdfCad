@@ -401,6 +401,13 @@ healthchecksdb
 # Backup folder for Package Reference Convert tool in Visual Studio 2017
 MigrationBackup/
 
+# Local toolchain and bridge runtime caches kept under the repository
+.dotnet/
+.bridge-appdata/
+acad.err
+dotnet-home/
+backup-extracted/
+
 # Ionide (cross platform F# VS Code tools) working folder
 **/.ionide/
 
