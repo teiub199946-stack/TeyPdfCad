@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using TeyPdfCad.Core.Primitives;
+using TeyPdfCad.Core.Sheets;
 
 namespace TeyPdfCad.AutoCAD;
 
@@ -64,6 +65,93 @@ internal static class PrimitiveSceneFixtureFormatter
         }
 
         builder.Append(']');
+        if (scene.Sheet is { } sheet)
+        {
+            builder.Append(',');
+            AppendPropertyName(builder, "sheet");
+            builder.Append('{');
+            AppendPropertyName(builder, "widthMm");
+            AppendDouble(builder, sheet.WidthMm);
+            builder.Append(',');
+            AppendPropertyName(builder, "heightMm");
+            AppendDouble(builder, sheet.HeightMm);
+            builder.Append(',');
+            AppendPropertyName(builder, "format");
+            AppendJsonString(builder, sheet.Format.ToString());
+            builder.Append(',');
+            AppendPropertyName(builder, "orientation");
+            AppendJsonString(builder, sheet.Orientation.ToString());
+            if (sheet.PageBounds is { } bounds)
+            {
+                builder.Append(',');
+                AppendPropertyName(builder, "pageBounds");
+                builder.Append('{');
+                AppendPropertyName(builder, "minX");
+                AppendDouble(builder, bounds.MinX);
+                builder.Append(',');
+                AppendPropertyName(builder, "minY");
+                AppendDouble(builder, bounds.MinY);
+                builder.Append(',');
+                AppendPropertyName(builder, "widthMm");
+                AppendDouble(builder, bounds.WidthMm);
+                builder.Append(',');
+                AppendPropertyName(builder, "heightMm");
+                AppendDouble(builder, bounds.HeightMm);
+                builder.Append(',');
+                AppendPropertyName(builder, "drawingUnitsPerMm");
+                AppendDouble(builder, bounds.DrawingUnitsPerMm);
+                builder.Append(',');
+                AppendPropertyName(builder, "units");
+                AppendJsonString(builder, bounds.Units);
+                builder.Append('}');
+            }
+            builder.Append('}');
+        }
+        if (scene.TitleBlock is { } titleBlock)
+        {
+            builder.Append(',');
+            AppendPropertyName(builder, "titleBlock");
+            builder.Append('{');
+            AppendPropertyName(builder, "isCandidate");
+            builder.Append(titleBlock.IsCandidate ? "true" : "false");
+            builder.Append(',');
+            AppendPropertyName(builder, "region");
+            builder.Append('{');
+            AppendPropertyName(builder, "minX");
+            AppendDouble(builder, titleBlock.Region.MinX);
+            builder.Append(',');
+            AppendPropertyName(builder, "minY");
+            AppendDouble(builder, titleBlock.Region.MinY);
+            builder.Append(',');
+            AppendPropertyName(builder, "maxX");
+            AppendDouble(builder, titleBlock.Region.MaxX);
+            builder.Append(',');
+            AppendPropertyName(builder, "maxY");
+            AppendDouble(builder, titleBlock.Region.MaxY);
+            builder.Append(',');
+            AppendPropertyName(builder, "sourceIds");
+            AppendStringArray(builder, titleBlock.Region.ProvenanceIds);
+            builder.Append('}');
+            builder.Append(',');
+            AppendPropertyName(builder, "fields");
+            builder.Append('[');
+            for (var i = 0; i < titleBlock.Fields.Count; i++)
+            {
+                if (i > 0) builder.Append(',');
+                AppendTitleBlockField(builder, titleBlock.Fields[i]);
+            }
+            builder.Append(']');
+            builder.Append(',');
+            AppendPropertyName(builder, "lines");
+            builder.Append('[');
+            for (var i = 0; i < titleBlock.Lines.Count; i++)
+            {
+                if (i > 0) builder.Append(',');
+                AppendLine(builder, titleBlock.Lines[i]);
+            }
+            builder.Append(']');
+            builder.Append('}');
+        }
         builder.Append('}');
         return builder.ToString();
     }
@@ -105,6 +193,29 @@ internal static class PrimitiveSceneFixtureFormatter
         builder.Append(',');
         AppendPropertyName(builder, "sourceIds");
         AppendStringArray(builder, text.ProvenanceIds);
+        builder.Append('}');
+    }
+
+    private static void AppendTitleBlockField(StringBuilder builder, TitleBlockField field)
+    {
+        builder.Append('{');
+        AppendPropertyName(builder, "kind");
+        AppendJsonString(builder, field.Kind.ToString());
+        builder.Append(',');
+        AppendPropertyName(builder, "value");
+        AppendJsonString(builder, field.Value);
+        builder.Append(',');
+        AppendPropertyName(builder, "position");
+        AppendPoint(builder, field.Position.X, field.Position.Y);
+        builder.Append(',');
+        AppendPropertyName(builder, "height");
+        AppendDouble(builder, field.Height);
+        builder.Append(',');
+        AppendPropertyName(builder, "rotation");
+        AppendDouble(builder, field.Rotation);
+        builder.Append(',');
+        AppendPropertyName(builder, "sourceIds");
+        AppendStringArray(builder, field.ProvenanceIds);
         builder.Append('}');
     }
 

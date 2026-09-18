@@ -2,12 +2,71 @@ using System.Globalization;
 using System.Reflection;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
+using TeyPdfCad.Core.Sheets;
 using Xunit;
 
 namespace TeyPdfCad.AutoCAD.Tests;
 
 public sealed class PrimitiveSceneFixtureFormatterTests
 {
+    [Fact]
+    public void SerializesOptionalSheetMetadata()
+    {
+        var scene = new PrimitiveScene
+        {
+            Sheet = new SheetMetadata(420, 297, StandardSheetFormat.A3, SheetOrientation.Landscape),
+        };
+
+        var json = InvokeFormat(scene, 0, 4);
+
+        Assert.Contains("\"sheet\":{\"widthMm\":420,\"heightMm\":297,\"format\":\"A3\",\"orientation\":\"Landscape\"}", json);
+    }
+
+    [Fact]
+    public void Serializes_page_scale_with_page_bounds()
+    {
+        var scene = new PrimitiveScene
+        {
+            Sheet = new SheetMetadata(420, 297, StandardSheetFormat.A3, SheetOrientation.Landscape)
+            {
+                PageBounds = new SheetPageBounds(2829, 2065, 420, 297, DrawingUnitsPerMm: 100),
+            },
+        };
+
+        var json = InvokeFormat(scene, 0, 4);
+
+        Assert.Contains("\"pageBounds\":{\"minX\":2829,\"minY\":2065,\"widthMm\":420,\"heightMm\":297,\"drawingUnitsPerMm\":100,\"units\":\"mm\"}", json);
+    }
+
+    [Fact]
+    public void SerializesEditableTitleBlockContractWithoutInventingFieldSemantics()
+    {
+        var scene = new PrimitiveScene
+        {
+            TitleBlock = new TitleBlockMetadata(
+                new TitleBlockRegion(290, 4, 420, 75, ["L1", "L2"]),
+                [new TitleBlockField(
+                    TitleBlockFieldKind.Unknown,
+                    "Наименование",
+                    new Point2(300, 30),
+                    3,
+                    0,
+                    ["T1"])])
+        };
+        scene.TitleBlock = scene.TitleBlock! with
+        {
+            Lines = [new LinePrimitive(new Point2(290, 4), new Point2(420, 4), "TB", ["L1"])],
+        };
+
+        var json = InvokeFormat(scene, 3, 4);
+
+        Assert.Contains("\"titleBlock\":{\"isCandidate\":true", json);
+        Assert.Contains("\"region\":{\"minX\":290,\"minY\":4,\"maxX\":420,\"maxY\":75,\"sourceIds\":[\"L1\",\"L2\"]}", json);
+        Assert.Contains("\"kind\":\"Unknown\",\"value\":\"Наименование\"", json);
+        Assert.Contains("\"sourceIds\":[\"T1\"]", json);
+        Assert.Contains("\"lines\":[{\"start\":[290,4],\"end\":[420,4]", json);
+    }
+
     [Fact]
     public void Format_is_byte_stable_when_scene_insertion_order_changes()
     {
