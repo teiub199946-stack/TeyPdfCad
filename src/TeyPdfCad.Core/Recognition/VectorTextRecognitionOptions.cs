@@ -38,6 +38,13 @@ public sealed record VectorTextRecognitionOptions
     /// </summary>
     public bool ResolveHalfTurnAmbiguityAsUpright { get; init; } = true;
 
+    /// <summary>
+    /// Score window in which 180-degree alternatives are treated as the same noisy
+    /// geometric glyph and resolved by readable orientation rather than by tiny
+    /// floating-point/noise score differences.
+    /// </summary>
+    public double HalfTurnAmbiguityScoreTolerance { get; init; } = 0.02;
+
     /// <summary>Hard safety cap for one glyph candidate.</summary>
     public int MaxGlyphStrokeCount { get; init; } = 64;
 
@@ -50,6 +57,8 @@ public sealed record VectorTextRecognitionOptions
             && CharacterGapHeightMultiplier >= 0
             && MaxRunRotationDifferenceRadians >= 0
             && MaxRunRotationDifferenceRadians <= Math.PI / 2.0
+            && HalfTurnAmbiguityScoreTolerance >= 0
+            && HalfTurnAmbiguityScoreTolerance <= 1
             && MaxGlyphStrokeCount >= 1
             && Templates is not null;
 }
