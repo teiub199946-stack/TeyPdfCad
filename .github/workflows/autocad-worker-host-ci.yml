@@ -1,0 +1,37 @@
+name: AutoCAD Worker Host CI
+
+on:
+  push:
+    branches:
+      - integration/codex-20260918-autocad-worker-host
+  pull_request:
+    paths:
+      - 'src/TeyPdfCad.AutoCAD/**'
+      - 'src/TeyPdfCad.Core/Bridge/**'
+      - 'tests/TeyPdfCad.AutoCAD.Tests/**'
+      - '.github/workflows/autocad-worker-host-ci.yml'
+
+jobs:
+  build-autocad-worker-host:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore AutoCAD 2022 tests
+        run: dotnet restore tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj
+
+      - name: Build AutoCAD 2022 worker host
+        run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
+
+      - name: Test AutoCAD 2022 worker host
+        run: dotnet test tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj --configuration Release --no-restore
+
+      - name: Verify expected net48 outputs
+        shell: pwsh
+        run: |
+          $dir = 'src/TeyPdfCad.AutoCAD/bin/Release/net48'
+          if (!(Test-Path "$dir/TeyPdfCad.AutoCAD.dll")) { throw 'Missing AutoCAD bridge DLL' }
+          if (!(Test-Path "$dir/TeyPdfCad.Core.dll")) { throw 'Missing Core DLL' }
