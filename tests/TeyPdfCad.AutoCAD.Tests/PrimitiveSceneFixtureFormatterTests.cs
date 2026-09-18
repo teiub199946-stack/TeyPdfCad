@@ -17,7 +17,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
             Sheet = new SheetMetadata(420, 297, StandardSheetFormat.A3, SheetOrientation.Landscape),
         };
 
-        var json = PrimitiveSceneFixtureFormatter.Format(scene, selectedCount: 0, insunits: 4);
+        var json = InvokeFormat(scene, 0, 4);
 
         Assert.Contains("\"sheet\":{\"widthMm\":420,\"heightMm\":297,\"format\":\"A3\",\"orientation\":\"Landscape\"}", json);
     }
@@ -58,7 +58,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
             Lines = [new LinePrimitive(new Point2(290, 4), new Point2(420, 4), "TB", ["L1"])],
         };
 
-        var json = PrimitiveSceneFixtureFormatter.Format(scene, selectedCount: 3, insunits: 4);
+        var json = InvokeFormat(scene, 3, 4);
 
         Assert.Contains("\"titleBlock\":{\"isCandidate\":true", json);
         Assert.Contains("\"region\":{\"minX\":290,\"minY\":4,\"maxX\":420,\"maxY\":75,\"sourceIds\":[\"L1\",\"L2\"]}", json);
