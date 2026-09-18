@@ -471,8 +471,12 @@ public sealed class VectorTextRecognizer
         if (candidateBounds.Height <= 1e-12 && candidateBounds.Width <= 1e-12)
             return null;
 
+        var templateBounds = GetBounds(template.Strokes);
         var normalizedCandidate = rotated
-            .Select(stroke => Normalize(stroke, candidateBounds))
+            .Select(stroke => NormalizeCandidateForTemplate(
+                stroke,
+                candidateBounds,
+                templateBounds))
             .ToArray();
         var match = MatchTemplate(
             normalizedCandidate,
@@ -584,6 +588,36 @@ public sealed class VectorTextRecognizer
         VectorGlyphTemplateStroke stroke,
         GlyphBounds bounds)
         => new(Normalize(stroke.Start, bounds), Normalize(stroke.End, bounds));
+
+    private static VectorGlyphTemplateStroke NormalizeCandidateForTemplate(
+        VectorGlyphTemplateStroke stroke,
+        GlyphBounds candidateBounds,
+        GlyphBounds templateBounds)
+        => new(
+            NormalizeCandidatePointForTemplate(
+                stroke.Start,
+                candidateBounds,
+                templateBounds),
+            NormalizeCandidatePointForTemplate(
+                stroke.End,
+                candidateBounds,
+                templateBounds));
+
+    private static Point2 NormalizeCandidatePointForTemplate(
+        Point2 point,
+        GlyphBounds candidateBounds,
+        GlyphBounds templateBounds)
+        => new(
+            templateBounds.Width <= 1e-12
+                ? 0.5
+                : candidateBounds.Width <= 1e-12
+                    ? 0.5
+                    : (point.X - candidateBounds.MinX) / candidateBounds.Width,
+            templateBounds.Height <= 1e-12
+                ? 0.5
+                : candidateBounds.Height <= 1e-12
+                    ? 0.5
+                    : (point.Y - candidateBounds.MinY) / candidateBounds.Height);
 
     private static Point2 Normalize(Point2 point, GlyphBounds bounds)
         => new(
