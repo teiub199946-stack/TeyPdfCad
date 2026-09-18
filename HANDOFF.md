@@ -43,22 +43,24 @@ The user manually confirmed:
   `TeyPdfCad_A3_Landscape` and `TeyPdfCad_TitleBlock_Landscape` with
   `media=ISO_A3_(420.00_x_297.00_MM)`, `blockLines=700`, `lineweights=[25,60]`.
 
-## Open runtime defect
+## Fixed source defect (2026-09-19, not yet runtime-accepted)
 
-The latest attempt to add a Model Space viewport for showing the full imported
-drawing in Paper Space still fails in AutoCAD 2022 with:
+The `eNotInDatabase` failure on the paper-space viewport was diagnosed and fixed in
+source. Two defects were corrected in `SheetLayoutWriter.cs`:
 
-`TeyPdfCad: sheet layout/title block creation failed. viewport/frame stage failed: eNotInDatabase`
+1. `Viewport.SetDatabaseDefaults()` was called before the viewport was resident in
+   the database. It now runs only after `AppendEntity` +
+   `AddNewlyCreatedDBObject`.
+2. `LayoutManager.CreateLayout`/`DeleteLayout` were invoked while `Reconstruct`
+   held an active transaction. `LayoutManager` is not transactional and its
+   side effects left the surrounding transaction pointing at non-database object
+   ids. Layout creation now goes through `LayoutDictionary` + `BlockTable`
+   transactionally in the same transaction.
 
-The failure occurs after `TEYPDFDUMPALL` and `TEYPDFSHEETCONFIG`; the transaction
-rolls back and `TEYPDFSHEETAUDIT` reports no generated layout. The source currently
-contains the latest viewport implementation, but it has not been runtime-accepted.
-Do not claim that the full drawing is visible in Paper Space.
-
-The prior non-viewport writer could create the A3 frame/title block, but the Paper
-Space was visually blank because source PDF geometry remained only in Model Space.
-The intended fix is to resolve the AutoCAD 2022 viewport API/ObjectId behavior,
-then rebuild and rerun the one-command script on a saved DWG.
+Verified before handoff: plugin Release build is 0 warnings/0 errors, Core 44,
+Bridge 27, Web 24 tests pass. Runtime acceptance in real AutoCAD 2022 is still
+outstanding; run the regenerated one-command script on a saved DWG and confirm the
+full drawing is visible in Paper Space before claiming success.
 
 ## Other boundary
 
@@ -68,9 +70,10 @@ not want AutoCAD repaired; continue with ordinary GUI AutoCAD testing.
 
 ## Latest package paths
 
-- Package: `C:\Users\Admin\Documents\ChatGPT\TeyConvert\TeyPdfCad-restored\artifacts\autocad-test\20260918_225939`
-- Full script: `...\225939\RUN_FULL_A3_TEST.scr`
-- Plugin DLL: `...\225939\plugin\TeyPdfCad.AutoCAD.dll`
+- Package: `C:\Users\Admin\Documents\ChatGPT\TeyConvert\TeyPdfCad-restored\artifacts\autocad-test\20260919_005235`
+  - Acceptance script: `...\005235\RUN_A3_ACCEPTANCE.scr`
+  - Full script: `...\005235\RUN_FULL_A3_TEST.scr`
+  - Plugin DLL: `...\005235\plugin\TeyPdfCad.AutoCAD.dll`
 
 The package may be stale after later source edits; regenerate it after any source
 change using:
