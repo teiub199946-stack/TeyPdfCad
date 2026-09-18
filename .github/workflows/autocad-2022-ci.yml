@@ -2,7 +2,16 @@ name: AutoCAD 2022 Adapter CI
 
 on:
   push:
-    branches: [ 'feature/autocad-2022-*' ]
+    branches:
+      - 'feature/autocad-2022-*'
+      - 'feature/vector-text-*'
+  pull_request:
+    paths:
+      - 'src/TeyPdfCad.Core/**'
+      - 'src/TeyPdfCad.AutoCAD/**'
+      - 'tests/TeyPdfCad.Tests/**'
+      - 'tests/TeyPdfCad.AutoCAD.Tests/**'
+      - '.github/workflows/autocad-2022-ci.yml'
   workflow_dispatch:
 
 jobs:
