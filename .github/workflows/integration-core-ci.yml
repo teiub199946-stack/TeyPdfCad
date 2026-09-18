@@ -1,0 +1,23 @@
+name: Integration Core CI
+
+on:
+  push:
+    branches:
+      - integration/codex-20260918-vector-text
+      - integration/codex-20260918-sheet-core
+  pull_request:
+    paths:
+      - 'src/TeyPdfCad.Core/**'
+      - 'tests/TeyPdfCad.Tests/**'
+      - '.github/workflows/integration-core-ci.yml'
+
+jobs:
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore tests/TeyPdfCad.Tests/TeyPdfCad.Tests.csproj
+      - run: dotnet test tests/TeyPdfCad.Tests/TeyPdfCad.Tests.csproj --configuration Release --no-restore
