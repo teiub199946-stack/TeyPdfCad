@@ -44,38 +44,26 @@ public sealed class ReconstructionCommands
         var document = Application.DocumentManager.MdiActiveDocument;
         if (document is null) return;
 
-        var editor = document.Editor;
-        var database = document.Database;
-        var objectIds = GetPdfImportSelection(editor);
+        var objectIds = GetPdfImportSelection(document.Editor);
         if (objectIds is null) return;
 
-        using var transaction = database.TransactionManager.StartTransaction();
-        var scene = new AutoCadPrimitiveReader().Read(transaction, objectIds);
-        var fixture = PrimitiveSceneFixtureFormatter.Format(
-            scene,
-            objectIds.Length,
-            (int)database.Insunits);
+        DumpFixture(document, objectIds);
+    }
 
-        try
+    [CommandMethod("TEYPDFDUMPALL", CommandFlags.Modal)]
+    public void DumpAllModelSpaceObjects()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null) return;
+
+        var objectIds = GetAllModelSpaceObjects(document.Database);
+        if (objectIds.Length == 0)
         {
-            var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
-            Directory.CreateDirectory(outputDirectory);
-
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmssfff", CultureInfo.InvariantCulture);
-            var outputPath = Path.Combine(outputDirectory, $"PrimitiveScene_{timestamp}.json");
-            File.WriteAllText(outputPath, fixture, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-            editor.WriteMessage(
-                $"\nTeyPdfCad fixture saved: {outputPath}\n" +
-                $"selected={objectIds.Length}, lines={scene.Lines.Count}, texts={scene.Texts.Count}, " +
-                $"INSUNITS={(int)database.Insunits}. Drawing was not changed.\n");
-        }
-        catch (System.Exception ex)
-        {
-            editor.WriteMessage($"\nTeyPdfCad fixture export failed: {ex.Message}\n");
+            document.Editor.WriteMessage("\nTeyPdfCad: ModelSpace is empty.");
+            return;
         }
 
-        // No commit: fixture capture is intentionally read-only.
+        DumpFixture(document, objectIds);
     }
 
     [CommandMethod("TEYPDFRECONSTRUCT", CommandFlags.Modal | CommandFlags.UsePickSet)]
@@ -84,21 +72,61 @@ public sealed class ReconstructionCommands
         var document = Application.DocumentManager.MdiActiveDocument;
         if (document is null) return;
 
+        var objectIds = GetPdfImportSelection(document.Editor);
+        if (objectIds is null) return;
+
+        Reconstruct(document, objectIds);
+    }
+
+    [CommandMethod("TEYPDFRECONSTRUCTALL", CommandFlags.Modal)]
+    public void ReconstructAllModelSpaceObjects()
+    {
+        if (!BridgeRuntimeSettings.TryReadFromEnvironment(out var settings, out var settingsError))
+        {
+            Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+                $"\nTeyPdfCad bridge settings rejected: {settingsError}");
+            return;
+        }
+
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null)
+        {
+            settings?.Fail("No active AutoCAD document.");
+            return;
+        }
+
+        var objectIds = GetAllModelSpaceObjects(document.Database);
+        if (objectIds.Length == 0)
+        {
+            document.Editor.WriteMessage("\nTeyPdfCad: ModelSpace is empty. Drawing was not changed.");
+            settings?.Fail("ModelSpace is empty.");
+            return;
+        }
+
+        Reconstruct(document, objectIds, settings);
+    }
+
+    private static void Reconstruct(
+        Document document,
+        ObjectId[] objectIds,
+        BridgeRuntimeSettings? settings = null)
+    {
         var editor = document.Editor;
         var database = document.Database;
-        var objectIds = GetPdfImportSelection(editor);
-        if (objectIds is null) return;
 
         editor.WriteMessage($"\n{DrawingUnitDiagnostics.Format(database.Insunits)}\n");
 
         using var transaction = database.TransactionManager.StartTransaction();
 
         var scene = new AutoCadPrimitiveReader().Read(transaction, objectIds);
-        var semantic = new SemanticReconstructionEngine().Analyze(scene);
+        var semantic = new SemanticReconstructionEngine().Analyze(
+            scene,
+            settings?.RecognitionOptions);
 
         if (semantic.Dimensions.Count == 0)
         {
             editor.WriteMessage("\nTeyPdfCad: no validated linear dimensions were reconstructed. Drawing was not changed.");
+            settings?.Fail("No validated linear dimensions were reconstructed.");
             return;
         }
 
@@ -108,6 +136,7 @@ public sealed class ReconstructionCommands
                 $"\nTeyPdfCad: {semantic.DetectedDrawingScales.Count} scale groups were detected " +
                 $"[{string.Join(", ", semantic.DetectedDrawingScales.Select(x => x.ToString("G8")))}]. " +
                 "Automatic global scaling is intentionally blocked until spatial scale partitioning is enabled. Drawing was not changed.");
+            settings?.Fail("Multiple drawing scale groups were detected.");
             return;
         }
 
@@ -135,16 +164,81 @@ public sealed class ReconstructionCommands
         if (!validation.Success)
         {
             editor.WriteMessage($"\nTeyPdfCad: native dimension validation failed. {validation.ErrorMessage} Transaction rolled back.");
+            settings?.Fail($"Native dimension validation failed: {validation.ErrorMessage}");
             return;
+        }
+
+        if (settings is not null)
+        {
+            if (!settings.PreserveSourceGeometry)
+                EraseSourceGeometry(transaction, objectIds);
+
+            settings.ApplyOutputUnits(database);
         }
 
         transaction.Commit();
         editor.Regen();
+        settings?.Complete();
 
         editor.WriteMessage(
             $"\nTeyPdfCad: reconstructed {createdIds.Count} native dimensions. " +
             $"Scale={scale:G8}; max native measurement error={validation.MaxRelativeError:P4}. " +
-            "Source PDFIMPORT primitives were preserved for review.");
+            (settings?.PreserveSourceGeometry == false
+                ? "Source PDFIMPORT primitives were removed."
+                : "Source PDFIMPORT primitives were preserved for review."));
+    }
+
+    private static void DumpFixture(Document document, ObjectId[] objectIds)
+    {
+        var database = document.Database;
+        using var transaction = database.TransactionManager.StartTransaction();
+        var scene = new AutoCadPrimitiveReader().Read(transaction, objectIds);
+        var fixture = PrimitiveSceneFixtureFormatter.Format(
+            scene,
+            objectIds.Length,
+            (int)database.Insunits);
+
+        try
+        {
+            var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
+            Directory.CreateDirectory(outputDirectory);
+
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmssfff", CultureInfo.InvariantCulture);
+            var outputPath = Path.Combine(outputDirectory, $"PrimitiveScene_{timestamp}.json");
+            File.WriteAllText(outputPath, fixture, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            document.Editor.WriteMessage(
+                $"\nTeyPdfCad fixture saved: {outputPath}\n" +
+                $"selected={objectIds.Length}, lines={scene.Lines.Count}, texts={scene.Texts.Count}, " +
+                $"INSUNITS={(int)database.Insunits}. Drawing was not changed.\n");
+        }
+        catch (System.Exception ex)
+        {
+            document.Editor.WriteMessage($"\nTeyPdfCad fixture export failed: {ex.Message}\n");
+        }
+
+        // No commit: fixture capture is intentionally read-only.
+    }
+
+    private static ObjectId[] GetAllModelSpaceObjects(Database database)
+    {
+        using var transaction = database.TransactionManager.StartTransaction();
+        var blockTable = (BlockTable)transaction.GetObject(database.BlockTableId, OpenMode.ForRead);
+        var modelSpace = (BlockTableRecord)transaction.GetObject(
+            blockTable[BlockTableRecord.ModelSpace],
+            OpenMode.ForRead);
+        var objectIds = modelSpace.Cast<ObjectId>().ToArray();
+        transaction.Commit();
+        return objectIds;
+    }
+
+    private static void EraseSourceGeometry(Transaction transaction, ObjectId[] objectIds)
+    {
+        foreach (var objectId in objectIds)
+        {
+            if (transaction.GetObject(objectId, OpenMode.ForWrite, false) is Entity entity && !entity.IsErased)
+                entity.Erase();
+        }
     }
 
     private static ObjectId[]? GetPdfImportSelection(Editor editor)
