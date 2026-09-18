@@ -33,7 +33,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
             },
         };
 
-        var json = PrimitiveSceneFixtureFormatter.Format(scene, selectedCount: 0, insunits: 4);
+        var json = InvokeFormat(scene, 0, 4);
 
         Assert.Contains("\"pageBounds\":{\"minX\":2829,\"minY\":2065,\"widthMm\":420,\"heightMm\":297,\"drawingUnitsPerMm\":100,\"units\":\"mm\"}", json);
     }
