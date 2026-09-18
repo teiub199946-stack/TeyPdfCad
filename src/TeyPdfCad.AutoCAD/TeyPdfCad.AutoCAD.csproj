@@ -4,7 +4,7 @@
     <RootNamespace>TeyPdfCad.AutoCAD</RootNamespace>
     <AssemblyName>TeyPdfCad.AutoCAD</AssemblyName>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <AutoCADApiVersion>24.1.51000</AutoCADApiVersion>
+    <AutoCADApiVersion>24.3.119</AutoCADApiVersion>
     <AutoCADLocalApiDirectory Condition="'$(TEYPDFCAD_AUTOCAD_LOCAL_API)' != ''">$(TEYPDFCAD_AUTOCAD_LOCAL_API)</AutoCADLocalApiDirectory>
   </PropertyGroup>
 
