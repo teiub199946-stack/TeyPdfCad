@@ -54,6 +54,42 @@ public sealed class SemanticReconstructionEngineTests
         Assert.Empty(scene.Texts);
     }
 
+
+    [Theory]
+    [InlineData(35)]
+    [InlineData(90)]
+    public void OptIn_VectorText_Preprocessing_Reconstructs_Rotated_Dimensions(double degrees)
+    {
+        var rotation = degrees * Math.PI / 180.0;
+        var scene = new PrimitiveScene();
+
+        scene.Lines.Add(new LinePrimitive(
+            Transform(new Point2(0, 0), new Point2(0, 0), rotation),
+            Transform(new Point2(12, 0), new Point2(0, 0), rotation),
+            SourceIds: ["dim"]));
+        scene.Lines.Add(new LinePrimitive(
+            Transform(new Point2(0, -12), new Point2(0, 0), rotation),
+            Transform(new Point2(0, 1), new Point2(0, 0), rotation),
+            SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            Transform(new Point2(12, -12), new Point2(0, 0), rotation),
+            Transform(new Point2(12, 1), new Point2(0, 0), rotation),
+            SourceIds: ["ext-2"]));
+
+        var rotatedOffset = Transform(new Point2(3.7, 2.5), new Point2(0, 0), rotation);
+        AddVectorNumber(scene, "1200", rotatedOffset, rotation);
+
+        var result = new SemanticReconstructionEngine().Analyze(
+            scene,
+            vectorTextOptions: new VectorTextRecognitionOptions());
+
+        var dimension = Assert.Single(result.Dimensions);
+        Assert.Equal(1200, dimension.DisplayedValue, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+        Assert.Equal("1200", dimension.SourceText);
+        Assert.Empty(scene.Texts);
+    }
+
     [Fact]
     public void Default_Analyze_Does_Not_Enable_VectorText_Implicitly()
     {
