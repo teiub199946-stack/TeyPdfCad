@@ -30,6 +30,14 @@ public sealed record VectorTextRecognitionOptions
     /// </summary>
     public bool UsePdfImportProvenanceGrouping { get; init; } = true;
 
+    /// <summary>
+    /// Engineering dimension text is normally kept readable within +/-90 degrees.
+    /// When two different glyph values are exact 180-degree rotations of one another
+    /// (for example seven-segment 6/9), prefer the upright interpretation. Ambiguities
+    /// at the same orientation still fail closed.
+    /// </summary>
+    public bool ResolveHalfTurnAmbiguityAsUpright { get; init; } = true;
+
     /// <summary>Hard safety cap for one glyph candidate.</summary>
     public int MaxGlyphStrokeCount { get; init; } = 64;
 
