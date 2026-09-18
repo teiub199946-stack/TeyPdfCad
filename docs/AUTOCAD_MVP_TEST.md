@@ -41,6 +41,8 @@ Current diagnostic commands:
 - `TEYPDFANALYZE` — read-only semantic analysis;
 - `TEYPDFDUMP` — read-only export of the exact `PrimitiveScene` supplied by the AutoCAD adapter to a deterministic JSON fixture under `%TEMP%\TeyPdfCad\`;
 - `TEYPDFRECONSTRUCT` — validated native dimension reconstruction.
+- `TEYPDFSHEETCONFIG` — set measured page bounds for the current AutoCAD session without changing the drawing.
+- `TEYPDFSHEETAUDIT` — read-only report of the generated A3 layout, media name, title-block block contents, and lineweights.
 
 ## Test drawing
 
@@ -88,6 +90,19 @@ Expected analysis result for the TrueType proof:
     - reject/roll back the operation with an explicit reason.
 
 It must never silently commit a native dimension whose measured value disagrees with the semantic value outside the validation tolerance.
+
+## Controlled sheet-layout hook
+
+For a measured A3 page only, the temporary adapter can receive explicit page bounds before running `TEYPDFRECONSTRUCTALL`:
+
+```text
+TEYPDFCAD_SHEET_WIDTH_MM=420
+TEYPDFCAD_SHEET_HEIGHT_MM=297
+TEYPDFCAD_SHEET_MIN_X=0
+TEYPDFCAD_SHEET_MIN_Y=0
+```
+
+The adapter creates the layout and title-block block only after native dimension validation succeeds. These variables are not a PDF page reader and must not be populated from guessed geometry.
 
 ## Vector-glyph failure capture
 

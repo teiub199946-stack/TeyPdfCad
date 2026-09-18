@@ -1,6 +1,6 @@
 # TeyPdfCad — verified project state
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 This file records verified engineering facts and near-term priorities. It is intended to be the durable project-memory checkpoint for work across chats and branches. Claims belong here only after direct evidence or CI evidence exists.
 
@@ -149,3 +149,48 @@ This PDF must be preserved as a required future regression fixture. Do not weake
 - Do not lower thresholds or relabel expected results merely to make metrics green.
 - Preserve provenance/source IDs needed for safe future cleanup of exploded PDFIMPORT primitives.
 - Never silently assign engineering units from the appearance of a dimension label; unit semantics must be explicit or separately inferred and validated.
+
+## Web/API lifecycle — verified 2026-09-18
+
+The Web/API path now publishes a terminal `ConversionResult` before changing the queue status to a terminal state. This removes the observable window where `GET /jobs/{jobId}` could report `completed` while `/result` still returned `result_pending`. If queue completion fails, the pre-published result is removed. The hosted worker no longer publishes a second copy; `ConversionJobRunner` owns the ordering and lifecycle transition.
+
+Evidence:
+
+- `TeyPdfCad.Web` build: 0 warnings, 0 errors.
+- `TeyPdfCad.Web.Api` build: 0 warnings, 0 errors.
+- `TeyPdfCad.Web.Tests`: 22 passed.
+- In-memory HTTP smoke: `/ready` returned 200, job submission returned 202, the job reached `completed`, `/result` returned 200, and the downloaded artifact began with the valid DWG header `AC1032`.
+
+This is in-memory lifecycle/artifact evidence only. It does not certify AutoCAD conversion. The AutoCAD plugin still requires AutoCAD 2022 host assemblies and a working Core Console profile for runtime acceptance.
+
+## AutoCAD Core Console gate — rechecked 2026-09-18
+
+The real bridge was invoked with the installed AutoCAD 2022 Core Console, the built `TeyPdfCad.AutoCAD.dll`, the `autocad-live-minimal.pdf` fixture, and the discovered `СПДС 2023` profile. Core Console started but exited with code `1`; the bridge returned exit code `22` before PDFIMPORT. The preserved log reports that `C:\Program Files\Autodesk\AutoCAD 2022\acad2022.cfg` is unavailable or cannot be processed, followed by `Невозможно обработать файл конфигурации!`. A direct filesystem check found no `acad2022.cfg` under the installed AutoCAD 2022 directory. No output DWG was produced.
+
+This is an installation/runtime prerequisite failure. Do not treat the header-only in-memory smoke artifact as a DWG conversion result, and do not claim the bridge production-ready until AutoCAD is repaired or its configuration is restored and a real Core Console run produces an independently inspectable DWG.
+
+The Web API readiness contract now checks the same prerequisite before accepting AutoCAD jobs. With the current installed paths and missing configuration file, `/ready` returns HTTP 503 with `autocad_configuration_not_found`. This is fail-closed readiness evidence; it does not replace the later Core Console and saved-DWG acceptance gate.
+
+## Code-only completion gate — 2026-09-18
+
+The bounded code work is complete for this checkpoint:
+
+- Core now has an explicit, fail-closed `VectorTextRecognizer` upstream module. It accepts only registered normalized stroke templates, merges provenance, does not mutate `PrimitiveScene`, and returns rejections for unknown groups. The default template set is deliberately limited to conservative seven-segment control digits; the real SHX fixture remains unrecognized until a verified template set is supplied.
+- Bridge protocol contracts are centralized: protocol v1, stable exit codes, DWG header/status validation, strict CLI argument validation, same input/output rejection, settings propagation through the Core Console environment, and bounded cleanup after cancellation.
+- A3/title-block detection now includes line segments crossing the candidate region even when both endpoints are outside the region.
+- AutoCAD Web readiness fails closed when `acad2022.cfg` is missing beside Core Console.
+
+Verified sequential Release evidence:
+
+- `TeyPdfCad.Tests`: 40 passed.
+- `TeyPdfCad.AutoCAD.Bridge.Tests`: 27 passed.
+- `TeyPdfCad.Web.Tests`: 24 passed.
+- Web/API, Bridge, Core, and AutoCAD plugin builds: 0 warnings, 0 errors. The plugin build used the installed AutoCAD 2022 API directory as an explicit local reference source.
+
+The next gate is manual AutoCAD acceptance by the operator: load the Release plugin, run health/PDFIMPORT/dump/reconstruct/sheet audit, save and reopen a DWG, then return the command transcript, fixture JSON, and resulting DWG. No real AutoCAD conversion success is claimed until those artifacts exist and pass independent inspection.
+
+The first manual PDFIMPORT attempt exposed a defective control fixture rather than a plugin failure: `autocad-live-minimal.pdf` contained literal `` `n`` sequences instead of line breaks. The fixture was corrected in place and independently parsed with Poppler `pdfinfo` as a one-page PDF 1.4 document. The next AutoCAD step is to retry PDFIMPORT with the corrected file before evaluating any reconstruction behavior.
+
+The first real A3 PDF dump then exposed a scale contract: the imported page extents were approximately `2829.645..44829.645` by `2065.104..31801.104`, while the physical page is 420 x 297 mm. This is 100 drawing units per millimetre. `SheetPageBounds`, title-block region calculations, the AutoCAD reader, and `TEYPDFSHEETCONFIG` now carry an explicit `DrawingUnitsPerMm` value; the rebuilt Release plugin must be loaded before reconstruction is tested. For this fixture use width `420`, height `297`, scale `100`, MinX `2829.645`, and MinY `2065.104`.
+
+The first scaled reconstruction still returned no sheet candidate because PDFIMPORT produced `texts=0`: the title-block labels are SHX/vector linework. The reader now has an explicit geometry-only title-block fallback when a configured sheet has linework but no text primitives. It preserves empty text fields and source provenance, so it enables layout geometry without inventing labels. Core tests are now 44/44 and the Release AutoCAD plugin rebuild is clean.
