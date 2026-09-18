@@ -27,6 +27,61 @@ public sealed class VectorTextRecognizerTests
         Assert.Empty(result.Rejections);
     }
 
+    [Theory]
+    [InlineData(90)]
+    [InlineData(35)]
+    [InlineData(-30)]
+    public void Recognizes_Rotated_SevenSegment_Run_And_Preserves_Reading_Order(double degrees)
+    {
+        var radians = degrees * Math.PI / 180.0;
+        var scene = new PrimitiveScene();
+        AddDigit(scene, '2', 0, ["glyph-2"], radians);
+        AddDigit(scene, '0', 1.2, ["glyph-0"], radians);
+        AddDigit(scene, '3', 2.4, ["glyph-3"], radians);
+
+        var result = new VectorTextRecognizer().Analyze(scene);
+
+        var text = Assert.Single(result.Texts);
+        Assert.Equal("203", text.Value);
+        var expectedCenter = Rotate(new Point2(1.7, 0.5), radians);
+        Assert.Equal(expectedCenter.X, text.Position.X, 5);
+        Assert.Equal(expectedCenter.Y, text.Position.Y, 5);
+        Assert.Equal(1, text.Height, 5);
+        Assert.True(
+            AngleDistanceModuloPi(radians, text.Rotation) < 1e-4,
+            $"expected rotation line {radians}, actual {text.Rotation}");
+    }
+
+    [Fact]
+    public void Groups_Disconnected_Strokes_From_The_Same_PdfImport_Polyline_Source()
+    {
+        var template = new VectorGlyphTemplate(
+            "A",
+            [
+                new VectorGlyphTemplateStroke(new Point2(0, 0), new Point2(0, 1)),
+                new VectorGlyphTemplateStroke(new Point2(1, 0), new Point2(1, 1)),
+            ]);
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(10, 20),
+            new Point2(10, 24),
+            "PDF _0",
+            ["42#segment:0"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(14, 20),
+            new Point2(14, 24),
+            "PDF _0",
+            ["42#segment:1"]));
+
+        var result = new VectorTextRecognizer().Analyze(
+            scene,
+            new VectorTextRecognitionOptions { Templates = [template] });
+
+        var text = Assert.Single(result.Texts);
+        Assert.Equal("A", text.Value);
+        Assert.Equal(new[] { "42#segment:0", "42#segment:1" }, text.ProvenanceIds);
+    }
+
     [Fact]
     public void Rejects_Unknown_Glyph_Without_Fabricating_Text()
     {
@@ -137,16 +192,34 @@ public sealed class VectorTextRecognizerTests
         PrimitiveScene scene,
         char value,
         double xOffset,
-        IReadOnlyList<string> sourceIds)
+        IReadOnlyList<string> sourceIds,
+        double rotation = 0)
     {
         var template = Assert.Single(VectorGlyphTemplates.SevenSegmentDigits, x => x.Value == value.ToString());
         foreach (var stroke in template.Strokes)
         {
+            var start = Rotate(new Point2(xOffset + stroke.Start.X, stroke.Start.Y), rotation);
+            var end = Rotate(new Point2(xOffset + stroke.End.X, stroke.End.Y), rotation);
             scene.Lines.Add(new LinePrimitive(
-                new Point2(xOffset + stroke.Start.X, stroke.Start.Y),
-                new Point2(xOffset + stroke.End.X, stroke.End.Y),
+                start,
+                end,
                 "PDF _0",
                 sourceIds));
         }
+    }
+
+    private static Point2 Rotate(Point2 point, double radians)
+    {
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+        return new Point2(
+            point.X * cos - point.Y * sin,
+            point.X * sin + point.Y * cos);
+    }
+
+    private static double AngleDistanceModuloPi(double left, double right)
+    {
+        var delta = Math.Abs(left - right) % Math.PI;
+        return Math.Min(delta, Math.PI - delta);
     }
 }
