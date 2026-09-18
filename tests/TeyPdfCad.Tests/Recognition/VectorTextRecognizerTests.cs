@@ -191,12 +191,12 @@ public sealed class VectorTextRecognizerTests
     }
 
     [Fact]
-    public void Deterministic_RealLike_Corpus_Is_Rotation_Scale_Translation_And_Provenance_Stable()
+    public void Deterministic_1000_Case_Corpus_Is_Rotation_Scale_Translation_And_Provenance_Stable()
     {
         var random = new Random(20260919);
         var recognizer = new VectorTextRecognizer();
 
-        for (var caseIndex = 0; caseIndex < 100; caseIndex++)
+        for (var caseIndex = 0; caseIndex < 1000; caseIndex++)
         {
             var value = string.Concat(
                 Enumerable.Range(0, 3)
