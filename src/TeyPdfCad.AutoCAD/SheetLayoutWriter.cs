@@ -257,7 +257,6 @@ internal sealed class SheetLayoutWriter
                 ToLocal(sourceLine.Start, titleBlock.Region, drawingUnitsPerMm),
                 ToLocal(sourceLine.End, titleBlock.Region, drawingUnitsPerMm));
             line.Layer = "0";
-            ApplyLineWeight(line, sourceLine.StrokeWidthMm);
             definition.AppendEntity(line);
             transaction.AddNewlyCreatedDBObject(line, true);
         }
@@ -288,14 +287,6 @@ internal sealed class SheetLayoutWriter
             (point.Y - region.MinY) / drawingUnitsPerMm,
             0);
 
-    private static void ApplyLineWeight(Entity entity, double? strokeWidthMm)
-    {
-        if (strokeWidthMm is not { } width || double.IsNaN(width) || double.IsInfinity(width) || width <= 0)
-            return;
-
-        var hundredths = Math.Max(1, Math.Min(211, (int)Math.Round(width * 100, MidpointRounding.AwayFromZero)));
-        entity.LineWeight = (LineWeight)hundredths;
-    }
 }
 
 internal sealed record SheetWriteResult(
