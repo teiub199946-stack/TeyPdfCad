@@ -245,7 +245,10 @@ public sealed class VectorTextRecognizerTests
             }
 
             var result = recognizer.Analyze(scene);
-            var text = Assert.Single(result.Texts);
+            Assert.True(
+                result.Texts.Count == 1,
+                $"case {caseIndex}: value={value}, rotation={rotation}, scale={scale}, texts=[{string.Join("|", result.Texts.Select(text => text.Value))}]");
+            var text = result.Texts[0];
             Assert.Equal(value, text.Value);
             Assert.True(
                 AngleDistanceModuloPi(rotation, text.Rotation) < 1e-3,
