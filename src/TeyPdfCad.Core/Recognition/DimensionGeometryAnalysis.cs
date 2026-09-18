@@ -61,11 +61,16 @@ internal static class DimensionGeometryAnalysis
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+        var strokeWidthMm = first.StrokeWidthMm == second.StrokeWidthMm
+            ? first.StrokeWidthMm
+            : null;
+
         merged = new LinePrimitive(
             leftPoint,
             rightPoint,
             first.Layer == second.Layer ? first.Layer : null,
-            sourceIds);
+            sourceIds,
+            strokeWidthMm);
         return true;
     }
 

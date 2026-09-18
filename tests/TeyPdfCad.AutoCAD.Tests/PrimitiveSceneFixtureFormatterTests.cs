@@ -36,7 +36,8 @@ public sealed class PrimitiveSceneFixtureFormatterTests
             new Point2(1.25, -2.5),
             new Point2(3.75, 4.5),
             "DIM",
-            new[] { "AB#segment:2", "AB" }));
+            new[] { "AB#segment:2", "AB" },
+            0.35));
         scene.Texts.Add(new TextPrimitive(
             "5200",
             new Point2(8.5, 9.25),
@@ -52,6 +53,7 @@ public sealed class PrimitiveSceneFixtureFormatterTests
         Assert.Contains("\"insunits\":4", json);
         Assert.Contains("\"start\":[1.25,-2.5]", json);
         Assert.Contains("\"end\":[3.75,4.5]", json);
+        Assert.Contains("\"strokeWidthMm\":0.35", json);
         Assert.Contains("\"layer\":\"DIM\"", json);
         Assert.Contains("\"sourceIds\":[\"AB\",\"AB#segment:2\"]", json);
         Assert.Contains("\"value\":\"5200\"", json);
