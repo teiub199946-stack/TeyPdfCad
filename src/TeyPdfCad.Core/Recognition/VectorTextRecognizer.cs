@@ -342,11 +342,18 @@ public sealed class VectorTextRecognizer
         if (best.Score < options.MinGlyphConfidence)
             return false;
 
-        if (ordered.Length > 1
-            && Math.Abs(best.Score - ordered[1].Score) <= 1e-10
-            && !string.Equals(best.Template.Value, ordered[1].Template.Value, StringComparison.Ordinal))
+        var equalScoreCompetitors = ordered
+            .Skip(1)
+            .Where(match => Math.Abs(best.Score - match.Score) <= 1e-10)
+            .Where(match => !string.Equals(best.Template.Value, match.Template.Value, StringComparison.Ordinal))
+            .ToArray();
+
+        if (equalScoreCompetitors.Length > 0)
         {
-            return false;
+            var canResolveAsHalfTurn = options.ResolveHalfTurnAmbiguityAsUpright
+                && equalScoreCompetitors.All(match => IsHalfTurnSeparated(best.Rotation, match.Rotation));
+            if (!canResolveAsHalfTurn)
+                return false;
         }
 
         var sourceIds = component
@@ -710,6 +717,9 @@ public sealed class VectorTextRecognizer
         var delta = AngleDistance(left, right);
         return Math.Min(delta, Math.Abs(Math.PI - delta));
     }
+
+    private static bool IsHalfTurnSeparated(double left, double right)
+        => Math.Abs(AngleDistance(left, right) - Math.PI) <= 1e-8;
 
     private static bool IsFinite(Point2 point)
         => !double.IsNaN(point.X)
