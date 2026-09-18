@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $AutoCadInstall = 'C:\Program Files\Autodesk\AutoCAD 2024',
+    [string] $AutoCadInstall = 'C:\Program Files\Autodesk\AutoCAD 2022',
     [string] $OutputRoot = '',
     [switch] $SkipBuild
 )
@@ -58,7 +58,7 @@ Control fixture (startup/PDFIMPORT only): $(Join-Path $repoRoot 'autocad-live-mi
 
 ## Manual AutoCAD plugin smoke
 
-1. Open AutoCAD 2024 and save any active drawing.
+1. Open AutoCAD 2022 and save any active drawing.
 2. Run NETLOAD and select the plugin DLL above.
 3. Run TEYPDFHEALTH. Expected command-line text: `TeyPdfCad health: ok.`
 4. Use the control fixture above only for startup/PDFIMPORT smoke, or use a supplied real vector engineering PDF for semantic acceptance. Run PDFIMPORT, then TEYPDFDUMPALL.
