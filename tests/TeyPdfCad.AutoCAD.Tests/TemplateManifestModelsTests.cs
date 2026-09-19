@@ -20,4 +20,20 @@ public sealed class TemplateManifestModelsTests
         Assert.Contains("\"A3\"", json);
         Assert.Contains("\"SHEET\"", json);
     }
+
+    [Fact]
+    public void Manifest_serializes_reconstructable_line_geometry_and_text()
+    {
+        var entity = new TemplateEntityManifest(
+            "AcDbLine", "A1", 0, 0, 10, 0,
+            [new TemplatePointManifest(0, 0), new TemplatePointManifest(10, 0)],
+            "Рамка", 3.5, "0");
+        var manifest = new TemplateLibraryManifest("1", [new TemplateBlockManifest("A3", [entity], [])], [], []);
+
+        var json = manifest.ToJson();
+
+        Assert.Contains("\"points\"", json);
+        Assert.Contains("\"Рамка\"", json);
+        Assert.Contains("\"textHeight\": 3.5", json);
+    }
 }

@@ -29,7 +29,13 @@ public sealed record TemplateEntityManifest(
     double MinX,
     double MinY,
     double MaxX,
-    double MaxY);
+    double MaxY,
+    IReadOnlyList<TemplatePointManifest>? Points = null,
+    string? Text = null,
+    double? TextHeight = null,
+    string? Layer = null);
+
+public sealed record TemplatePointManifest(double X, double Y);
 
 public sealed record TemplateAttributeManifest(string Tag, string Prompt, string DefaultValue);
 

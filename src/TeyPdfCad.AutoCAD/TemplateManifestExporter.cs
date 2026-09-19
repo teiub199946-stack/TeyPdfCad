@@ -79,7 +79,11 @@ public sealed class TemplateManifestExporter
                     minX,
                     minY,
                     maxX,
-                    maxY));
+                    maxY,
+                    GetGeometryPoints(entity),
+                    GetText(entity),
+                    GetTextHeight(entity),
+                    entity.Layer));
             }
             blocks.Add(new TemplateBlockManifest(block.Name, entities, attributes));
         }
@@ -123,4 +127,42 @@ public sealed class TemplateManifestExporter
             return false;
         }
     }
+
+    private static IReadOnlyList<TemplatePointManifest>? GetGeometryPoints(Entity entity)
+    {
+        switch (entity)
+        {
+            case Line line:
+                return [
+                    new TemplatePointManifest(line.StartPoint.X, line.StartPoint.Y),
+                    new TemplatePointManifest(line.EndPoint.X, line.EndPoint.Y)
+                ];
+            case Polyline polyline:
+                var points = new List<TemplatePointManifest>(polyline.NumberOfVertices);
+                for (var index = 0; index < polyline.NumberOfVertices; index++)
+                {
+                    var point = polyline.GetPoint2dAt(index);
+                    points.Add(new TemplatePointManifest(point.X, point.Y));
+                }
+                return points;
+            default:
+                return null;
+        }
+    }
+
+    private static string? GetText(Entity entity)
+        => entity switch
+        {
+            DBText text => text.TextString,
+            MText text => text.Contents,
+            _ => null
+        };
+
+    private static double? GetTextHeight(Entity entity)
+        => entity switch
+        {
+            DBText text => text.Height,
+            MText text => text.TextHeight,
+            _ => null
+        };
 }
