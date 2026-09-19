@@ -206,6 +206,45 @@ public sealed class ReconstructionCommands
         transaction.Commit();
     }
 
+    [CommandMethod("TEYPDFAUDITDWG", CommandFlags.Modal)]
+    public void AuditConvertedDwg()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null) return;
+
+        var database = document.Database;
+        using var transaction = database.TransactionManager.StartTransaction();
+        var layouts = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId, OpenMode.ForRead);
+        var layoutCount = 0;
+        var viewportCount = 0;
+        foreach (DBDictionaryEntry entry in layouts)
+        {
+            var layout = (Layout)transaction.GetObject(entry.Value, OpenMode.ForRead);
+            if (layout.ModelType) continue;
+            layoutCount++;
+            var paperSpace = (BlockTableRecord)transaction.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+            viewportCount += paperSpace.Cast<ObjectId>()
+                .Count(id => transaction.GetObject(id, OpenMode.ForRead, false) is Viewport);
+        }
+
+        var blockTable = (BlockTable)transaction.GetObject(database.BlockTableId, OpenMode.ForRead);
+        var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+        var entities = modelSpace.Cast<ObjectId>()
+            .Select(id => transaction.GetObject(id, OpenMode.ForRead, false))
+            .OfType<Entity>()
+            .ToArray();
+        var layerTable = (LayerTable)transaction.GetObject(database.LayerTableId, OpenMode.ForRead);
+        var snapshot = new DwgAcceptanceSnapshot(
+            layoutCount,
+            entities.Length,
+            viewportCount,
+            layerTable.Cast<ObjectId>().Count(),
+            entities.Count(entity => entity is Dimension),
+            entities.Count(entity => entity is Leader or MLeader));
+        document.Editor.WriteMessage("\nTEYPDFCAD_AUDIT " + DwgAcceptanceAudit.Format(snapshot) + "\n");
+        transaction.Commit();
+    }
+
     [CommandMethod("TEYPDFSHEETCONFIG", CommandFlags.Modal)]
     public void ConfigureSheetBounds()
     {

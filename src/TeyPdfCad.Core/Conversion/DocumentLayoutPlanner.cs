@@ -8,7 +8,10 @@ public sealed class DocumentLayoutPlanner
 
     public DwgDocumentPlan Create(VectorPdfDocument document)
     {
-        ArgumentNullException.ThrowIfNull(document);
+        if (document is null)
+        {
+            throw new ArgumentNullException(nameof(document));
+        }
 
         var sheets = new List<SheetPlan>(document.Pages.Count);
         var modelOriginX = 0d;

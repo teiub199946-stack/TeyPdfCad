@@ -14,6 +14,10 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" Condition="'$(AutoCADLocalApiDirectory)' == ''" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TeyPdfCad.AutoCAD.Tests" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(AutoCADLocalApiDirectory)' != ''">
     <Reference Include="AcCoreMgd">
       <HintPath>$(AutoCADLocalApiDirectory)\AcCoreMgd.dll</HintPath>

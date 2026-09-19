@@ -12,7 +12,10 @@ public sealed class LeaderRecognizer
 
     public LeaderRecognitionResult Recognize(PrimitiveScene scene)
     {
-        ArgumentNullException.ThrowIfNull(scene);
+        if (scene is null)
+        {
+            throw new ArgumentNullException(nameof(scene));
+        }
 
         var leaders = new List<LeaderCandidate>();
         var warnings = new List<SemanticWarning>();

@@ -11,13 +11,16 @@ public sealed class AxisRecognizer
 
     public AxisRecognitionResult Recognize(PrimitiveScene scene)
     {
-        ArgumentNullException.ThrowIfNull(scene);
+        if (scene is null)
+        {
+            throw new ArgumentNullException(nameof(scene));
+        }
 
         var axes = new List<AxisCandidate>();
         var warnings = new List<SemanticWarning>();
         foreach (var line in scene.Lines.Where(line => GeometryMath.Distance(line.Start, line.End) >= MinimumAxisLength))
         {
-            var layerEvidence = line.Layer?.Contains("ОС", StringComparison.OrdinalIgnoreCase) == true ? 0.55d : 0d;
+            var layerEvidence = line.Layer?.IndexOf("ОС", StringComparison.OrdinalIgnoreCase) >= 0 ? 0.55d : 0d;
             var dashEvidence = line.StrokeDashPattern.Count >= 3 ? 0.45d : 0d;
             var confidence = layerEvidence + dashEvidence;
             if (confidence >= NativeAxisThreshold)

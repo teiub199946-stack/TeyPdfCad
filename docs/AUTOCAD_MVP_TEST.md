@@ -43,6 +43,17 @@ Current diagnostic commands:
 - `TEYPDFRECONSTRUCT` — validated native dimension reconstruction.
 - `TEYPDFSHEETCONFIG` — set measured page bounds for the current AutoCAD session without changing the drawing.
 - `TEYPDFSHEETAUDIT` — read-only report of the generated A3 layout, media name, title-block block contents, and lineweights.
+- `TEYPDFAUDITDWG` — read-only JSON audit of the currently open converted DWG. It reports `layoutCount`, `modelSpaceEntityCount`, `viewportCount`, `layerCount`, `dimensionCount`, and `leaderCount`.
+
+## One-shot acceptance package for vector PDF → DWG
+
+After building the repository in Release mode, run once from PowerShell:
+
+```powershell
+.\scripts\Run-VectorPdfAcceptance.ps1 -InputPdf 'C:\path\to\drawing.pdf' -OutputDirectory 'C:\path\to\acceptance-output'
+```
+
+The command creates exactly one `converted.dwg`, `conversion-report.json`, a checksum manifest, and a generated `RUN_VECTOR_PDF_ACCEPTANCE.scr`. Open `converted.dwg` in AutoCAD and run the generated SCR file. It loads the plug-in and prints one line starting with `TEYPDFCAD_AUDIT` followed by JSON. Return that line, `conversion-report.json`, and `autocad-audit.log` when Core Console was used. The script never invokes `PDFIMPORT`.
 
 ## Test drawing
 
