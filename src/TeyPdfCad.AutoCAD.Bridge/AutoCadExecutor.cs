@@ -10,18 +10,20 @@ internal static class AutoCadExecutor
     {
         var coreConsole = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_CORE_CONSOLE");
         var pluginDll = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_PLUGIN_DLL");
-        var profile = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_PROFILE");
-        var configurationFile = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_CONFIG_FILE");
-        if (string.IsNullOrWhiteSpace(coreConsole) || string.IsNullOrWhiteSpace(pluginDll))
+        var baseDrawing = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_BASE_DWG");
+        if (string.IsNullOrWhiteSpace(coreConsole)
+            || string.IsNullOrWhiteSpace(pluginDll)
+            || string.IsNullOrWhiteSpace(baseDrawing))
         {
             Console.Error.WriteLine(
                 "AutoCAD executor requires TEYPDFCAD_AUTOCAD_CORE_CONSOLE and " +
-                "TEYPDFCAD_AUTOCAD_PLUGIN_DLL.");
+                "TEYPDFCAD_AUTOCAD_PLUGIN_DLL and TEYPDFCAD_AUTOCAD_BASE_DWG.");
             return BridgeProtocol.MissingHostDependencyExitCode;
         }
 
         coreConsole = Path.GetFullPath(coreConsole);
         pluginDll = Path.GetFullPath(pluginDll);
+        baseDrawing = Path.GetFullPath(baseDrawing);
         if (!File.Exists(coreConsole))
         {
             Console.Error.WriteLine($"AutoCAD Core Console was not found: {coreConsole}");
@@ -32,14 +34,10 @@ internal static class AutoCadExecutor
             Console.Error.WriteLine($"TeyPdfCad plugin DLL was not found: {pluginDll}");
             return BridgeProtocol.MissingHostDependencyExitCode;
         }
-        if (!string.IsNullOrWhiteSpace(configurationFile))
+        if (!File.Exists(baseDrawing))
         {
-            configurationFile = Path.GetFullPath(configurationFile);
-            if (!File.Exists(configurationFile))
-            {
-                Console.Error.WriteLine($"AutoCAD configuration file was not found: {configurationFile}");
-                return BridgeProtocol.MissingHostDependencyExitCode;
-            }
+            Console.Error.WriteLine($"AutoCAD base drawing was not found: {baseDrawing}");
+            return BridgeProtocol.MissingHostDependencyExitCode;
         }
 
         var root = Path.Combine(
@@ -49,14 +47,18 @@ internal static class AutoCadExecutor
             $"{request.JobId}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         var inputPdf = Path.Combine(root, "input.pdf");
+        var inputDrawing = Path.Combine(root, "base.dwg");
         var outputDwg = Path.Combine(root, "result.dwg");
         var script = Path.Combine(root, "run.scr");
         var log = Path.Combine(root, "autocad.log");
         var status = Path.Combine(root, "bridge-status.txt");
+        var isolatedUserData = Path.Combine(root, "userdata");
         try
         {
             File.Copy(request.InputPath, inputPdf, overwrite: true);
-            WriteScript(script, pluginDll, inputPdf, outputDwg);
+            File.Copy(baseDrawing, inputDrawing, overwrite: true);
+            Directory.CreateDirectory(isolatedUserData);
+            AutoCadLaunchPlan.WriteScript(script, pluginDll, inputPdf, outputDwg);
 
             var info = new ProcessStartInfo
             {
@@ -73,23 +75,13 @@ internal static class AutoCadExecutor
                 request.PreserveSourceGeometry ? "true" : "false";
             info.Environment[BridgeEnvironmentVariables.RecognizerProfile] = request.RecognizerProfile;
             info.Environment[BridgeEnvironmentVariables.StatusFile] = status;
-            if (!string.IsNullOrWhiteSpace(configurationFile))
-            {
-                info.ArgumentList.Add("/c");
-                info.ArgumentList.Add(Path.GetDirectoryName(configurationFile)!);
-            }
-            if (HasExplicitProfile(profile))
-            {
-                info.ArgumentList.Add("/p");
-                info.ArgumentList.Add(profile!.Trim());
-            }
-            else if (!string.IsNullOrWhiteSpace(profile))
-            {
-                Console.Error.WriteLine(
-                    $"AutoCAD profile '{profile}' is unnamed; starting Core Console with its default profile.");
-            }
-            info.ArgumentList.Add("/s");
-            info.ArgumentList.Add(script);
+            var launchPlan = AutoCadLaunchPlan.Create(
+                inputDrawing,
+                script,
+                isolatedUserData,
+                request.JobId);
+            foreach (var argument in launchPlan.Arguments)
+                info.ArgumentList.Add(argument);
 
             using var process = Process.Start(info);
             if (process is null)
@@ -98,11 +90,35 @@ internal static class AutoCadExecutor
                 return BridgeProtocol.ProcessFailureExitCode;
             }
 
-            var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            var completedOutput = false;
             try
             {
-                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+                while (!process.HasExited)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (BridgeProtocol.TryReadSuccessStatus(status, out _)
+                        && File.Exists(outputDwg)
+                        && await IsDwgAsync(outputDwg, cancellationToken).ConfigureAwait(false))
+                    {
+                        completedOutput = true;
+                        TryKill(process);
+                        break;
+                    }
+
+                    if (File.Exists(status)
+                        && !BridgeProtocol.TryReadSuccessStatus(status, out _))
+                    {
+                        TryKill(process);
+                        break;
+                    }
+
+                    await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+                    process.Refresh();
+                }
+                if (!process.HasExited)
+                    await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -114,16 +130,16 @@ internal static class AutoCadExecutor
             await File.WriteAllTextAsync(log, output + Environment.NewLine + errors, Encoding.UTF8, CancellationToken.None)
                 .ConfigureAwait(false);
 
-            if (process.ExitCode != 0)
-            {
-                Console.Error.WriteLine($"AutoCAD Core Console exited with code {process.ExitCode}. Log: {log}");
-                return BridgeProtocol.ProcessFailureExitCode;
-            }
-
             if (!BridgeProtocol.TryReadSuccessStatus(status, out var statusError))
             {
                 Console.Error.WriteLine($"AutoCAD reconstruction failed: {statusError}. Log: {log}");
                 return BridgeProtocol.ReconstructionFailureExitCode;
+            }
+
+            if (!completedOutput && process.ExitCode != 0)
+            {
+                Console.Error.WriteLine($"AutoCAD Core Console exited with code {process.ExitCode}. Log: {log}");
+                return BridgeProtocol.ProcessFailureExitCode;
             }
 
             if (!File.Exists(outputDwg) || !await IsDwgAsync(outputDwg, cancellationToken).ConfigureAwait(false))
@@ -157,29 +173,33 @@ internal static class AutoCadExecutor
         }
     }
 
-    private static void WriteScript(string path, string pluginDll, string inputPdf, string outputDwg)
-    {
-        static string Quote(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
-        var lines = new[]
-        {
-            "_.FILEDIA", "0",
-            "_.CMDECHO", "1",
-            "_.NETLOAD", Quote(pluginDll),
-            "_.-PDFIMPORT", "F", Quote(inputPdf), "1", "0,0", "1", "0",
-            "_.TEYPDFDUMPALL",
-            "_.TEYPDFRECONSTRUCTALL",
-            "_.SAVEAS", "2018", Quote(outputDwg),
-            "_.QUIT", "Y",
-        };
-        File.WriteAllLines(path, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-    }
-
     private static async Task<bool> IsDwgAsync(string path, CancellationToken cancellationToken)
     {
-        await using var stream = File.OpenRead(path);
-        var header = new byte[6];
-        var read = await stream.ReadAsync(header.AsMemory(), cancellationToken).ConfigureAwait(false);
-        return BridgeProtocol.IsDwgHeader(header[..read]);
+        try
+        {
+            await using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite,
+                4096,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var header = new byte[6];
+            var read = await stream.ReadAsync(header.AsMemory(), cancellationToken).ConfigureAwait(false);
+            return BridgeProtocol.IsDwgHeader(header[..read]);
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static void TryDelete(string path)
@@ -221,13 +241,4 @@ internal static class AutoCadExecutor
         catch (System.ComponentModel.Win32Exception) { }
     }
 
-    private static bool HasExplicitProfile(string? profile)
-    {
-        if (string.IsNullOrWhiteSpace(profile))
-            return false;
-
-        var normalized = profile.Trim();
-        return !string.Equals(normalized, "<<Профиль без имени>>", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(normalized, "<<Unnamed Profile>>", StringComparison.OrdinalIgnoreCase);
-    }
 }

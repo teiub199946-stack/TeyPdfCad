@@ -15,11 +15,13 @@ public sealed class AutoCadRuntimeReadinessTests
             var bridge = Path.Combine(root, "bridge.exe");
             var core = Path.Combine(root, "accoreconsole.exe");
             var plugin = Path.Combine(root, "TeyPdfCad.AutoCAD.dll");
+            var baseDrawing = Path.Combine(root, "base.dwg");
             File.WriteAllBytes(bridge, [1]);
             File.WriteAllBytes(core, [1]);
             File.WriteAllBytes(plugin, [1]);
+            File.WriteAllBytes(baseDrawing, [1]);
 
-            var result = AutoCadRuntimeReadiness.Evaluate(bridge, core, plugin);
+            var result = AutoCadRuntimeReadiness.Evaluate(bridge, core, plugin, baseDrawing);
 
             Assert.False(result.IsReady);
             Assert.Equal("autocad_configuration_not_found", result.Error);
@@ -40,12 +42,14 @@ public sealed class AutoCadRuntimeReadinessTests
             var bridge = Path.Combine(root, "bridge.exe");
             var core = Path.Combine(root, "accoreconsole.exe");
             var plugin = Path.Combine(root, "TeyPdfCad.AutoCAD.dll");
+            var baseDrawing = Path.Combine(root, "base.dwg");
             File.WriteAllBytes(bridge, [1]);
             File.WriteAllBytes(core, [1]);
             File.WriteAllBytes(plugin, [1]);
+            File.WriteAllBytes(baseDrawing, [1]);
             File.WriteAllBytes(Path.Combine(root, "acad2022.cfg"), [1]);
 
-            var result = AutoCadRuntimeReadiness.Evaluate(bridge, core, plugin);
+            var result = AutoCadRuntimeReadiness.Evaluate(bridge, core, plugin, baseDrawing);
 
             Assert.True(result.IsReady);
             Assert.Null(result.Error);
@@ -57,27 +61,28 @@ public sealed class AutoCadRuntimeReadinessTests
     }
 
     [Fact]
-    public void Accepts_explicit_user_configuration_outside_install_directory()
+    public void Rejects_missing_base_drawing()
     {
         var root = Path.Combine(Path.GetTempPath(), "TeyPdfCad", Guid.NewGuid().ToString("N"));
-        var install = Path.Combine(root, "install");
-        var userConfig = Path.Combine(root, "user", "rus", "acad2022.cfg");
-        Directory.CreateDirectory(install);
-        Directory.CreateDirectory(Path.GetDirectoryName(userConfig)!);
+        Directory.CreateDirectory(root);
         try
         {
-            var bridge = Path.Combine(install, "bridge.exe");
-            var core = Path.Combine(install, "accoreconsole.exe");
-            var plugin = Path.Combine(install, "TeyPdfCad.AutoCAD.dll");
+            var bridge = Path.Combine(root, "bridge.exe");
+            var core = Path.Combine(root, "accoreconsole.exe");
+            var plugin = Path.Combine(root, "TeyPdfCad.AutoCAD.dll");
             File.WriteAllBytes(bridge, [1]);
             File.WriteAllBytes(core, [1]);
             File.WriteAllBytes(plugin, [1]);
-            File.WriteAllBytes(userConfig, [1]);
+            File.WriteAllBytes(Path.Combine(root, "acad2022.cfg"), [1]);
 
-            var result = AutoCadRuntimeReadiness.Evaluate(bridge, core, plugin, userConfig);
+            var result = AutoCadRuntimeReadiness.Evaluate(
+                bridge,
+                core,
+                plugin,
+                Path.Combine(root, "missing-base.dwg"));
 
-            Assert.True(result.IsReady);
-            Assert.Null(result.Error);
+            Assert.False(result.IsReady);
+            Assert.Equal("autocad_base_drawing_not_found", result.Error);
         }
         finally
         {

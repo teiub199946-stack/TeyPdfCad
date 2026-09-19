@@ -6,7 +6,7 @@ public sealed record AutoCadRuntimeReadiness(bool IsReady, string? Error)
         string? bridgeExecutable,
         string? coreConsole,
         string? pluginDll,
-        string? configurationFile = null)
+        string? baseDrawing)
     {
         if (string.IsNullOrWhiteSpace(bridgeExecutable))
             return NotReady("autocad_bridge_not_configured");
@@ -20,13 +20,15 @@ public sealed record AutoCadRuntimeReadiness(bool IsReady, string? Error)
             return NotReady("autocad_plugin_not_configured");
         if (!File.Exists(pluginDll))
             return NotReady("autocad_plugin_not_found");
+        if (string.IsNullOrWhiteSpace(baseDrawing))
+            return NotReady("autocad_base_drawing_not_configured");
+        if (!File.Exists(baseDrawing))
+            return NotReady("autocad_base_drawing_not_found");
 
         var installDirectory = Path.GetDirectoryName(Path.GetFullPath(coreConsole));
-        var resolvedConfiguration = string.IsNullOrWhiteSpace(configurationFile)
-            ? string.IsNullOrWhiteSpace(installDirectory)
-                ? null
-                : Path.Combine(installDirectory, "acad2022.cfg")
-            : Path.GetFullPath(configurationFile);
+        var resolvedConfiguration = string.IsNullOrWhiteSpace(installDirectory)
+            ? null
+            : Path.Combine(installDirectory, "acad2022.cfg");
         if (string.IsNullOrWhiteSpace(resolvedConfiguration) || !File.Exists(resolvedConfiguration))
             return NotReady("autocad_configuration_not_found");
 

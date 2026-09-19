@@ -36,8 +36,7 @@ TEYPDFCAD_AUTOCAD_BRIDGE_EXE=C:\path\to\verified-autocad-bridge.exe
 TEYPDFCAD_AUTOCAD_TIMEOUT_SECONDS=600
 TEYPDFCAD_AUTOCAD_CORE_CONSOLE=C:\Program Files\Autodesk\AutoCAD 2022\accoreconsole.exe
 TEYPDFCAD_AUTOCAD_PLUGIN_DLL=C:\path\to\TeyPdfCad.AutoCAD.dll
-TEYPDFCAD_AUTOCAD_CONFIG_FILE=C:\Users\<user>\AppData\Local\Autodesk\AutoCAD 2022\R24.1\rus\acad2022.cfg
-TEYPDFCAD_AUTOCAD_PROFILE=<<Профиль без имени>>
+TEYPDFCAD_AUTOCAD_BASE_DWG=C:\path\to\base.dwg
 TEYPDFCAD_ARTIFACT_RETENTION_HOURS=24
 TEYPDFCAD_RETENTION_SWEEP_MINUTES=5
 TEYPDFCAD_MAX_JOB_METADATA=10000
@@ -51,9 +50,9 @@ The bridge protocol is version `1` and receives the PDF and job settings as comm
 
 The API exposes `/ready` separately from `/health`. In AutoCAD mode, both endpoints return `503` and a specific readiness error until the bridge executable, `accoreconsole.exe`, and the plugin DLL are all configured and present. Job submission is rejected while readiness is degraded. JSON `POST /jobs` is metadata-only and is therefore accepted only in `inmemory` mode; AutoCAD mode requires `POST /jobs/upload` so the PDF input artifact exists.
 
-AutoCAD readiness also requires `acad2022.cfg`. Set `TEYPDFCAD_AUTOCAD_CONFIG_FILE`
-to the real user configuration file when it is not installed beside Core Console.
-The bridge passes its containing directory to Core Console with `/c`.
+AutoCAD readiness requires `acad2022.cfg` beside the configured Core Console
+executable and a trusted base DWG/DWT path. The bridge copies that base drawing
+into a fresh isolated job directory before launching Core Console.
 
 The bounded queue uses fail-fast backpressure. When `TEYPDFCAD_QUEUE_CAPACITY` pending jobs are already buffered, new submissions receive `429 queue_full` instead of holding an HTTP request open while waiting for a worker.
 

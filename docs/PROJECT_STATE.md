@@ -1,6 +1,6 @@
 # TeyPdfCad — verified project state
 
-Last updated: 2026-09-18
+Last updated: 2026-09-20
 
 This file records verified engineering facts and near-term priorities. It is intended to be the durable project-memory checkpoint for work across chats and branches. Claims belong here only after direct evidence or CI evidence exists.
 
@@ -13,6 +13,26 @@ Current temporary pipeline:
 `Vector PDF -> AutoCAD PDFIMPORT -> PrimitiveScene -> SemanticReconstructionEngine -> native AutoCAD Dimension -> DWG`
 
 Semantic Core must remain independent of the AutoCAD host so PDFIMPORT can later be replaced by a direct PDF primitive reader.
+
+## Automated Core Console E2E proof — 2026-09-20
+
+The AutoCAD 2022 Core Console runtime blocker is closed for the controlled
+fixture path. `acad2022.cfg` is available beside `accoreconsole.exe`; the
+bridge opens a trusted base drawing with `/i`, creates a fresh `/isolate`
+user-data root per job, uses language-neutral PDFIMPORT option `_F`, and
+imports PDF coordinates into the millimetre drawing with scale `25.4`.
+
+The generated TrueType control PDF was converted automatically. The bridge
+returned `0`, saved a valid `AC1032` DWG, and ACadSharp independently reopened
+the result:
+
+- 1 native `DimensionLinear`;
+- measurement `5200.00088888889`;
+- 5 source `LwPolyline` entities;
+- 1 source `MText`;
+- no dimension text override was required.
+
+Evidence is recorded in `docs/AUTOCAD_CORE_CONSOLE_ACCEPTANCE_2026-09-20.md`.
 
 ## Verified host target
 

@@ -4,7 +4,6 @@ param(
     [Parameter(Mandatory)] [string] $PluginDll,
     [Parameter(Mandatory)] [string] $InputDwg,
     [Parameter(Mandatory)] [string] $OutputDirectory,
-    [string] $ConfigurationFile,
     [int] $TimeoutSeconds = 300
 )
 
@@ -19,9 +18,7 @@ function Assert-File([string] $Path, [string] $Label) {
 Assert-File $AutoCadPath 'AutoCAD executable'
 Assert-File $PluginDll 'TeyPdfCad plugin DLL'
 Assert-File $InputDwg 'Input DWG fixture'
-if ([string]::IsNullOrWhiteSpace($ConfigurationFile)) {
-    $ConfigurationFile = Join-Path (Split-Path -Parent $AutoCadPath) 'acad2022.cfg'
-}
+$ConfigurationFile = Join-Path (Split-Path -Parent $AutoCadPath) 'acad2022.cfg'
 Assert-File $ConfigurationFile 'AutoCAD configuration'
 if ($TimeoutSeconds -lt 30) { throw 'TimeoutSeconds must be at least 30 seconds.' }
 
@@ -51,13 +48,12 @@ $script = @(
     '_.TEYPDFDUMPALL',
     '_.TEYPDFRECONSTRUCTALL',
     '_.QSAVE',
-    '_.QUIT', 'Y'
+    '_.QUIT', '_Y'
 )
 [IO.File]::WriteAllLines($scriptPath, $script, [Text.UTF8Encoding]::new($false))
 
 $arguments = @(
     '/nologo',
-    '/c', (Split-Path -Parent (Resolve-Path -LiteralPath $ConfigurationFile).Path),
     '/b', $scriptPath
 )
 $process = Start-Process -FilePath $AutoCadPath -ArgumentList $arguments -WorkingDirectory $runDirectory -PassThru

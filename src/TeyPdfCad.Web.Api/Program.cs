@@ -27,9 +27,9 @@ var workerMode = builder.Configuration["TEYPDFCAD_WORKER_MODE"]?.Trim().ToLowerI
 var bridgeExecutable = builder.Configuration["TEYPDFCAD_AUTOCAD_BRIDGE_EXE"];
 var coreConsole = builder.Configuration["TEYPDFCAD_AUTOCAD_CORE_CONSOLE"];
 var pluginDll = builder.Configuration["TEYPDFCAD_AUTOCAD_PLUGIN_DLL"];
-var configurationFile = builder.Configuration["TEYPDFCAD_AUTOCAD_CONFIG_FILE"];
+var baseDrawing = builder.Configuration["TEYPDFCAD_AUTOCAD_BASE_DWG"];
 var autocadReadiness = workerMode == "autocad"
-    ? AutoCadRuntimeReadiness.Evaluate(bridgeExecutable, coreConsole, pluginDll, configurationFile)
+    ? AutoCadRuntimeReadiness.Evaluate(bridgeExecutable, coreConsole, pluginDll, baseDrawing)
     : new AutoCadRuntimeReadiness(true, null);
 var conversionReady = autocadReadiness.IsReady;
 var readinessError = autocadReadiness.Error;

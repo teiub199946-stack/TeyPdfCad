@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+using TeyPdfCad.Core.Bridge;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Sheets;
@@ -136,6 +137,14 @@ public sealed class ReconstructionCommands
         }
 
         Reconstruct(document, objectIds, settings);
+    }
+
+    [CommandMethod("TEYPDFBRIDGECOMPLETE", CommandFlags.Modal)]
+    public void CompleteBridgeAfterSave()
+    {
+        var statusPath = Environment.GetEnvironmentVariable(BridgeEnvironmentVariables.StatusFile);
+        if (!string.IsNullOrWhiteSpace(statusPath))
+            BridgeRuntimeSettings.CompleteSavedOutput(statusPath);
     }
 
     [CommandMethod("TEYPDFSHEETAUDIT", CommandFlags.Modal)]
@@ -351,7 +360,6 @@ public sealed class ReconstructionCommands
 
             transaction.Commit();
             editor.Regen();
-            settings?.Complete();
             editor.WriteMessage(
                 $"\nTeyPdfCad: created sheet layout={sheetResult.LayoutName}, " +
                 $"title block={sheetResult.BlockName}; no validated linear dimensions were found." +
@@ -406,8 +414,6 @@ public sealed class ReconstructionCommands
 
         transaction.Commit();
         editor.Regen();
-
-        settings?.Complete();
 
         editor.WriteMessage(
             $"\nTeyPdfCad: reconstructed {createdIds.Count} native dimensions. " +

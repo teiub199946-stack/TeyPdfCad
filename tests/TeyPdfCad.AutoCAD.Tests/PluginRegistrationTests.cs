@@ -7,6 +7,44 @@ namespace TeyPdfCad.AutoCAD.Tests;
 public sealed class PluginRegistrationTests
 {
     [Fact]
+    public void Bridge_completion_preserves_existing_failure_status()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "status.txt");
+        try
+        {
+            File.WriteAllText(path, "error|reconstruction failed");
+
+            BridgeRuntimeSettings.CompleteSavedOutput(path);
+
+            Assert.Equal("error|reconstruction failed", File.ReadAllText(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Bridge_completion_writes_ok_only_after_saved_output_command()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "status.txt");
+        try
+        {
+            BridgeRuntimeSettings.CompleteSavedOutput(path);
+
+            Assert.Equal("ok", File.ReadAllText(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Assembly_declares_explicit_AutoCAD_plugin_entrypoint_and_command_class()
     {
         var assemblyPath = typeof(TeyPdfCad.AutoCAD.ReconstructionCommands).Assembly.Location;

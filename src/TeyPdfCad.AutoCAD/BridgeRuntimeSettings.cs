@@ -101,11 +101,30 @@ internal sealed class BridgeRuntimeSettings
             database.Insunits = TargetUnits.Value;
     }
 
-    public void Complete()
+    public static void CompleteSavedOutput(string path)
     {
-        var statusPath = Environment.GetEnvironmentVariable(BridgeEnvironmentVariables.StatusFile);
-        if (!string.IsNullOrWhiteSpace(statusPath))
-            WriteStatus(statusPath, "ok");
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                var existing = File.ReadAllText(path).Trim();
+                if (existing.StartsWith("error|", StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+
+            WriteStatus(path, "ok");
+        }
+        catch (IOException)
+        {
+            // The bridge treats a missing/unreadable status as failure.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The bridge treats a missing/unreadable status as failure.
+        }
     }
 
     public void Fail(string message)
