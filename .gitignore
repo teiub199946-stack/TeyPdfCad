@@ -408,6 +408,7 @@ acad.err
 dotnet-home/
 backup-extracted/
 .worktrees/
+.superpowers/
 
 # Ionide (cross platform F# VS Code tools) working folder
 **/.ionide/
