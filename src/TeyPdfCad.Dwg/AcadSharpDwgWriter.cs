@@ -1,6 +1,7 @@
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
+using ACadSharp.Objects;
 using CSMath;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
@@ -15,6 +16,10 @@ public sealed class AcadSharpDwgWriter
         ArgumentNullException.ThrowIfNull(plan);
 
         var document = new CadDocument();
+        foreach (var sheet in plan.Sheets)
+        {
+            document.Layouts.Add(new Layout(sheet.LayoutName));
+        }
         foreach (var sourceLine in source.Pages.SelectMany(page => page.Entities).OfType<VectorLine>())
         {
             document.Entities.Add(new Line(

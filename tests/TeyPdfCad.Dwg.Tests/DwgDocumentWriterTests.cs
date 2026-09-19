@@ -58,4 +58,18 @@ public sealed class DwgDocumentWriterTests
         Assert.True(polyline.IsClosed);
         Assert.Equal(3, polyline.Vertices.Count);
     }
+
+    [Fact]
+    public void Writer_creates_one_named_layout_per_source_page()
+    {
+        var document = new VectorPdfDocument(Enumerable.Range(1, 3)
+            .Select(number => new VectorPdfPage(number, 595.276, 841.89, 0, []))
+            .ToArray());
+        var plan = new DocumentLayoutPlanner().Create(document);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, plan)));
+
+        Assert.Contains(drawing.Layouts, layout => layout.Name == "Лист-001");
+        Assert.Contains(drawing.Layouts, layout => layout.Name == "Лист-003");
+    }
 }
