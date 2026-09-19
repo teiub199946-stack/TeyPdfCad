@@ -53,9 +53,9 @@ public sealed class ConversionPipeline
             var bytes = new AcadSharpDwgWriter().Write(document, plan, hatchRecognition, semanticResults);
             var readBack = DwgReader.Read(new MemoryStream(bytes));
             var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
-            if (layoutsReadBack != document.PageCount)
+            if (layoutsReadBack != 0)
             {
-                throw new InvalidDataException($"DWG read-back found {layoutsReadBack} layouts for {document.PageCount} PDF pages.");
+                throw new InvalidDataException($"DWG read-back found {layoutsReadBack} generated layouts; Model Space-only output requires zero.");
             }
             ValidateReadBack(readBack, plan, document);
             var readBackSummary = CreateReadBackSummary(readBack);
@@ -109,16 +109,8 @@ public sealed class ConversionPipeline
 
     private static void ValidateReadBack(ACadSharp.CadDocument drawing, DwgDocumentPlan plan, TeyPdfCad.Core.Documents.VectorPdfDocument source)
     {
-        foreach (var sheet in plan.Sheets)
-        {
-            var layout = drawing.Layouts.SingleOrDefault(candidate => candidate.Name == sheet.LayoutName)
-                ?? throw new InvalidDataException($"DWG read-back did not find layout '{sheet.LayoutName}'.");
-            if (Math.Abs(layout.PaperWidth - sheet.PaperWidthMillimetres) > 0.01d
-                || Math.Abs(layout.PaperHeight - sheet.PaperHeightMillimetres) > 0.01d)
-                throw new InvalidDataException($"DWG layout '{sheet.LayoutName}' paper size changed during write/read-back.");
-            if (!layout.AssociatedBlock.Entities.OfType<ACadSharp.Entities.Viewport>().Any(viewport => !viewport.RepresentsPaper))
-                throw new InvalidDataException($"DWG layout '{sheet.LayoutName}' has no model-space viewport.");
-        }
+        if (drawing.Layouts.Any(candidate => candidate.Name.StartsWith("Лист-", StringComparison.Ordinal)))
+            throw new InvalidDataException("DWG read-back found generated layouts in Model Space-only mode.");
 
         if (source.Pages.Any(page => page.Entities.Count > 0) && !drawing.Entities.Any())
             throw new InvalidDataException("DWG read-back found no model-space entities for a non-empty vector PDF.");

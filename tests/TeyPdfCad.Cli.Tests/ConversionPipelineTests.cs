@@ -24,7 +24,7 @@ public sealed class ConversionPipelineTests
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
         Assert.True(json.RootElement.GetProperty("complete").GetBoolean());
         Assert.Equal(1, json.RootElement.GetProperty("pagesProcessed").GetInt32());
-        Assert.Equal(1, json.RootElement.GetProperty("layoutsReadBack").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("layoutsReadBack").GetInt32());
     }
 
     [Fact]
