@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>TeyPdfCad.Pdf</RootNamespace>
+    <AssemblyName>TeyPdfCad.Pdf</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+  </ItemGroup>
+</Project>
