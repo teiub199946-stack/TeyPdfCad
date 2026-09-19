@@ -20,9 +20,14 @@ public sealed class PdfPigVectorDocumentReaderTests
         var lines = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>().ToArray();
         Assert.Equal(2, lines.Length);
         var line = lines[0];
+        Assert.Equal(10 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
+        Assert.Equal(10 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
         Assert.Equal(2, line.Style.StrokeWidthPoints);
         Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
         Assert.Equal(0xFF0000, line.Style.RgbColor);
+        var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        Assert.Equal(72 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.X, 6);
+        Assert.Equal(700 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.Y, 6);
     }
 
     private static MemoryStream CreateMinimalPdf()

@@ -35,10 +35,10 @@ public sealed class PdfGraphicsOperationInterpreter
                     rgbColor = ToRgb(color.R, color.G, color.B);
                     break;
                 case BeginNewSubpath move:
-                    currentPoint = new Point2(move.X, move.Y);
+                    currentPoint = ToMillimetres(move.X, move.Y);
                     break;
                 case AppendStraightLineSegment line when currentPoint is Point2 start:
-                    var end = new Point2(line.X, line.Y);
+                    var end = ToMillimetres(line.X, line.Y);
                     segments.Add((start, end));
                     currentPoint = end;
                     break;
@@ -67,4 +67,7 @@ public sealed class PdfGraphicsOperationInterpreter
         var b = (int)Math.Round(Math.Clamp(blue, 0d, 1d) * 255d);
         return (r << 16) | (g << 8) | b;
     }
+
+    private static Point2 ToMillimetres(double x, double y)
+        => new(x * VectorPdfPage.MillimetresPerPoint, y * VectorPdfPage.MillimetresPerPoint);
 }

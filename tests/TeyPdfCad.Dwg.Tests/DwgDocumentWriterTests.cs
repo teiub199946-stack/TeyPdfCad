@@ -125,4 +125,24 @@ public sealed class DwgDocumentWriterTests
         Assert.NotEqual(ACadSharp.Tables.LineType.Continuous.Name, line.LineType.Name);
         Assert.Equal(2, line.LineType.Segments.Count());
     }
+
+    [Fact]
+    public void Writer_emits_source_text_as_editable_dwg_text()
+    {
+        var style = new VectorStyle(SourceLayer: "ТЕКСТ", RgbColor: 0x112233);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorText("note", "Марка оси", new Point2(5, 7), 10, style)]);
+        var document = new VectorPdfDocument([page]);
+        var plan = new DocumentLayoutPlanner().Create(document);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, plan)));
+
+        var text = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>());
+        Assert.Equal("Марка оси", text.Value);
+        Assert.Equal(5, text.InsertPoint.X, 6);
+        Assert.Equal(7, text.InsertPoint.Y, 6);
+        Assert.Equal(10 * VectorPdfPage.MillimetresPerPoint, text.Height, 6);
+        Assert.Equal("ТЕКСТ", text.Layer.Name);
+        Assert.Equal(0x112233, text.Color.TrueColor);
+    }
 }

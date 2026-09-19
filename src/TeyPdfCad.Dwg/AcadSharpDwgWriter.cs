@@ -75,6 +75,20 @@ public sealed class AcadSharpDwgWriter
                 styles.Apply(polyline, sourcePolyline.Style);
                 document.Entities.Add(polyline);
             }
+            foreach (var sourceText in page.Entities.OfType<VectorText>())
+            {
+                var text = new TextEntity
+                {
+                    Value = sourceText.Value,
+                    InsertPoint = new XYZ(
+                        sheet.ModelOriginX + sourceText.InsertionPoint.X,
+                        sheet.ModelOriginY + sourceText.InsertionPoint.Y,
+                        0),
+                    Height = sourceText.HeightPoints * VectorPdfPage.MillimetresPerPoint
+                };
+                styles.Apply(text, sourceText.Style);
+                document.Entities.Add(text);
+            }
         }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);

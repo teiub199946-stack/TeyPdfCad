@@ -71,7 +71,7 @@ internal sealed class AcadSharpStyleCatalog
             };
             for (var index = 0; index < pattern.Count; index++)
             {
-                var length = Math.Abs(pattern[index]);
+                var length = Math.Abs(pattern[index]) * VectorPdfPage.MillimetresPerPoint;
                 lineType.AddSegment(new LineType.Segment
                 {
                     Length = index % 2 == 0 ? length : -length

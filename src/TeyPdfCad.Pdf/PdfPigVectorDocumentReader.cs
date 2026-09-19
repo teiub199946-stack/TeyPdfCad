@@ -27,7 +27,9 @@ public sealed class PdfPigVectorDocumentReader
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-1",
                     Value: text,
-                    InsertionPoint: new Point2(first.Location.X, first.Location.Y),
+                    InsertionPoint: new Point2(
+                        first.Location.X * VectorPdfPage.MillimetresPerPoint,
+                        first.Location.Y * VectorPdfPage.MillimetresPerPoint),
                     HeightPoints: first.FontSize,
                     Style: new VectorStyle()));
             }
