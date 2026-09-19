@@ -37,7 +37,13 @@ public sealed record TemplateSheet(
     StandardSheetFormat Format,
     SheetOrientation Orientation);
 
-public sealed record TemplateSelection(bool IsConfirmed, string? TemplateName, string Reason)
+public sealed record TemplateSelection(
+    bool IsConfirmed,
+    string? TemplateName,
+    string Reason,
+    IReadOnlyList<string>? SourceIds = null)
 {
+    public IReadOnlyList<string> SourceIdsToReplace => SourceIds ?? [];
+
     public static TemplateSelection Rejected(string reason) => new(false, null, reason);
 }

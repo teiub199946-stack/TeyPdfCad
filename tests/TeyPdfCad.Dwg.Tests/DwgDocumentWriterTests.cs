@@ -14,7 +14,8 @@ public sealed class DwgDocumentWriterTests
     [Fact]
     public void Writer_inserts_confirmed_template_block_in_model_space()
     {
-        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine("stamp", new Point2(0, 0), new Point2(10, 0), new VectorStyle())]);
         var document = new VectorPdfDocument([page]);
         var library = new TemplateLibrary([], [new TemplateBlockDefinition(
             "A3-landscape",
@@ -27,11 +28,12 @@ public sealed class DwgDocumentWriterTests
             templateLibrary: library,
             templateSelectionsByPage: new Dictionary<int, TemplateSelection>
             {
-                [1] = new(true, "A3-landscape", "test")
+                [1] = new(true, "A3-landscape", "test", ["stamp"])
             })));
 
         var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
         Assert.Equal("A3-landscape", insert.Block.Name);
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
     }
 
     [Fact]

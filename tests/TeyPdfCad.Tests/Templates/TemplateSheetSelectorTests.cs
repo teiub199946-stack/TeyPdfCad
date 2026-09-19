@@ -11,12 +11,13 @@ public sealed class TemplateSheetSelectorTests
     {
         var library = new TemplateLibrary([new TemplateSheet("A3-landscape", StandardSheetFormat.A3, SheetOrientation.Landscape)]);
         var sheet = new SheetMetadata(420, 297, StandardSheetFormat.A3, SheetOrientation.Landscape);
-        var titleBlock = new TitleBlockMetadata(new TitleBlockRegion(290, 0, 420, 70), [], true);
+        var titleBlock = new TitleBlockMetadata(new TitleBlockRegion(290, 0, 420, 70, ["stamp-line", "stamp-text"]), [], true);
 
         var result = new TemplateSheetSelector(library).Select(sheet, titleBlock);
 
         Assert.True(result.IsConfirmed);
         Assert.Equal("A3-landscape", result.TemplateName);
+        Assert.Equal(["stamp-line", "stamp-text"], result.SourceIdsToReplace);
     }
 
     [Fact]

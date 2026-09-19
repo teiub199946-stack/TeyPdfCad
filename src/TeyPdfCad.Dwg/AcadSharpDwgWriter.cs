@@ -32,6 +32,7 @@ public sealed class AcadSharpDwgWriter
         foreach (var page in source.Pages)
         {
             var sheet = sheetsByPage[page.Number];
+            var templateSourceIds = new HashSet<string>(StringComparer.Ordinal);
             if (templateLibrary is not null
                 && templateSelectionsByPage is not null
                 && templateSelectionsByPage.TryGetValue(page.Number, out var templateSelection)
@@ -40,7 +41,10 @@ public sealed class AcadSharpDwgWriter
                 var template = templateLibrary.Blocks.SingleOrDefault(block =>
                     string.Equals(block.Name, templateSelection.TemplateName, StringComparison.Ordinal));
                 if (template is not null)
+                {
                     WriteTemplateInsert(document, styles, sheet, template);
+                    templateSourceIds.UnionWith(templateSelection.SourceIdsToReplace);
+                }
             }
             var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
                 ? suppliedRecognition
@@ -63,6 +67,7 @@ public sealed class AcadSharpDwgWriter
                 {
                     continue;
                 }
+                if (templateSourceIds.Contains(sourceLine.SourceId)) continue;
                 if (consumedSemanticIds.Contains(sourceLine.SourceId)) continue;
                 var line = new Line(
                     new XYZ(sheet.ModelOriginX + sourceLine.Start.X, sheet.ModelOriginY + sourceLine.Start.Y, 0),
@@ -159,6 +164,7 @@ public sealed class AcadSharpDwgWriter
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
+                if (templateSourceIds.Contains(sourceText.SourceId)) continue;
                 if (consumedSemanticIds.Contains(sourceText.SourceId)) continue;
                 var text = new TextEntity
                 {

@@ -21,6 +21,10 @@ public sealed class TemplateSheetSelector
             candidate.Format == sheet.Format && candidate.Orientation == sheet.Orientation);
         return template is null
             ? TemplateSelection.Rejected("template-not-found")
-            : new TemplateSelection(true, template.Name, "format-and-title-block-confirmed");
+            : new TemplateSelection(
+                true,
+                template.Name,
+                "format-and-title-block-confirmed",
+                titleBlock.Region.ProvenanceIds);
     }
 }
