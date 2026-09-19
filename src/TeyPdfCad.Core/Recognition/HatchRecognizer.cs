@@ -6,6 +6,9 @@ namespace TeyPdfCad.Core.Recognition;
 
 public sealed class HatchRecognizer
 {
+    private const double ParallelToleranceRadians = 2d * Math.PI / 180d;
+    private const double MaximumSpacingCoefficientOfVariation = 0.15d;
+
     public HatchRecognitionResult Recognize(IReadOnlyList<VectorEntity> entities)
     {
         ArgumentNullException.ThrowIfNull(entities);
@@ -26,13 +29,26 @@ public sealed class HatchRecognizer
             }
         }
 
+        var lineEntities = entities.OfType<VectorLine>().ToArray();
+        foreach (var boundary in entities.OfType<VectorPolyline>().Where(path => path.IsClosed && HasValidBoundary(path.Vertices)))
+        {
+            var interiorLines = lineEntities
+                .Where(line => Contains(boundary.Vertices, GeometryMath.Midpoint(line.Start, line.End)))
+                .ToArray();
+            var pattern = TryCreatePatternCandidate(boundary, interiorLines, entities.OfType<VectorText>().ToArray());
+            if (pattern is not null)
+            {
+                hatches.Add(pattern);
+            }
+        }
+
         var warnings = new List<SemanticWarning>();
-        if (hatches.Count == 0 && entities.OfType<VectorLine>().Take(3).Count() == 3)
+        if (lineEntities.Length >= 3 && !hatches.Any(candidate => !candidate.IsSolid))
         {
             warnings.Add(new SemanticWarning(
                 "hatch-low-confidence",
                 "Parallel source lines remain editable geometry because no closed filled boundary proves a hatch.",
-                entities.OfType<VectorLine>().Select(line => line.SourceId).ToArray()));
+                lineEntities.Select(line => line.SourceId).ToArray()));
         }
 
         return new HatchRecognitionResult(hatches, warnings);
@@ -40,6 +56,81 @@ public sealed class HatchRecognizer
 
     private static bool HasValidBoundary(IReadOnlyList<Point2> boundary)
         => boundary.Count >= 3 && boundary.Distinct().Count() >= 3;
+
+    private static HatchCandidate? TryCreatePatternCandidate(
+        VectorPolyline boundary,
+        IReadOnlyList<VectorLine> lines,
+        IReadOnlyList<VectorText> texts)
+    {
+        if (lines.Count < 3 || texts.Any(text => Contains(boundary.Vertices, text.InsertionPoint)))
+        {
+            return null;
+        }
+
+        var unit = GeometryMath.Normalize(GeometryMath.Subtract(lines[0].End, lines[0].Start));
+        if (GeometryMath.Length(unit) <= 1e-12)
+        {
+            return null;
+        }
+
+        var parallelLines = lines.Where(line => IsParallel(line, unit)).ToArray();
+        if (parallelLines.Length < 3)
+        {
+            return null;
+        }
+
+        var normal = new Point2(-unit.Y, unit.X);
+        var positions = parallelLines
+            .Select(line => GeometryMath.Dot(GeometryMath.Midpoint(line.Start, line.End), normal))
+            .OrderBy(position => position)
+            .ToArray();
+        var spacings = positions.Zip(positions.Skip(1), (first, second) => second - first)
+            .Where(spacing => spacing > 1e-9)
+            .ToArray();
+        if (spacings.Length < 2)
+        {
+            return null;
+        }
+
+        var meanSpacing = spacings.Average();
+        var standardDeviation = Math.Sqrt(spacings.Average(spacing => Math.Pow(spacing - meanSpacing, 2)));
+        if (standardDeviation / meanSpacing > MaximumSpacingCoefficientOfVariation)
+        {
+            return null;
+        }
+
+        return new HatchCandidate(
+            boundary.Vertices,
+            IsSolid: false,
+            PatternAngleRadians: Math.Atan2(unit.Y, unit.X),
+            PatternSpacingMillimetres: meanSpacing,
+            boundary.Style,
+            Confidence: 0.9d,
+            [boundary.SourceId, ..parallelLines.Select(line => line.SourceId)]);
+    }
+
+    private static bool IsParallel(VectorLine line, Point2 referenceUnit)
+    {
+        var unit = GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start));
+        return Math.Abs(GeometryMath.Dot(unit, referenceUnit)) >= Math.Cos(ParallelToleranceRadians);
+    }
+
+    private static bool Contains(IReadOnlyList<Point2> polygon, Point2 point)
+    {
+        var inside = false;
+        for (int current = 0, previous = polygon.Count - 1; current < polygon.Count; previous = current++)
+        {
+            var a = polygon[current];
+            var b = polygon[previous];
+            if ((a.Y > point.Y) != (b.Y > point.Y)
+                && point.X < (b.X - a.X) * (point.Y - a.Y) / (b.Y - a.Y) + a.X)
+            {
+                inside = !inside;
+            }
+        }
+
+        return inside;
+    }
 }
 
 public sealed record HatchRecognitionResult(

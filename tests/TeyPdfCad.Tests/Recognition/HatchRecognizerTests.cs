@@ -8,6 +8,31 @@ namespace TeyPdfCad.Tests.Recognition;
 public sealed class HatchRecognizerTests
 {
     [Fact]
+    public void Three_regular_parallel_lines_inside_closed_boundary_form_pattern_candidate()
+    {
+        var result = new HatchRecognizer().Recognize(RectangleWithHorizontalLines([4, 8, 12]));
+
+        var hatch = Assert.Single(result.NativeHatches, candidate => !candidate.IsSolid);
+        Assert.Equal(0d, hatch.PatternAngleRadians!.Value, 6);
+        Assert.Equal(4d, hatch.PatternSpacingMillimetres!.Value, 6);
+    }
+
+    [Fact]
+    public void Irregular_or_text_interrupted_lines_do_not_form_pattern_candidate()
+    {
+        var irregular = new HatchRecognizer().Recognize(RectangleWithHorizontalLines([4, 7, 15]));
+        var withText = new HatchRecognizer().Recognize([
+            ..RectangleWithHorizontalLines([4, 8, 12]),
+            new VectorText("note", "бетон", new Point2(10, 8), 2.5, new VectorStyle())
+        ]);
+
+        Assert.DoesNotContain(irregular.NativeHatches, candidate => !candidate.IsSolid);
+        Assert.DoesNotContain(withText.NativeHatches, candidate => !candidate.IsSolid);
+        Assert.Contains(irregular.Warnings, warning => warning.Code == "hatch-low-confidence");
+        Assert.Contains(withText.Warnings, warning => warning.Code == "hatch-low-confidence");
+    }
+
+    [Fact]
     public void Closed_solid_fill_is_a_native_solid_hatch_candidate()
     {
         var filled = new VectorFilledPath(
@@ -38,4 +63,18 @@ public sealed class HatchRecognizerTests
         Assert.Empty(result.NativeHatches);
         Assert.Contains(result.Warnings, warning => warning.Code == "hatch-low-confidence");
     }
+
+    private static VectorEntity[] RectangleWithHorizontalLines(IReadOnlyList<double> yCoordinates)
+        => [
+            new VectorPolyline(
+                "boundary",
+                [new Point2(0, 0), new Point2(20, 0), new Point2(20, 20), new Point2(0, 20)],
+                true,
+                new VectorStyle()),
+            ..yCoordinates.Select((y, index) => new VectorLine(
+                $"hatch-line-{index}",
+                new Point2(1, y),
+                new Point2(19, y),
+                new VectorStyle()))
+        ];
 }
