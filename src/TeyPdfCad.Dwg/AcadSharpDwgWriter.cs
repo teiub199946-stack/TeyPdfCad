@@ -89,6 +89,29 @@ public sealed class AcadSharpDwgWriter
                 styles.Apply(text, sourceText.Style);
                 document.Entities.Add(text);
             }
+            foreach (var sourceFill in page.Entities.OfType<VectorFilledPath>())
+            {
+                var boundary = new LwPolyline(sourceFill.Boundary.Select(vertex => new XY(
+                    sheet.ModelOriginX + vertex.X,
+                    sheet.ModelOriginY + vertex.Y)))
+                {
+                    IsClosed = true
+                };
+                styles.Apply(boundary, sourceFill.Style);
+                document.Entities.Add(boundary);
+
+                var hatch = new Hatch
+                {
+                    IsSolid = true,
+                    Pattern = HatchPattern.Solid,
+                    SeedPoints = [new XY(
+                        sheet.ModelOriginX + sourceFill.Boundary.Average(point => point.X),
+                        sheet.ModelOriginY + sourceFill.Boundary.Average(point => point.Y))]
+                };
+                hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
+                styles.Apply(hatch, sourceFill.Style);
+                document.Entities.Add(hatch);
+            }
         }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);

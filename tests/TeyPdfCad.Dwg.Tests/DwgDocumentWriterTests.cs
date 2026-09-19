@@ -145,4 +145,27 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal("ТЕКСТ", text.Layer.Name);
         Assert.Equal(0x112233, text.Color.TrueColor);
     }
+
+    [Fact]
+    public void Writer_emits_editable_boundary_and_native_solid_hatch_for_filled_path()
+    {
+        var filled = new VectorFilledPath(
+            "fill",
+            [new Point2(0, 0), new Point2(10, 0), new Point2(10, 5), new Point2(0, 5)],
+            VectorFillRule.NonZero,
+            new VectorStyle("ЗАЛИВКА", 0x336699));
+        var page = new VectorPdfPage(1, 72, 72, 0, [filled]);
+        var document = new VectorPdfDocument([page]);
+        var plan = new DocumentLayoutPlanner().Create(document);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, plan)));
+
+        var boundary = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>());
+        Assert.True(boundary.IsClosed);
+        Assert.Equal(4, boundary.Vertices.Count);
+        var hatch = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>());
+        Assert.True(hatch.IsSolid);
+        Assert.Equal("ЗАЛИВКА", hatch.Layer.Name);
+        Assert.Equal(0x336699, hatch.Color.TrueColor);
+    }
 }
