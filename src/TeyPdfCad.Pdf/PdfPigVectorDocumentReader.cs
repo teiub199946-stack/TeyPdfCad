@@ -12,13 +12,14 @@ public sealed class PdfPigVectorDocumentReader
         cancellationToken.ThrowIfCancellationRequested();
 
         using var document = PdfDocument.Open(pdf);
+        var graphicsInterpreter = new PdfGraphicsOperationInterpreter();
         var pages = new List<VectorPdfPage>();
 
         foreach (var sourcePage in document.GetPages())
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var entities = new List<VectorEntity>();
+            var entities = graphicsInterpreter.Interpret(sourcePage.Operations, sourcePage.Number).ToList();
             var text = string.Concat(sourcePage.Letters.Select(letter => letter.Value));
             if (!string.IsNullOrWhiteSpace(text))
             {

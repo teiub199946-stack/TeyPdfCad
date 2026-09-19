@@ -17,16 +17,20 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(595.276, page.WidthPoints, 3);
         Assert.Equal(841.89, page.HeightPoints, 3);
         Assert.Contains(page.Entities, entity => entity is TeyPdfCad.Core.Documents.VectorText { Value: "A3" });
+        var line = Assert.IsType<TeyPdfCad.Core.Documents.VectorLine>(page.Entities.Single(entity => entity is TeyPdfCad.Core.Documents.VectorLine));
+        Assert.Equal(2, line.Style.StrokeWidthPoints);
+        Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
     }
 
     private static MemoryStream CreateMinimalPdf()
     {
+        const string contents = "2 w [4 2] 0 d 10 10 m 100 10 l S\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.276 841.89] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-            "<< /Length 35 >>\nstream\nBT /F1 12 Tf 72 700 Td (A3) Tj ET\nendstream",
+            $"<< /Length {Encoding.ASCII.GetByteCount(contents)} >>\nstream\n{contents}\nendstream",
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
         };
         var builder = new StringBuilder("%PDF-1.4\n");
