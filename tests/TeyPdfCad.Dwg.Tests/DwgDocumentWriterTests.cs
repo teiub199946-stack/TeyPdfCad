@@ -80,6 +80,26 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_routes_low_confidence_axis_source_geometry_to_review_layer()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine("maybe-axis", new Point2(0, 0), new Point2(25.4, 0), new VectorStyle("ИСХОДНЫЙ"))]);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Warnings = [new SemanticWarning("axis-low-confidence", "Needs review.", ["maybe-axis"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var line = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Equal("TEY_REVIEW_AXIS", line.Layer.Name);
+    }
+
+    [Fact]
     public void Writer_type_is_available_without_autocad()
     {
         var document = new VectorPdfDocument([new VectorPdfPage(1, 595.276, 841.89, 0, [])]);

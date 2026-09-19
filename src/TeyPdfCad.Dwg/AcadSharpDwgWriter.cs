@@ -58,6 +58,16 @@ public sealed class AcadSharpDwgWriter
                     .Concat(semantics.Leaders.SelectMany(candidate => candidate.ProvenanceIds))
                     .Concat(semantics.Axes.SelectMany(candidate => candidate.ProvenanceIds))
                     .ToHashSet(StringComparer.Ordinal);
+            var reviewLayersBySourceId = semantics is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : semantics.Warnings
+                    .SelectMany(warning => warning.ProvenanceIds.Select(sourceId => new
+                    {
+                        SourceId = sourceId,
+                        Layer = GetReviewLayerName(warning.Code)
+                    }))
+                    .GroupBy(entry => entry.SourceId, StringComparer.Ordinal)
+                    .ToDictionary(group => group.Key, group => group.First().Layer, StringComparer.Ordinal);
             var patternHatches = hatchRecognition.NativeHatches.Where(candidate => !candidate.IsSolid).ToArray();
             var consumedPatternLineIds = patternHatches.SelectMany(candidate => candidate.ProvenanceIds).ToHashSet(StringComparer.Ordinal);
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
@@ -72,7 +82,7 @@ public sealed class AcadSharpDwgWriter
                 var line = new Line(
                     new XYZ(sheet.ModelOriginX + sourceLine.Start.X, sheet.ModelOriginY + sourceLine.Start.Y, 0),
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
-                styles.Apply(line, sourceLine.Style);
+                styles.Apply(line, GetReviewStyle(sourceLine.Style, sourceLine.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(line);
             }
             foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
@@ -96,7 +106,7 @@ public sealed class AcadSharpDwgWriter
                 {
                     IsClosed = sourcePolyline.IsClosed
                 };
-                styles.Apply(polyline, sourcePolyline.Style);
+                styles.Apply(polyline, GetReviewStyle(sourcePolyline.Style, sourcePolyline.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(polyline);
                 if (sourcePolyline.IsClosed)
                 {
@@ -126,7 +136,7 @@ public sealed class AcadSharpDwgWriter
                 {
                     hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 }
-                styles.Apply(hatch, sourceFill.Style);
+                styles.Apply(hatch, GetReviewStyle(sourceFill.Style, sourceFill.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(hatch);
             }
             foreach (var candidate in patternHatches)
@@ -177,7 +187,7 @@ public sealed class AcadSharpDwgWriter
                     Rotation = sourceText.RotationRadians,
                     Style = styles.GetPdfTextStyle()
                 };
-                styles.Apply(text, sourceText.Style);
+                styles.Apply(text, GetReviewStyle(sourceText.Style, sourceText.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(text);
             }
             if (semantics is not null)
@@ -209,6 +219,25 @@ public sealed class AcadSharpDwgWriter
             Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ")
         };
         document.Entities.Add(dimension);
+    }
+
+    private static VectorStyle GetReviewStyle(
+        VectorStyle sourceStyle,
+        string sourceId,
+        IReadOnlyDictionary<string, string> reviewLayersBySourceId)
+        => reviewLayersBySourceId.TryGetValue(sourceId, out var reviewLayer)
+            ? sourceStyle with { SourceLayer = reviewLayer }
+            : sourceStyle;
+
+    private static string GetReviewLayerName(string warningCode)
+    {
+        if (warningCode.StartsWith("axis-", StringComparison.Ordinal)) return "TEY_REVIEW_AXIS";
+        if (warningCode.StartsWith("leader-", StringComparison.Ordinal)) return "TEY_REVIEW_LEADER";
+        if (warningCode.StartsWith("level-", StringComparison.Ordinal)) return "TEY_REVIEW_LEVEL";
+        if (warningCode.StartsWith("break-", StringComparison.Ordinal)) return "TEY_REVIEW_BREAK";
+        if (warningCode.StartsWith("section-", StringComparison.Ordinal)) return "TEY_REVIEW_SECTION";
+        if (warningCode.StartsWith("detail-", StringComparison.Ordinal)) return "TEY_REVIEW_DETAIL";
+        return "TEY_REVIEW_SEMANTIC";
     }
 
     private static void WriteTemplateInsert(
