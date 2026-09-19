@@ -2,6 +2,7 @@ using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Dwg;
 using TeyPdfCad.Core.Geometry;
+using TeyPdfCad.Core.Semantics;
 using ACadSharp.IO;
 using Xunit;
 
@@ -9,6 +10,25 @@ namespace TeyPdfCad.Dwg.Tests;
 
 public sealed class DwgDocumentWriterTests
 {
+    [Fact]
+    public void Writer_emits_high_confidence_axis_as_editable_named_block()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Axes = [new AxisCandidate(new Point2(0, 0), new Point2(25.4, 0), 1d, ["axis"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Equal("TEY_AXIS", insert.Block.Name);
+    }
+
     [Fact]
     public void Writer_type_is_available_without_autocad()
     {

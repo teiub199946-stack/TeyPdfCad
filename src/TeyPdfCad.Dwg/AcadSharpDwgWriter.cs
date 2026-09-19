@@ -2,6 +2,7 @@ using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
 using ACadSharp.Objects;
+using ACadSharp.Tables;
 using CSMath;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
@@ -218,14 +219,32 @@ public sealed class AcadSharpDwgWriter
 
     private static void WriteAxis(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, AxisCandidate candidate)
     {
-        var axis = new Line(
-            new XYZ(sheet.ModelOriginX + candidate.Start.X, sheet.ModelOriginY + candidate.Start.Y, 0d),
-            new XYZ(sheet.ModelOriginX + candidate.End.X, sheet.ModelOriginY + candidate.End.Y, 0d))
+        const string blockName = "TEY_AXIS";
+        if (!document.BlockRecords.TryGetValue(blockName, out var block))
         {
-            Layer = styles.GetAnnotationLayer("PDF_ОСИ"),
-            LineType = styles.GetCenterLineType()
+            block = new BlockRecord(blockName);
+            var axis = new Line(new XYZ(0d, 0d, 0d), new XYZ(1d, 0d, 0d))
+            {
+                Layer = styles.GetAnnotationLayer("PDF_ОСИ"),
+                LineType = styles.GetCenterLineType(),
+                LineWeight = LineWeightType.W9
+            };
+            block.Entities.Add(axis);
+            document.BlockRecords.Add(block);
+        }
+
+        var dx = candidate.End.X - candidate.Start.X;
+        var dy = candidate.End.Y - candidate.Start.Y;
+        var insert = new Insert(block)
+        {
+            InsertPoint = new XYZ(sheet.ModelOriginX + candidate.Start.X, sheet.ModelOriginY + candidate.Start.Y, 0d),
+            XScale = Math.Sqrt(dx * dx + dy * dy),
+            YScale = 1d,
+            ZScale = 1d,
+            Rotation = Math.Atan2(dy, dx),
+            Layer = styles.GetAnnotationLayer("PDF_ОСИ")
         };
-        document.Entities.Add(axis);
+        document.Entities.Add(insert);
     }
 
     private static LwPolyline CreateBoundary(IReadOnlyList<TeyPdfCad.Core.Geometry.Point2> loop, double originX, double originY, VectorStyle style, AcadSharpStyleCatalog styles, CadDocument document)
