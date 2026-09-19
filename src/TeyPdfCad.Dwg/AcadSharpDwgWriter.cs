@@ -18,7 +18,12 @@ public sealed class AcadSharpDwgWriter
         var document = new CadDocument();
         foreach (var sheet in plan.Sheets)
         {
-            document.Layouts.Add(new Layout(sheet.LayoutName));
+            var layout = new Layout(sheet.LayoutName)
+            {
+                PaperWidth = sheet.PaperWidthMillimetres,
+                PaperHeight = sheet.PaperHeightMillimetres
+            };
+            document.Layouts.Add(layout);
         }
         foreach (var sourceLine in source.Pages.SelectMany(page => page.Entities).OfType<VectorLine>())
         {

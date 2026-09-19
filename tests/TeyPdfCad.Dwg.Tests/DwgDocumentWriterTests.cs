@@ -71,5 +71,8 @@ public sealed class DwgDocumentWriterTests
 
         Assert.Contains(drawing.Layouts, layout => layout.Name == "Лист-001");
         Assert.Contains(drawing.Layouts, layout => layout.Name == "Лист-003");
+        var firstLayout = drawing.Layouts.Single(layout => layout.Name == "Лист-001");
+        Assert.Equal(210, firstLayout.PaperWidth, 3);
+        Assert.Equal(297, firstLayout.PaperHeight, 3);
     }
 }
