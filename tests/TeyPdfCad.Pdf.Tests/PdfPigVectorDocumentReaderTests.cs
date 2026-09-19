@@ -94,13 +94,21 @@ public sealed class PdfPigVectorDocumentReaderTests
     [Fact]
     public async Task Reader_keeps_separate_words_and_records_page_rotation()
     {
-        const string contents = "BT /F1 12 Tf 72 700 Td (A3) Tj 200 0 Td (B4) Tj ET";
+        const string contents = "10 20 m 30 40 l S BT /F1 12 Tf 72 700 Td (A3) Tj 200 0 Td (B4) Tj ET";
         await using var input = CreateMinimalPdf(contents, rotation: 90);
 
         var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
 
         Assert.Equal(90, page.RotationDegrees);
-        Assert.Equal(["A3", "B4"], page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>().Select(text => text.Value).ToArray());
+        Assert.Equal(841.89, page.WidthPoints, 3);
+        Assert.Equal(595.276, page.HeightPoints, 3);
+        var texts = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>().ToArray();
+        Assert.Equal(["A3", "B4"], texts.Select(text => text.Value).ToArray());
+        Assert.Equal(700 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, texts[0].InsertionPoint.X, 6);
+        Assert.Equal((595.276 - 72) * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, texts[0].InsertionPoint.Y, 6);
+        var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+        Assert.Equal(20 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
+        Assert.Equal((595.276 - 10) * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
     }
 
     [Fact]
@@ -114,6 +122,30 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(0x1A1A1A, line.Style.RgbColor);
         Assert.Equal(2d, line.Style.StrokeWidthPoints);
         Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
+    }
+
+    [Fact]
+    public async Task Reader_reports_unsupported_clipping_instead_of_silently_ignoring_it()
+    {
+        await using var input = CreateMinimalPdf("0 0 m 20 0 l 10 10 l 20 20 l 0 20 l h W n 1 1 m 10 10 l S");
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        Assert.Contains(page.Diagnostics, diagnostic => diagnostic.Code == "unsupported-pdf-path-operation");
+        Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+    }
+
+    [Fact]
+    public async Task Reader_clips_vector_lines_to_a_rectangular_clipping_path()
+    {
+        await using var input = CreateMinimalPdf("0 0 20 20 re W n -10 10 m 30 10 l S");
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+
+        Assert.Empty(page.Diagnostics);
+        Assert.Equal(0d, line.Start.X, 6);
+        Assert.Equal(20d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.End.X, 6);
     }
 
     private static MemoryStream CreateMinimalPdf(string? contentsOverride = null, int rotation = 0)

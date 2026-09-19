@@ -20,7 +20,18 @@ public sealed class PdfPigVectorDocumentReader
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var entities = graphicsInterpreter.Interpret(sourcePage.Operations, sourcePage.Number).ToList();
+            var mediaBounds = sourcePage.MediaBox.Bounds;
+            var mediaWidth = sourcePage.Rotation.SwapsAxis ? mediaBounds.Height : mediaBounds.Width;
+            var mediaHeight = sourcePage.Rotation.SwapsAxis ? mediaBounds.Width : mediaBounds.Height;
+            var graphics = graphicsInterpreter.InterpretDetailed(
+                sourcePage.Operations,
+                sourcePage.Number,
+                sourcePage.Rotation.Value,
+                mediaWidth,
+                mediaHeight,
+                mediaBounds.Left,
+                mediaBounds.Bottom);
+            var entities = graphics.Entities.ToList();
             var words = NearestNeighbourWordExtractor.Instance.GetWords(sourcePage.Letters);
             var textSequence = 0;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
@@ -42,7 +53,8 @@ public sealed class PdfPigVectorDocumentReader
                 WidthPoints: sourcePage.Width,
                 HeightPoints: sourcePage.Height,
                 RotationDegrees: sourcePage.Rotation.Value,
-                Entities: entities));
+                Entities: entities,
+                SourceDiagnostics: graphics.Diagnostics));
         }
 
         return Task.FromResult(new VectorPdfDocument(pages));

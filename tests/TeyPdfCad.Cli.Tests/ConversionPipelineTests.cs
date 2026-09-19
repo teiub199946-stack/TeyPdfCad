@@ -102,6 +102,65 @@ public sealed class ConversionPipelineTests
         Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
     }
 
+    [Fact]
+    public async Task Pipeline_marks_the_result_partial_when_a_pdf_path_operation_is_unsupported()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "clipped.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateMinimalPdf("0 0 m 20 0 l 10 10 l 20 20 l 0 20 l h W n 1 1 m 10 10 l S"));
+
+        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
+
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
+        Assert.True(File.Exists(output));
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.False(page.GetProperty("complete").GetBoolean());
+        Assert.Contains(page.GetProperty("diagnostics").EnumerateArray(), diagnostic => diagnostic.GetProperty("code").GetString() == "unsupported-pdf-path-operation");
+    }
+
+    [Fact]
+    public async Task Pipeline_accepts_a_full_page_clipping_rectangle_as_lossless()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "page-clipped.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateMinimalPdf("0 0 72 72 re W n 1 1 m 10 10 l S"));
+
+        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
+
+        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.True(json.RootElement.GetProperty("complete").GetBoolean());
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Empty(page.GetProperty("diagnostics").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Pipeline_skips_advisory_semantics_when_page_complexity_is_too_high()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "complex.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        var content = string.Join(' ', Enumerable.Range(0, 501).Select(index => $"0 {index % 72} m 72 {index % 72} l S"));
+        await File.WriteAllBytesAsync(input, CreateMinimalPdf(content));
+
+        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
+
+        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Contains("semantic-recognition-skipped-complexity", page.GetProperty("semanticWarnings").EnumerateArray().Select(value => value.GetString()));
+    }
+
     private static byte[] CreateMinimalPdf(string contents)
     {
         var objects = new[]
