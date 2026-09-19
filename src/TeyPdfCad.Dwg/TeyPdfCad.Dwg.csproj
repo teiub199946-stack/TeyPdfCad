@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>TeyPdfCad.Dwg</RootNamespace>
+    <AssemblyName>TeyPdfCad.Dwg</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
+    <PackageReference Include="ACadSharp" Version="3.7.1" />
+  </ItemGroup>
+</Project>
