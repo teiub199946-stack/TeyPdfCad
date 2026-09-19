@@ -40,7 +40,7 @@ public sealed class TemplateLibraryManifestReader
     private static TemplateSheet? TryInferSheet(TemplateBlockDefinition block)
     {
         var name = block.Name.Replace('_', '-');
-        var format = Enum.GetValues<StandardSheetFormat>()
+        var format = Enum.GetValues(typeof(StandardSheetFormat)).Cast<StandardSheetFormat>()
             .Where(value => value != StandardSheetFormat.Unknown)
             .FirstOrDefault(value => name.IndexOf(value.ToString(), StringComparison.OrdinalIgnoreCase) >= 0);
         if (format == StandardSheetFormat.Unknown) return null;
