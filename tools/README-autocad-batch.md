@@ -24,6 +24,11 @@ The script returns a JSON object with the run directory, result DWG, fixture JSO
 
 PDFIMPORT itself remains a separate gate until the prompt sequence is verified against the installed AutoCAD 2022 build. Do not use an unverified command script for production conversion.
 
-For plugin-only health checks, use `autocad-plugin-smoke.ps1`. It uses `accoreconsole.exe` and accepts `-ProfileName` when the installed AutoCAD profile is known. Core Console must start successfully with that profile before the script can load the DLL; a profile setup failure is an AutoCAD installation/profile problem, not a plugin result.
+For plugin-only health checks, use `autocad-plugin-smoke.ps1`. It uses
+`accoreconsole.exe`, accepts `-ProfileName`, and accepts
+`-ConfigurationFile` when `acad2022.cfg` is stored in the user's Autodesk
+profile rather than beside `acad.exe`.
 
-Both harnesses fail before launching AutoCAD when `acad2022.cfg` is missing beside the selected AutoCAD executable. This is the same prerequisite reported by the Web API `/ready` endpoint in AutoCAD mode.
+Both harnesses fail before launching AutoCAD when the selected configuration
+file is missing. The Web API uses the equivalent
+`TEYPDFCAD_AUTOCAD_CONFIG_FILE` setting.

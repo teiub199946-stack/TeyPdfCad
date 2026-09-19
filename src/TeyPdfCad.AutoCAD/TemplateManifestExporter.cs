@@ -67,14 +67,18 @@ public sealed class TemplateManifestExporter
                     continue;
                 }
 
-                foreach (var expandedEntity in ExpandEntity(entity))
-                {
+                TemplateEntityExpansion.VisitLeaves(
+                    entity,
+                    IsReconstructable,
+                    ExplodeSafely,
+                    expandedEntity =>
+                    {
                     var objectClass = expandedEntity.GetRXClass().Name;
                     if (!TryGetBounds(expandedEntity, out var minX, out var minY, out var maxX, out var maxY)
                         || !IsReconstructable(expandedEntity))
                     {
                         unsupported.Add(objectClass);
-                        continue;
+                        return;
                     }
                     entities.Add(new TemplateEntityManifest(
                         objectClass,
@@ -86,19 +90,20 @@ public sealed class TemplateManifestExporter
                         GetGeometryPoints(expandedEntity),
                         GetText(expandedEntity),
                         GetTextHeight(expandedEntity),
-                        expandedEntity.Layer));
-                }
+                        expandedEntity.Layer,
+                        GetIsClosed(expandedEntity),
+                        GetRotationRadians(expandedEntity)));
+                    },
+                    expandedEntity => expandedEntity.Dispose());
             }
-            blocks.Add(new TemplateBlockManifest(block.Name, entities, attributes));
+            blocks.Add(new TemplateBlockManifest(
+                block.Name,
+                entities,
+                attributes,
+                new TemplatePointManifest(block.Origin.X, block.Origin.Y)));
         }
         return blocks.OrderBy(block => block.Name, StringComparer.Ordinal).ToArray();
     }
-
-    private static IReadOnlyList<Entity> ExpandEntity(Entity entity)
-        => TemplateEntityExpansion.Flatten(
-            entity,
-            IsReconstructable,
-            ExplodeSafely);
 
     private static bool IsReconstructable(Entity entity)
         => entity is Line or Polyline or Circle or DBText or MText;
@@ -156,7 +161,7 @@ public sealed class TemplateManifestExporter
         }
     }
 
-    private static IReadOnlyList<TemplatePointManifest>? GetGeometryPoints(Entity entity)
+    internal static IReadOnlyList<TemplatePointManifest>? GetGeometryPoints(Entity entity)
     {
         switch (entity)
         {
@@ -178,6 +183,10 @@ public sealed class TemplateManifestExporter
                     new TemplatePointManifest(circle.Center.X, circle.Center.Y),
                     new TemplatePointManifest(circle.Center.X + circle.Radius, circle.Center.Y)
                 ];
+            case DBText text:
+                return [new TemplatePointManifest(text.Position.X, text.Position.Y)];
+            case MText text:
+                return [new TemplatePointManifest(text.Location.X, text.Location.Y)];
             default:
                 return null;
         }
@@ -196,6 +205,17 @@ public sealed class TemplateManifestExporter
         {
             DBText text => text.Height,
             MText text => text.TextHeight,
+            _ => null
+        };
+
+    private static bool? GetIsClosed(Entity entity)
+        => entity is Polyline polyline ? polyline.Closed : null;
+
+    private static double? GetRotationRadians(Entity entity)
+        => entity switch
+        {
+            DBText text => text.Rotation,
+            MText text => text.Rotation,
             _ => null
         };
 }

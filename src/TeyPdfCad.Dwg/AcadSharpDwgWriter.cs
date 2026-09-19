@@ -249,19 +249,25 @@ public sealed class AcadSharpDwgWriter
         if (!document.BlockRecords.TryGetValue(template.Name, out var block))
         {
             block = new BlockRecord(template.Name);
+            var origin = template.EffectiveOrigin;
             foreach (var entity in template.Entities)
             {
                 if (entity.ObjectClass == "AcDbLine" && entity.Points.Count == 2)
                 {
                     var line = new Line(
-                        new XYZ(entity.Points[0].X, entity.Points[0].Y, 0d),
-                        new XYZ(entity.Points[1].X, entity.Points[1].Y, 0d));
+                        new XYZ(entity.Points[0].X - origin.X, entity.Points[0].Y - origin.Y, 0d),
+                        new XYZ(entity.Points[1].X - origin.X, entity.Points[1].Y - origin.Y, 0d));
                     styles.Apply(line, new VectorStyle(entity.Layer ?? "0"));
                     block.Entities.Add(line);
                 }
                 else if (entity.ObjectClass == "AcDbPolyline" && entity.Points.Count >= 2)
                 {
-                    var polyline = new LwPolyline(entity.Points.Select(point => new XY(point.X, point.Y)));
+                    var polyline = new LwPolyline(entity.Points.Select(point => new XY(
+                        point.X - origin.X,
+                        point.Y - origin.Y)))
+                    {
+                        IsClosed = entity.IsClosed
+                    };
                     styles.Apply(polyline, new VectorStyle(entity.Layer ?? "0"));
                     block.Entities.Add(polyline);
                 }
@@ -270,7 +276,7 @@ public sealed class AcadSharpDwgWriter
                     var center = entity.Points[0];
                     var radiusPoint = entity.Points[1];
                     var circle = new Circle(
-                        new XYZ(center.X, center.Y, 0d),
+                        new XYZ(center.X - origin.X, center.Y - origin.Y, 0d),
                         Math.Sqrt(Math.Pow(radiusPoint.X - center.X, 2d) + Math.Pow(radiusPoint.Y - center.Y, 2d)));
                     styles.Apply(circle, new VectorStyle(entity.Layer ?? "0"));
                     block.Entities.Add(circle);
@@ -280,8 +286,12 @@ public sealed class AcadSharpDwgWriter
                     var text = new TextEntity
                     {
                         Value = entity.Text,
-                        InsertPoint = new XYZ(entity.Points[0].X, entity.Points[0].Y, 0d),
+                        InsertPoint = new XYZ(
+                            entity.Points[0].X - origin.X,
+                            entity.Points[0].Y - origin.Y,
+                            0d),
                         Height = entity.TextHeight ?? 2.5d,
+                        Rotation = entity.RotationRadians,
                         Style = styles.GetPdfTextStyle()
                     };
                     styles.Apply(text, new VectorStyle(entity.Layer ?? "0"));

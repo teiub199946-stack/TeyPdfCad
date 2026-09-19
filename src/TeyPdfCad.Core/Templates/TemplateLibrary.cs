@@ -18,7 +18,11 @@ public sealed class TemplateLibrary
 public sealed record TemplateBlockDefinition(
     string Name,
     IReadOnlyList<TemplateGeometryEntity> Entities,
-    IReadOnlyList<TemplateAttributeDefinition> Attributes);
+    IReadOnlyList<TemplateAttributeDefinition> Attributes,
+    TemplatePoint? Origin = null)
+{
+    public TemplatePoint EffectiveOrigin => Origin ?? new TemplatePoint(0d, 0d);
+}
 
 public sealed record TemplateGeometryEntity(
     string ObjectClass,
@@ -26,7 +30,9 @@ public sealed record TemplateGeometryEntity(
     IReadOnlyList<TemplatePoint> Points,
     string? Text,
     double? TextHeight,
-    string? Layer);
+    string? Layer,
+    bool IsClosed = false,
+    double RotationRadians = 0d);
 
 public sealed record TemplatePoint(double X, double Y);
 

@@ -41,6 +41,81 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_normalizes_template_geometry_by_exported_block_origin()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var library = new TemplateLibrary([], [new TemplateBlockDefinition(
+            "A3-landscape",
+            [new TemplateGeometryEntity(
+                "AcDbLine",
+                "A1",
+                [new TemplatePoint(1000, 2000), new TemplatePoint(1420, 2000)],
+                null,
+                null,
+                "0")],
+            [],
+            new TemplatePoint(1000, 2000))]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            templateLibrary: library,
+            templateSelectionsByPage: new Dictionary<int, TemplateSelection>
+            {
+                [1] = new(true, "A3-landscape", "test")
+            })));
+
+        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        var line = Assert.Single(insert.Block.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Equal(0d, line.StartPoint.X, 6);
+        Assert.Equal(0d, line.StartPoint.Y, 6);
+        Assert.Equal(420d, line.EndPoint.X, 6);
+        Assert.Equal(0d, line.EndPoint.Y, 6);
+    }
+
+    [Fact]
+    public void Writer_preserves_template_polyline_closure_and_text_rotation()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var library = new TemplateLibrary([], [new TemplateBlockDefinition(
+            "A3-landscape",
+            [
+                new TemplateGeometryEntity(
+                    "AcDbPolyline",
+                    "P1",
+                    [new TemplatePoint(0, 0), new TemplatePoint(10, 0), new TemplatePoint(10, 10)],
+                    null,
+                    null,
+                    "0",
+                    IsClosed: true),
+                new TemplateGeometryEntity(
+                    "AcDbText",
+                    "T1",
+                    [new TemplatePoint(5, 5)],
+                    "Лист",
+                    3.5,
+                    "0",
+                    RotationRadians: Math.PI / 2d)
+            ],
+            [])]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            templateLibrary: library,
+            templateSelectionsByPage: new Dictionary<int, TemplateSelection>
+            {
+                [1] = new(true, "A3-landscape", "test")
+            })));
+
+        var block = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>()).Block;
+        Assert.True(Assert.Single(block.Entities.OfType<ACadSharp.Entities.LwPolyline>()).IsClosed);
+        Assert.Equal(Math.PI / 2d, Assert.Single(block.Entities.OfType<ACadSharp.Entities.TextEntity>()).Rotation, 12);
+    }
+
+    [Fact]
     public void Writer_emits_high_confidence_axis_as_editable_named_block()
     {
         var page = new VectorPdfPage(1, 72, 72, 0, []);

@@ -11,6 +11,7 @@ internal static class AutoCadExecutor
         var coreConsole = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_CORE_CONSOLE");
         var pluginDll = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_PLUGIN_DLL");
         var profile = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_PROFILE");
+        var configurationFile = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_CONFIG_FILE");
         if (string.IsNullOrWhiteSpace(coreConsole) || string.IsNullOrWhiteSpace(pluginDll))
         {
             Console.Error.WriteLine(
@@ -30,6 +31,15 @@ internal static class AutoCadExecutor
         {
             Console.Error.WriteLine($"TeyPdfCad plugin DLL was not found: {pluginDll}");
             return BridgeProtocol.MissingHostDependencyExitCode;
+        }
+        if (!string.IsNullOrWhiteSpace(configurationFile))
+        {
+            configurationFile = Path.GetFullPath(configurationFile);
+            if (!File.Exists(configurationFile))
+            {
+                Console.Error.WriteLine($"AutoCAD configuration file was not found: {configurationFile}");
+                return BridgeProtocol.MissingHostDependencyExitCode;
+            }
         }
 
         var root = Path.Combine(
@@ -63,6 +73,11 @@ internal static class AutoCadExecutor
                 request.PreserveSourceGeometry ? "true" : "false";
             info.Environment[BridgeEnvironmentVariables.RecognizerProfile] = request.RecognizerProfile;
             info.Environment[BridgeEnvironmentVariables.StatusFile] = status;
+            if (!string.IsNullOrWhiteSpace(configurationFile))
+            {
+                info.ArgumentList.Add("/c");
+                info.ArgumentList.Add(Path.GetDirectoryName(configurationFile)!);
+            }
             if (HasExplicitProfile(profile))
             {
                 info.ArgumentList.Add("/p");

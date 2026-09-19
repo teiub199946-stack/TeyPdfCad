@@ -39,6 +39,26 @@ public sealed class TemplateManifestModelsTests
     }
 
     [Fact]
+    public void Expansion_releases_every_generated_node_after_its_leaf_is_consumed()
+    {
+        var line = new ExpansionNode("AcDbLine");
+        var nested = new ExpansionNode("AcDbBlockReference", [line]);
+        var root = new ExpansionNode("mcsDbObjectFormat", [nested]);
+        var visited = new List<string>();
+        var released = new List<string>();
+
+        TemplateEntityExpansion.VisitLeaves(
+            root,
+            node => node.Name == "AcDbLine",
+            node => node.Children,
+            node => visited.Add(node.Name),
+            node => released.Add(node.Name));
+
+        Assert.Equal(["AcDbLine"], visited);
+        Assert.Equal(["AcDbLine", "AcDbBlockReference"], released);
+    }
+
+    [Fact]
     public void Manifest_serializes_block_attributes_and_unknown_classes()
     {
         var manifest = new TemplateLibraryManifest(

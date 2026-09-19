@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)] [string] $PluginDll,
     [string] $ProfileName,
     [string] $CoreConsolePath,
+    [string] $ConfigurationFile,
     [int] $TimeoutSeconds = 120
 )
 
@@ -11,9 +12,11 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath $AutoCadPath -PathType Leaf)) { throw "AutoCAD executable was not found: $AutoCadPath" }
 if (-not (Test-Path -LiteralPath $PluginDll -PathType Leaf)) { throw "Plugin DLL was not found: $PluginDll" }
 if ($TimeoutSeconds -lt 30) { throw 'TimeoutSeconds must be at least 30 seconds.' }
-$configPath = Join-Path (Split-Path -Parent $AutoCadPath) 'acad2022.cfg'
-if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
-    throw "AutoCAD configuration was not found: $configPath. Repair or initialize AutoCAD before running Core Console smoke."
+if ([string]::IsNullOrWhiteSpace($ConfigurationFile)) {
+    $ConfigurationFile = Join-Path (Split-Path -Parent $AutoCadPath) 'acad2022.cfg'
+}
+if (-not (Test-Path -LiteralPath $ConfigurationFile -PathType Leaf)) {
+    throw "AutoCAD configuration was not found: $ConfigurationFile. Pass -ConfigurationFile with the real user acad2022.cfg path."
 }
 if ([string]::IsNullOrWhiteSpace($CoreConsolePath)) {
     $CoreConsolePath = Join-Path (Split-Path -Parent $AutoCadPath) 'accoreconsole.exe'
@@ -37,7 +40,7 @@ $lines = @(
 $previousSentinel = $env:TEYPDFCAD_HEALTH_FILE
 $env:TEYPDFCAD_HEALTH_FILE = $sentinelPath
 try {
-    $arguments = @('/s', $scriptPath)
+    $arguments = @('/c', (Split-Path -Parent (Resolve-Path -LiteralPath $ConfigurationFile).Path), '/s', $scriptPath)
     if (-not [string]::IsNullOrWhiteSpace($ProfileName)) {
         $arguments = @('/p', $ProfileName) + $arguments
     }

@@ -21,7 +21,8 @@ public sealed record TemplateLibraryManifest(
 public sealed record TemplateBlockManifest(
     string Name,
     IReadOnlyList<TemplateEntityManifest> Entities,
-    IReadOnlyList<TemplateAttributeManifest> Attributes);
+    IReadOnlyList<TemplateAttributeManifest> Attributes,
+    TemplatePointManifest? Origin = null);
 
 public sealed record TemplateEntityManifest(
     string ObjectClass,
@@ -33,7 +34,9 @@ public sealed record TemplateEntityManifest(
     IReadOnlyList<TemplatePointManifest>? Points = null,
     string? Text = null,
     double? TextHeight = null,
-    string? Layer = null);
+    string? Layer = null,
+    bool? IsClosed = null,
+    double? RotationRadians = null);
 
 public sealed record TemplatePointManifest(double X, double Y);
 

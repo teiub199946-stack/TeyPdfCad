@@ -23,11 +23,14 @@ public sealed class TemplateLibraryManifestReader
                     (entity.Points ?? []).Select(point => new TemplatePoint(point.X, point.Y)).ToArray(),
                     entity.Text,
                     entity.TextHeight,
-                    entity.Layer)).ToArray(),
+                    entity.Layer,
+                    entity.IsClosed ?? false,
+                    entity.RotationRadians ?? 0d)).ToArray(),
                 (block.Attributes ?? []).Select(attribute => new TemplateAttributeDefinition(
                     attribute.Tag ?? string.Empty,
                     attribute.Prompt ?? string.Empty,
-                    attribute.DefaultValue ?? string.Empty)).ToArray()))
+                    attribute.DefaultValue ?? string.Empty)).ToArray(),
+                block.Origin is null ? null : new TemplatePoint(block.Origin.X, block.Origin.Y)))
             .ToArray();
         var sheets = blocks
             .Select(TryInferSheet)
@@ -39,6 +42,9 @@ public sealed class TemplateLibraryManifestReader
 
     private static TemplateSheet? TryInferSheet(TemplateBlockDefinition block)
     {
+        if (block.Entities.Count == 0)
+            return null;
+
         var name = block.Name.Replace('_', '-');
         var format = Enum.GetValues(typeof(StandardSheetFormat)).Cast<StandardSheetFormat>()
             .Where(value => value != StandardSheetFormat.Unknown)
@@ -66,6 +72,7 @@ public sealed class TemplateLibraryManifestReader
         public string? Name { get; set; }
         public List<EntityDto>? Entities { get; set; }
         public List<AttributeDto>? Attributes { get; set; }
+        public PointDto? Origin { get; set; }
     }
 
     private sealed class EntityDto
@@ -76,6 +83,8 @@ public sealed class TemplateLibraryManifestReader
         public string? Text { get; set; }
         public double? TextHeight { get; set; }
         public string? Layer { get; set; }
+        public bool? IsClosed { get; set; }
+        public double? RotationRadians { get; set; }
     }
 
     private sealed class PointDto { public double X { get; set; } public double Y { get; set; } }

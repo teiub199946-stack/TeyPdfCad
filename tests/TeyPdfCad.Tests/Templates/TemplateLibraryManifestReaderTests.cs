@@ -6,12 +6,35 @@ namespace TeyPdfCad.Tests.Templates;
 public sealed class TemplateLibraryManifestReaderTests
 {
     [Fact]
+    public void Does_not_register_named_sheet_when_exported_block_has_no_reconstructable_geometry()
+    {
+        const string json = """
+        { "schemaVersion":"1", "blocks":[{
+          "name":"A3-landscape",
+          "origin":{"x":570401.723,"y":35136.433},
+          "entities":[],
+          "attributes":[]
+        }], "styles":[], "unsupportedEntityClasses":["mcsDbObjectFormat"] }
+        """;
+
+        var library = new TemplateLibraryManifestReader().Read(json);
+
+        Assert.Empty(library.Sheets);
+        Assert.Empty(Assert.Single(library.Blocks).Entities);
+    }
+
+    [Fact]
     public void Reads_reconstructable_linework_and_attributes_from_autocad_manifest()
     {
         const string json = """
         { "schemaVersion":"1", "blocks":[{
           "name":"A3-landscape",
-          "entities":[{"objectClass":"AcDbLine","handle":"A1","minX":0,"minY":0,"maxX":420,"maxY":0,"points":[{"x":0,"y":0},{"x":420,"y":0}],"layer":"0"}],
+          "origin":{"x":1000,"y":2000},
+          "entities":[
+            {"objectClass":"AcDbLine","handle":"A1","minX":1000,"minY":2000,"maxX":1420,"maxY":2000,"points":[{"x":1000,"y":2000},{"x":1420,"y":2000}],"layer":"0"},
+            {"objectClass":"AcDbPolyline","handle":"A2","minX":1000,"minY":2000,"maxX":1010,"maxY":2010,"points":[{"x":1000,"y":2000},{"x":1010,"y":2000},{"x":1010,"y":2010}],"layer":"0","isClosed":true},
+            {"objectClass":"AcDbText","handle":"A3","minX":1005,"minY":2005,"maxX":1020,"maxY":2010,"points":[{"x":1005,"y":2005}],"text":"Лист","textHeight":3.5,"rotationRadians":1.5707963267948966,"layer":"0"}
+          ],
           "attributes":[{"tag":"SHEET","prompt":"Лист","defaultValue":"1"}]
         }], "styles":[], "unsupportedEntityClasses":[] }
         """;
@@ -20,7 +43,10 @@ public sealed class TemplateLibraryManifestReaderTests
 
         var block = Assert.Single(library.Blocks);
         Assert.Equal("A3-landscape", block.Name);
-        Assert.Equal(2, Assert.Single(block.Entities).Points.Count);
+        Assert.Equal(2, block.Entities[0].Points.Count);
+        Assert.Equal(new TemplatePoint(1000, 2000), block.Origin);
+        Assert.True(block.Entities[1].IsClosed);
+        Assert.Equal(Math.PI / 2d, block.Entities[2].RotationRadians, 12);
         Assert.Equal("SHEET", Assert.Single(block.Attributes).Tag);
         var sheet = Assert.Single(library.Sheets);
         Assert.Equal(TeyPdfCad.Core.Sheets.StandardSheetFormat.A3, sheet.Format);
