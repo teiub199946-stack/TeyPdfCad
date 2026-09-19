@@ -81,6 +81,24 @@ public sealed class ConversionPipelineTests
     }
 
     [Fact]
+    public async Task Pipeline_rejects_a_missing_template_manifest_without_writing_dwg()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "source.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateMinimalPdf("0 0 m 10 10 l S"));
+
+        var result = await new ConversionPipeline().ConvertAsync(
+            input, output, report, default, Path.Combine(directory, "missing.json"));
+
+        Assert.Equal(ConversionOutcome.InvalidArgumentsOrIo, result.Outcome);
+        Assert.False(File.Exists(output));
+        Assert.True(File.Exists(report));
+    }
+
+    [Fact]
     public async Task Pipeline_reports_and_writes_a_confirmed_pattern_hatch()
     {
         var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));

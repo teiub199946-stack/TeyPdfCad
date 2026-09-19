@@ -4,9 +4,9 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        if (args.Length != 7 || !string.Equals(args[0], "convert", StringComparison.OrdinalIgnoreCase))
+        if ((args.Length != 7 && args.Length != 9) || !string.Equals(args[0], "convert", StringComparison.OrdinalIgnoreCase))
         {
-            await Console.Error.WriteLineAsync("Usage: TeyPdfCad.Cli convert --input <pdf> --output <dwg> --report <json>");
+            await Console.Error.WriteLineAsync("Usage: TeyPdfCad.Cli convert --input <pdf> --output <dwg> --report <json> [--template-manifest <json>]");
             return (int)ConversionOutcome.InvalidArgumentsOrIo;
         }
 
@@ -26,7 +26,8 @@ public static class Program
             return (int)ConversionOutcome.InvalidArgumentsOrIo;
         }
 
-        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
+        options.TryGetValue("--template-manifest", out var templateManifest);
+        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default, templateManifest);
         await Console.Out.WriteLineAsync($"outcome={result.Outcome}; report={result.ReportPath}; dwg={result.DwgPath ?? "none"}");
         return (int)result.Outcome;
     }

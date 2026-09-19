@@ -5,6 +5,8 @@ using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Semantics;
+using TeyPdfCad.Core.Sheets;
+using TeyPdfCad.Core.Templates;
 using TeyPdfCad.Dwg;
 using TeyPdfCad.Pdf;
 
@@ -22,7 +24,12 @@ public sealed record ConversionResult(ConversionOutcome Outcome, string ReportPa
 
 public sealed class ConversionPipeline
 {
-    public async Task<ConversionResult> ConvertAsync(string inputPdfPath, string outputDwgPath, string reportPath, CancellationToken cancellationToken)
+    public async Task<ConversionResult> ConvertAsync(
+        string inputPdfPath,
+        string outputDwgPath,
+        string reportPath,
+        CancellationToken cancellationToken,
+        string? templateManifestPath = null)
     {
         if (string.IsNullOrWhiteSpace(inputPdfPath)) throw new ArgumentException("Input PDF path is required.", nameof(inputPdfPath));
         if (string.IsNullOrWhiteSpace(outputDwgPath)) throw new ArgumentException("Output DWG path is required.", nameof(outputDwgPath));
@@ -39,6 +46,10 @@ public sealed class ConversionPipeline
             var semanticRecognition = document.Pages.ToDictionary(
                 page => page.Number,
                 AnalyzeSemantics);
+            var templateLibrary = LoadTemplateLibrary(templateManifestPath);
+            var templateSelections = templateLibrary is null
+                ? null
+                : document.Pages.ToDictionary(page => page.Number, page => SelectTemplate(page, templateLibrary));
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
@@ -50,7 +61,13 @@ public sealed class ConversionPipeline
             var semanticResults = semanticRecognition
                 .Where(pair => pair.Value.Result is not null)
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
-            var bytes = new AcadSharpDwgWriter().Write(document, plan, hatchRecognition, semanticResults);
+            var bytes = new AcadSharpDwgWriter().Write(
+                document,
+                plan,
+                hatchRecognition,
+                semanticResults,
+                templateLibrary,
+                templateSelections);
             var readBack = DwgReader.Read(new MemoryStream(bytes));
             var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
             if (layoutsReadBack != 0)
@@ -92,6 +109,36 @@ public sealed class ConversionPipeline
             || string.Equals(input, report, StringComparison.OrdinalIgnoreCase)
             || string.Equals(output, report, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Input PDF, output DWG and JSON report must use distinct paths.");
+    }
+
+    private static TemplateLibrary? LoadTemplateLibrary(string? templateManifestPath)
+    {
+        if (string.IsNullOrWhiteSpace(templateManifestPath)) return null;
+        var fullPath = Path.GetFullPath(templateManifestPath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException("Template manifest was not found.", fullPath);
+        return new TemplateLibraryManifestReader().Read(File.ReadAllText(fullPath));
+    }
+
+    private static TemplateSelection SelectTemplate(VectorPdfPage page, TemplateLibrary library)
+    {
+        var detection = StandardSheetDetector.Detect(page.WidthMillimetres, page.HeightMillimetres);
+        var sheet = new SheetMetadata(page.WidthMillimetres, page.HeightMillimetres, detection.Format, detection.Orientation);
+        var scene = new PrimitiveScene { Sheet = sheet };
+        scene.Lines.AddRange(page.Entities.OfType<VectorLine>().Select(line => new LinePrimitive(
+            line.Start,
+            line.End,
+            line.Style.SourceLayer,
+            [line.SourceId])));
+        scene.Texts.AddRange(page.Entities.OfType<VectorText>().Select(text => new TextPrimitive(
+            text.Value,
+            text.InsertionPoint,
+            text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
+            text.RotationRadians * 180d / Math.PI,
+            text.Style.SourceLayer,
+            [text.SourceId])));
+        var titleBlock = TitleBlockDetector.Detect(scene, sheet);
+        return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
 
     private static async Task TryWriteFailureReportAsync(string reportPath, string message, CancellationToken cancellationToken)
