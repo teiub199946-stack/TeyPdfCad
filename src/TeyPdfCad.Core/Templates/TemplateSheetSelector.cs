@@ -25,6 +25,9 @@ public sealed class TemplateSheetSelector
                 true,
                 template.Name,
                 "format-and-title-block-confirmed",
-                titleBlock.Region.ProvenanceIds);
+                titleBlock.Lines
+                    .SelectMany(line => line.ProvenanceIds)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray());
     }
 }

@@ -17,7 +17,7 @@ public sealed class TemplateSheetSelectorTests
 
         Assert.True(result.IsConfirmed);
         Assert.Equal("A3-landscape", result.TemplateName);
-        Assert.Equal(["stamp-line", "stamp-text"], result.SourceIdsToReplace);
+        Assert.Equal(["stamp-line"], result.SourceIdsToReplace);
     }
 
     [Fact]
