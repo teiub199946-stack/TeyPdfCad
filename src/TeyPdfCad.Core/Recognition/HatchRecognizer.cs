@@ -11,7 +11,10 @@ public sealed class HatchRecognizer
 
     public HatchRecognitionResult Recognize(IReadOnlyList<VectorEntity> entities)
     {
-        ArgumentNullException.ThrowIfNull(entities);
+        if (entities is null)
+        {
+            throw new ArgumentNullException(nameof(entities));
+        }
 
         var hatches = new List<HatchCandidate>();
         foreach (var filledPath in entities.OfType<VectorFilledPath>())
@@ -33,7 +36,7 @@ public sealed class HatchRecognizer
         foreach (var boundary in entities.OfType<VectorPolyline>().Where(path => path.IsClosed && HasValidBoundary(path.Vertices)))
         {
             var interiorLines = lineEntities
-                .Where(line => Contains(boundary.Vertices, GeometryMath.Midpoint(line.Start, line.End)))
+                .Where(line => IsEntirelyInside(boundary.Vertices, line))
                 .ToArray();
             var pattern = TryCreatePatternCandidate(boundary, interiorLines, entities.OfType<VectorText>().ToArray());
             if (pattern is not null)
@@ -43,7 +46,7 @@ public sealed class HatchRecognizer
         }
 
         var warnings = new List<SemanticWarning>();
-        if (lineEntities.Length >= 3 && !hatches.Any(candidate => !candidate.IsSolid))
+        if (HasPlausibleParallelGroup(lineEntities) && !hatches.Any(candidate => !candidate.IsSolid))
         {
             warnings.Add(new SemanticWarning(
                 "hatch-low-confidence",
@@ -117,6 +120,10 @@ public sealed class HatchRecognizer
 
     private static bool Contains(IReadOnlyList<Point2> polygon, Point2 point)
     {
+        if (IsOnBoundary(polygon, point))
+        {
+            return true;
+        }
         var inside = false;
         for (int current = 0, previous = polygon.Count - 1; current < polygon.Count; previous = current++)
         {
@@ -130,6 +137,61 @@ public sealed class HatchRecognizer
         }
 
         return inside;
+    }
+
+    private static bool IsEntirelyInside(IReadOnlyList<Point2> polygon, VectorLine line)
+        => Contains(polygon, line.Start)
+           && Contains(polygon, line.End)
+           && !IntersectsPolygonBoundary(polygon, line);
+
+    private static bool IntersectsPolygonBoundary(IReadOnlyList<Point2> polygon, VectorLine line)
+    {
+        for (var current = 0; current < polygon.Count; current++)
+        {
+            var edgeStart = polygon[current];
+            var edgeEnd = polygon[(current + 1) % polygon.Count];
+            if (SegmentsIntersect(line.Start, line.End, edgeStart, edgeEnd))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool HasPlausibleParallelGroup(IReadOnlyList<VectorLine> lines)
+    {
+        foreach (var line in lines)
+        {
+            var unit = GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start));
+            if (GeometryMath.Length(unit) > 1e-12 && lines.Count(candidate => IsParallel(candidate, unit)) >= 3)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsOnBoundary(IReadOnlyList<Point2> polygon, Point2 point)
+        => Enumerable.Range(0, polygon.Count).Any(index => DistanceToSegment(point, polygon[index], polygon[(index + 1) % polygon.Count]) <= 1e-9);
+
+    private static double DistanceToSegment(Point2 point, Point2 start, Point2 end)
+    {
+        var dx = end.X - start.X;
+        var dy = end.Y - start.Y;
+        var squared = dx * dx + dy * dy;
+        if (squared <= 1e-18) return Math.Sqrt(Math.Pow(point.X - start.X, 2) + Math.Pow(point.Y - start.Y, 2));
+        var t = Math.Max(0d, Math.Min(1d, ((point.X - start.X) * dx + (point.Y - start.Y) * dy) / squared));
+        return Math.Sqrt(Math.Pow(point.X - (start.X + t * dx), 2) + Math.Pow(point.Y - (start.Y + t * dy), 2));
+    }
+
+    private static bool SegmentsIntersect(Point2 a, Point2 b, Point2 c, Point2 d)
+    {
+        static double Cross(Point2 first, Point2 second, Point2 third) => (second.X - first.X) * (third.Y - first.Y) - (second.Y - first.Y) * (third.X - first.X);
+        var abC = Cross(a, b, c);
+        var abD = Cross(a, b, d);
+        var cdA = Cross(c, d, a);
+        var cdB = Cross(c, d, b);
+        return Math.Sign(abC) != Math.Sign(abD) && Math.Sign(cdA) != Math.Sign(cdB);
     }
 }
 

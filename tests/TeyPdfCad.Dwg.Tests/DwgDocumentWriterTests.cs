@@ -168,4 +168,24 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal("ЗАЛИВКА", hatch.Layer.Name);
         Assert.Equal(0x336699, hatch.Color.TrueColor);
     }
+
+    [Fact]
+    public void Writer_preserves_hole_boundaries_and_uses_an_interior_seed_for_concave_fill()
+    {
+        var filled = new VectorFilledPath(
+            "concave-fill",
+            [new Point2(0, 0), new Point2(12, 0), new Point2(12, 4), new Point2(4, 4), new Point2(4, 12), new Point2(0, 12)],
+            VectorFillRule.EvenOdd,
+            new VectorStyle(),
+            InteriorBoundaries: [[new Point2(1, 1), new Point2(3, 1), new Point2(3, 3), new Point2(1, 3)]]);
+        var page = new VectorPdfPage(1, 72, 72, 0, [filled]);
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(new VectorPdfDocument([page]), new DocumentLayoutPlanner().Create(new VectorPdfDocument([page])))));
+
+        Assert.Equal(2, drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>().Count());
+        var hatch = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>());
+        Assert.Equal(2, hatch.Paths.Count);
+        var seed = Assert.Single(hatch.SeedPoints);
+        Assert.InRange(seed.X, 0d, 4d);
+        Assert.InRange(seed.Y, 4d, 12d);
+    }
 }

@@ -40,8 +40,14 @@ public sealed record VectorFilledPath(
     IReadOnlyList<Point2> Boundary,
     VectorFillRule FillRule,
     VectorStyle Style,
-    double Confidence = 1d)
-    : VectorEntity(SourceId, Style, Confidence);
+    double Confidence = 1d,
+    IReadOnlyList<IReadOnlyList<Point2>>? InteriorBoundaries = null)
+    : VectorEntity(SourceId, Style, Confidence)
+{
+    public IReadOnlyList<IReadOnlyList<Point2>> InteriorBoundaries { get; init; } = InteriorBoundaries ?? [];
+
+    public IReadOnlyList<IReadOnlyList<Point2>> Loops => [Boundary, ..InteriorBoundaries];
+}
 
 public sealed record VectorText(
     string SourceId,

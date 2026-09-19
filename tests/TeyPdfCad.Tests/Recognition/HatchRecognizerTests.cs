@@ -64,6 +64,24 @@ public sealed class HatchRecognizerTests
         Assert.Contains(result.Warnings, warning => warning.Code == "hatch-low-confidence");
     }
 
+    [Fact]
+    public void Lines_crossing_a_boundary_are_not_mistaken_for_a_hatch()
+    {
+        var result = new HatchRecognizer().Recognize([
+            new VectorPolyline(
+                "boundary",
+                [new Point2(0, 0), new Point2(20, 0), new Point2(20, 20), new Point2(0, 20)],
+                true,
+                new VectorStyle()),
+            new VectorLine("inside-1", new Point2(1, 8), new Point2(19, 8), new VectorStyle()),
+            new VectorLine("inside-2", new Point2(1, 12), new Point2(19, 12), new VectorStyle()),
+            new VectorLine("crossing", new Point2(-5, 16), new Point2(25, 16), new VectorStyle())
+        ]);
+
+        Assert.DoesNotContain(result.NativeHatches, candidate => !candidate.IsSolid);
+        Assert.Contains(result.Warnings, warning => warning.Code == "hatch-low-confidence");
+    }
+
     private static VectorEntity[] RectangleWithHorizontalLines(IReadOnlyList<double> yCoordinates)
         => [
             new VectorPolyline(

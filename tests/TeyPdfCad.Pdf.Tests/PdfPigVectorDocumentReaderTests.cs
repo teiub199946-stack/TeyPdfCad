@@ -18,9 +18,29 @@ public sealed class PdfPigVectorDocumentReaderTests
         var fill = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorFilledPath>());
         Assert.Equal(4, fill.Boundary.Count);
         Assert.Equal(0x336699, fill.Style.RgbColor);
-        var boundary = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>().ToArray();
-        Assert.Equal(4, boundary.Length);
-        Assert.All(boundary, line => Assert.Equal(0x00FF00, line.Style.RgbColor));
+        var boundary = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorPolyline>());
+        Assert.True(boundary.IsClosed);
+        Assert.Equal(4, boundary.Vertices.Count);
+        Assert.Equal(0x00FF00, boundary.Style.RgbColor);
+    }
+
+    [Fact]
+    public async Task Reader_preserves_closed_fill_and_stroke_operator_and_compound_even_odd_path()
+    {
+        const string contents = "1 0 0 RG 0 0 1 rg 10 10 m 30 10 l 30 30 l 10 30 l b\n0 1 0 rg 40 10 m 80 10 l 80 50 l 40 50 l h 50 20 m 70 20 l 70 40 l 50 40 l h f*";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        var fills = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorFilledPath>().ToArray();
+        Assert.Equal(2, fills.Length);
+        Assert.Contains(fills, fill => fill.Style.RgbColor == 0x0000FF && fill.Boundary.Count == 4);
+        var compound = Assert.Single(fills, fill => fill.FillRule == TeyPdfCad.Core.Documents.VectorFillRule.EvenOdd);
+        Assert.Single(compound.InteriorBoundaries);
+        Assert.Equal(4, compound.InteriorBoundaries[0].Count);
+        var stroke = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorPolyline>());
+        Assert.True(stroke.IsClosed);
+        Assert.Equal(0xFF0000, stroke.Style.RgbColor);
     }
 
     [Fact]
