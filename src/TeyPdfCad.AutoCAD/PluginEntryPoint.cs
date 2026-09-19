@@ -4,6 +4,7 @@ using System.Text;
 
 [assembly: ExtensionApplication(typeof(TeyPdfCad.AutoCAD.PluginEntryPoint))]
 [assembly: CommandClass(typeof(TeyPdfCad.AutoCAD.ReconstructionCommands))]
+[assembly: CommandClass(typeof(TeyPdfCad.AutoCAD.TemplateManifestExporter))]
 [assembly: CommandClass(typeof(TeyPdfCad.AutoCAD.PluginEntryPoint))]
 
 namespace TeyPdfCad.AutoCAD;
