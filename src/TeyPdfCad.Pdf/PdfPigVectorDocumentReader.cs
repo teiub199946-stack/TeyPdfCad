@@ -1,6 +1,7 @@
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Geometry;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.WordExtractor;
 
 namespace TeyPdfCad.Pdf;
 
@@ -20,17 +21,19 @@ public sealed class PdfPigVectorDocumentReader
             cancellationToken.ThrowIfCancellationRequested();
 
             var entities = graphicsInterpreter.Interpret(sourcePage.Operations, sourcePage.Number).ToList();
-            var text = string.Concat(sourcePage.Letters.Select(letter => letter.Value));
-            if (!string.IsNullOrWhiteSpace(text))
+            var words = NearestNeighbourWordExtractor.Instance.GetWords(sourcePage.Letters);
+            var textSequence = 0;
+            foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
-                var first = sourcePage.Letters[0];
+                var first = word.Letters[0];
+                textSequence++;
                 entities.Add(new VectorText(
-                    SourceId: $"page-{sourcePage.Number}-text-1",
-                    Value: text,
+                    SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
+                    Value: word.Text,
                     InsertionPoint: new Point2(
-                        first.Location.X * VectorPdfPage.MillimetresPerPoint,
-                        first.Location.Y * VectorPdfPage.MillimetresPerPoint),
-                    HeightPoints: first.FontSize,
+                        first.StartBaseLine.X * VectorPdfPage.MillimetresPerPoint,
+                        first.StartBaseLine.Y * VectorPdfPage.MillimetresPerPoint),
+                    HeightPoints: word.Letters.Max(letter => letter.FontSize),
                     Style: new VectorStyle()));
             }
 
@@ -38,7 +41,7 @@ public sealed class PdfPigVectorDocumentReader
                 Number: sourcePage.Number,
                 WidthPoints: sourcePage.Width,
                 HeightPoints: sourcePage.Height,
-                RotationDegrees: 0,
+                RotationDegrees: sourcePage.Rotation.Value,
                 Entities: entities));
         }
 

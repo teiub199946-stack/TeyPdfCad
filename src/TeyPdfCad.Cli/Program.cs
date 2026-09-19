@@ -10,7 +10,16 @@ public static class Program
             return (int)ConversionOutcome.InvalidArgumentsOrIo;
         }
 
-        var options = args.Skip(1).Chunk(2).ToDictionary(pair => pair[0], pair => pair[1], StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> options;
+        try
+        {
+            options = args.Skip(1).Chunk(2).ToDictionary(pair => pair[0], pair => pair[1], StringComparer.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            await Console.Error.WriteLineAsync("Options must be unique.");
+            return (int)ConversionOutcome.InvalidArgumentsOrIo;
+        }
         if (!options.TryGetValue("--input", out var input) || !options.TryGetValue("--output", out var output) || !options.TryGetValue("--report", out var report))
         {
             await Console.Error.WriteLineAsync("Required options: --input, --output, --report.");

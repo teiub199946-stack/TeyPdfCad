@@ -45,6 +45,41 @@ public sealed class ConversionPipelineTests
         Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
     }
 
+    [Fact]
+    public async Task Pipeline_reports_a_malformed_pdf_instead_of_crashing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "broken.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllTextAsync(input, "not a PDF");
+
+        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
+
+        Assert.Equal(ConversionOutcome.InvalidArgumentsOrIo, result.Outcome);
+        Assert.False(File.Exists(output));
+        Assert.True(File.Exists(report));
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Pipeline_never_overwrites_the_input_pdf_with_the_dwg()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "source.pdf");
+        var report = Path.Combine(directory, "result.json");
+        var original = CreateMinimalPdf("0 0 m 10 10 l S");
+        await File.WriteAllBytesAsync(input, original);
+
+        var result = await new ConversionPipeline().ConvertAsync(input, input, report, default);
+
+        Assert.Equal(ConversionOutcome.InvalidArgumentsOrIo, result.Outcome);
+        Assert.Equal(original, await File.ReadAllBytesAsync(input));
+    }
+
     private static byte[] CreateMinimalPdf(string contents)
     {
         var objects = new[]

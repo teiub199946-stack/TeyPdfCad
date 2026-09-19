@@ -71,14 +71,59 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(700 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.Y, 6);
     }
 
-    private static MemoryStream CreateMinimalPdf(string? contentsOverride = null)
+    [Fact]
+    public async Task Reader_applies_graphics_state_transform_and_preserves_rectangles_curves_and_closed_strokes()
     {
-        var contents = contentsOverride ?? "1 0 0 RG 2 w [4 2] 0 d 10 10 m 100 10 l 100 100 l S\n0.2 0.4 0.6 rg 10 10 m 110 10 l 110 60 l 10 60 l h f\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
+        const string contents = "q 2 0 0 3 5 7 cm 10 20 30 40 re S Q 0 0 m 0 10 10 10 10 0 c s";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        var paths = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorPolyline>().ToArray();
+        Assert.Equal(2, paths.Length);
+        var rectangle = paths[0];
+        Assert.True(rectangle.IsClosed);
+        Assert.Equal(25 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, rectangle.Vertices[0].X, 6);
+        Assert.Equal(67 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, rectangle.Vertices[0].Y, 6);
+        var curve = paths[1];
+        Assert.True(curve.IsClosed);
+        Assert.Equal(17, curve.Vertices.Count);
+        Assert.Equal(10 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, curve.Vertices[^1].X, 6);
+    }
+
+    [Fact]
+    public async Task Reader_keeps_separate_words_and_records_page_rotation()
+    {
+        const string contents = "BT /F1 12 Tf 72 700 Td (A3) Tj 200 0 Td (B4) Tj ET";
+        await using var input = CreateMinimalPdf(contents, rotation: 90);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        Assert.Equal(90, page.RotationDegrees);
+        Assert.Equal(["A3", "B4"], page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>().Select(text => text.Value).ToArray());
+    }
+
+    [Fact]
+    public async Task Reader_preserves_gray_color_and_scales_stroke_style_with_the_graphics_transform()
+    {
+        const string contents = "q 2 0 0 2 0 0 cm 0.1 G 1 w [2 1] 0 d 0 0 m 10 0 l S Q";
+        await using var input = CreateMinimalPdf(contents);
+
+        var line = Assert.Single(Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages).Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+
+        Assert.Equal(0x1A1A1A, line.Style.RgbColor);
+        Assert.Equal(2d, line.Style.StrokeWidthPoints);
+        Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
+    }
+
+    private static MemoryStream CreateMinimalPdf(string? contentsOverride = null, int rotation = 0)
+    {
+        var contents = contentsOverride ?? "1 0 0 RG 2 w [4 2] 0 d 10 10 m 100 10 l 100 10 m 100 100 l S\n0.2 0.4 0.6 rg 10 10 m 110 10 l 110 60 l 10 60 l h f\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.276 841.89] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.276 841.89] /Rotate {rotation} /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
             $"<< /Length {Encoding.ASCII.GetByteCount(contents)} >>\nstream\n{contents}\nendstream",
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
         };
