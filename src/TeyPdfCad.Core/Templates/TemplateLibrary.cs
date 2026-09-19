@@ -4,13 +4,33 @@ namespace TeyPdfCad.Core.Templates;
 
 public sealed class TemplateLibrary
 {
-    public TemplateLibrary(IReadOnlyList<TemplateSheet> sheets)
+    public TemplateLibrary(IReadOnlyList<TemplateSheet> sheets, IReadOnlyList<TemplateBlockDefinition>? blocks = null)
     {
         Sheets = sheets ?? throw new ArgumentNullException(nameof(sheets));
+        Blocks = blocks ?? [];
     }
 
     public IReadOnlyList<TemplateSheet> Sheets { get; }
+
+    public IReadOnlyList<TemplateBlockDefinition> Blocks { get; }
 }
+
+public sealed record TemplateBlockDefinition(
+    string Name,
+    IReadOnlyList<TemplateGeometryEntity> Entities,
+    IReadOnlyList<TemplateAttributeDefinition> Attributes);
+
+public sealed record TemplateGeometryEntity(
+    string ObjectClass,
+    string Handle,
+    IReadOnlyList<TemplatePoint> Points,
+    string? Text,
+    double? TextHeight,
+    string? Layer);
+
+public sealed record TemplatePoint(double X, double Y);
+
+public sealed record TemplateAttributeDefinition(string Tag, string Prompt, string DefaultValue);
 
 public sealed record TemplateSheet(
     string Name,
