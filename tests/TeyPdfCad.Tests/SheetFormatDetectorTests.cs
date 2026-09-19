@@ -26,7 +26,7 @@ public sealed class SheetFormatDetectorTests
     [Fact]
     public void LeavesUnknownFormatFailClosed()
     {
-        var result = StandardSheetDetector.Detect(210, 297);
+        var result = StandardSheetDetector.Detect(200, 300);
 
         Assert.Equal(StandardSheetFormat.Unknown, result.Format);
         Assert.Equal(SheetOrientation.Unknown, result.Orientation);
