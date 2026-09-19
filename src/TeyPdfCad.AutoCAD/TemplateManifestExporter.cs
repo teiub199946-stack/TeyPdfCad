@@ -61,33 +61,61 @@ public sealed class TemplateManifestExporter
             foreach (ObjectId entityId in block)
             {
                 if (transaction.GetObject(entityId, OpenMode.ForRead, false) is not Entity entity) continue;
-                var objectClass = entity.GetRXClass().Name;
                 if (entity is AttributeDefinition attribute)
                 {
                     attributes.Add(new TemplateAttributeManifest(attribute.Tag, attribute.Prompt, attribute.TextString));
                     continue;
                 }
 
-                if (!TryGetBounds(entity, out var minX, out var minY, out var maxX, out var maxY))
+                foreach (var expandedEntity in ExpandEntity(entity))
                 {
-                    unsupported.Add(objectClass);
-                    continue;
+                    var objectClass = expandedEntity.GetRXClass().Name;
+                    if (!TryGetBounds(expandedEntity, out var minX, out var minY, out var maxX, out var maxY)
+                        || !IsReconstructable(expandedEntity))
+                    {
+                        unsupported.Add(objectClass);
+                        continue;
+                    }
+                    entities.Add(new TemplateEntityManifest(
+                        objectClass,
+                        entity.Handle.ToString(),
+                        minX,
+                        minY,
+                        maxX,
+                        maxY,
+                        GetGeometryPoints(expandedEntity),
+                        GetText(expandedEntity),
+                        GetTextHeight(expandedEntity),
+                        expandedEntity.Layer));
                 }
-                entities.Add(new TemplateEntityManifest(
-                    objectClass,
-                    entity.Handle.ToString(),
-                    minX,
-                    minY,
-                    maxX,
-                    maxY,
-                    GetGeometryPoints(entity),
-                    GetText(entity),
-                    GetTextHeight(entity),
-                    entity.Layer));
             }
             blocks.Add(new TemplateBlockManifest(block.Name, entities, attributes));
         }
         return blocks.OrderBy(block => block.Name, StringComparer.Ordinal).ToArray();
+    }
+
+    private static IReadOnlyList<Entity> ExpandEntity(Entity entity)
+        => TemplateEntityExpansion.Flatten(
+            entity,
+            IsReconstructable,
+            ExplodeSafely);
+
+    private static bool IsReconstructable(Entity entity)
+        => entity is Line or Polyline or Circle or DBText or MText;
+
+    private static IReadOnlyList<Entity> ExplodeSafely(Entity entity)
+    {
+        var children = new DBObjectCollection();
+        try
+        {
+            entity.Explode(children);
+            return children.Cast<DBObject>().OfType<Entity>().ToArray();
+        }
+        catch (System.Exception)
+        {
+            foreach (DBObject child in children) child.Dispose();
+            return [];
+        }
     }
 
     private static IReadOnlyList<TemplateStyleManifest> ReadStyles(Database database, Transaction transaction)
