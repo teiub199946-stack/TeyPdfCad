@@ -10,6 +10,8 @@ internal sealed class AcadSharpStyleCatalog
     private readonly CadDocument _document;
     private readonly Dictionary<string, Layer> _layers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, LineType> _lineTypes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DimensionStyle> _dimensionStyles = new(StringComparer.Ordinal);
+    private TextStyle? _pdfTextStyle;
 
     public AcadSharpStyleCatalog(CadDocument document)
     {
@@ -35,6 +37,60 @@ internal sealed class AcadSharpStyleCatalog
         {
             entity.LineWeight = GetLineWeight(strokeWidth);
         }
+    }
+
+    public Layer GetAnnotationLayer(string name) => GetLayer(name);
+
+    public TextStyle GetPdfTextStyle()
+    {
+        if (_pdfTextStyle is not null) return _pdfTextStyle;
+        const string name = "TEYPDFCAD_TEXT";
+        if (!_document.TextStyles.TryGetValue(name, out var style))
+        {
+            style = new TextStyle(name)
+            {
+                Filename = "arial.ttf",
+                Height = 0d,
+                Width = 1d
+            };
+            _document.TextStyles.Add(style);
+        }
+        return _pdfTextStyle = style;
+    }
+
+    public DimensionStyle GetDimensionStyle(double linearScale)
+    {
+        var canonicalScale = Math.Round(linearScale, 6);
+        var name = $"TEYPDFCAD_SCALE_{canonicalScale.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture).Replace('.', '_')}";
+        if (_dimensionStyles.TryGetValue(name, out var cached)) return cached;
+        if (!_document.DimensionStyles.TryGetValue(name, out var style))
+        {
+            style = new DimensionStyle(name)
+            {
+                LinearScaleFactor = canonicalScale,
+                TextHeight = 2.5d,
+                ArrowSize = 2.5d,
+                ExtensionLineOffset = 0.75d,
+                ExtensionLineExtension = 1.25d,
+                ScaleFactor = 1d
+            };
+            _document.DimensionStyles.Add(style);
+        }
+        _dimensionStyles.Add(name, style);
+        return style;
+    }
+
+    public LineType GetCenterLineType()
+    {
+        const string name = "TEYPDFCAD_CENTER";
+        if (_document.LineTypes.TryGetValue(name, out var existing)) return existing;
+        var lineType = new LineType(name) { Description = "PDF reconstructed axis" };
+        lineType.AddSegment(new LineType.Segment { Length = 12d });
+        lineType.AddSegment(new LineType.Segment { Length = -3d });
+        lineType.AddSegment(new LineType.Segment { Length = 2d });
+        lineType.AddSegment(new LineType.Segment { Length = -3d });
+        _document.LineTypes.Add(lineType);
+        return lineType;
     }
 
     private Layer GetLayer(string name)

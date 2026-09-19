@@ -47,7 +47,10 @@ public sealed class ConversionPipeline
             }
 
             var plan = new DocumentLayoutPlanner().Create(document);
-            var bytes = new AcadSharpDwgWriter().Write(document, plan, hatchRecognition);
+            var semanticResults = semanticRecognition
+                .Where(pair => pair.Value.Result is not null)
+                .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
+            var bytes = new AcadSharpDwgWriter().Write(document, plan, hatchRecognition, semanticResults);
             var readBack = DwgReader.Read(new MemoryStream(bytes));
             var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
             if (layoutsReadBack != document.PageCount)
@@ -145,14 +148,12 @@ public sealed class ConversionPipeline
     {
         var lines = page.Entities.OfType<VectorLine>().ToArray();
         var texts = page.Entities.OfType<VectorText>().ToArray();
-        // Dimension reconstruction probes candidate lines and then searches the
-        // full line set for extension/arrow geometry.  Bound that quadratic
-        // work for real construction sheets; semantics are advisory and must
-        // never delay the vector conversion itself.
-        const long maximumSemanticWork = 2_000_000;
-        var estimatedWork = (long)lines.Length * lines.Length * Math.Max(texts.Length, 1);
-        if (lines.Length > 500 || texts.Length > 500 || estimatedWork > maximumSemanticWork)
-            return new PageSemanticSummary(0, 0, 0, ["semantic-recognition-skipped-complexity"]);
+        // Candidate dimension lines are spatially filtered around each text,
+        // so the dominant cost is now the page-wide text/line scan.
+        const long maximumSemanticWork = 1_000_000;
+        var estimatedWork = (long)lines.Length * Math.Max(texts.Length, 1);
+        if (lines.Length > 2_000 || texts.Length > 1_000 || estimatedWork > maximumSemanticWork)
+            return new PageSemanticSummary(0, 0, 0, ["semantic-recognition-skipped-complexity"], null);
 
         var scene = new PrimitiveScene();
         scene.Lines.AddRange(lines.Select(line => new LinePrimitive(
@@ -166,15 +167,25 @@ public sealed class ConversionPipeline
             text.Value,
             text.InsertionPoint,
             text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
-            0d,
+            text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
             [text.SourceId])));
-        var semantic = new SemanticReconstructionEngine().Analyze(scene);
+        var analyzed = new SemanticReconstructionEngine().Analyze(scene);
+        var semantic = analyzed with
+        {
+            Dimensions = analyzed.Dimensions
+                .Where(candidate => candidate.Confidence >= 0.90d && candidate.ArrowEvidence >= 0.5d)
+                .ToArray(),
+            Leaders = analyzed.Leaders
+                .Where(candidate => candidate.Confidence >= 0.90d)
+                .ToArray()
+        };
         return new PageSemanticSummary(
             semantic.Dimensions.Count,
             semantic.Axes.Count,
             semantic.Leaders.Count,
-            semantic.Warnings.Select(warning => warning.Code).Distinct().ToArray());
+            semantic.Warnings.Select(warning => warning.Code).Distinct().ToArray(),
+            semantic);
     }
 
     private static ReadBackSummary CreateReadBackSummary(ACadSharp.CadDocument drawing)
@@ -236,7 +247,8 @@ public sealed class ConversionPipeline
         int DimensionCandidateCount,
         int AxisCandidateCount,
         int LeaderCandidateCount,
-        IReadOnlyList<string> Warnings);
+        IReadOnlyList<string> Warnings,
+        SemanticReconstructionResult? Result);
 
     private sealed record ReadBackSummary(
         int ModelEntityCount,

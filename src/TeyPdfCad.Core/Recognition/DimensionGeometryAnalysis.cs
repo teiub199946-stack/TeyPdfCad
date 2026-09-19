@@ -10,12 +10,12 @@ internal static class DimensionGeometryAnalysis
 
     public static IEnumerable<LinePrimitive> DimensionLineCandidates(IReadOnlyList<LinePrimitive> lines, TextPrimitive text)
     {
-        foreach (var line in lines) yield return line;
-
         var localRadius = Math.Max(text.Height * 8.0, 1e-6);
         var localFragments = lines
             .Where(line => GeometryMath.DistancePointToSegment(text.Position, line.Start, line.End) <= localRadius)
             .ToArray();
+
+        foreach (var line in localFragments) yield return line;
 
         for (var i = 0; i < localFragments.Length; i++)
         for (var j = i + 1; j < localFragments.Length; j++)

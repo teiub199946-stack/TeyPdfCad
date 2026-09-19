@@ -150,7 +150,7 @@ public sealed class ConversionPipelineTests
         var input = Path.Combine(directory, "complex.pdf");
         var output = Path.Combine(directory, "result.dwg");
         var report = Path.Combine(directory, "result.json");
-        var content = string.Join(' ', Enumerable.Range(0, 501).Select(index => $"0 {index % 72} m 72 {index % 72} l S"));
+        var content = string.Join(' ', Enumerable.Range(0, 2_001).Select(index => $"0 {index % 72} m 72 {index % 72} l S"));
         await File.WriteAllBytesAsync(input, CreateMinimalPdf(content));
 
         var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);

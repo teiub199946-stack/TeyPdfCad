@@ -6,6 +6,8 @@ using CSMath;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Recognition;
+using TeyPdfCad.Core.Semantics;
+using TeyPdfCad.Core.Semantics.Dimensions;
 
 namespace TeyPdfCad.Dwg;
 
@@ -14,7 +16,8 @@ public sealed class AcadSharpDwgWriter
     public byte[] Write(
         VectorPdfDocument source,
         DwgDocumentPlan plan,
-        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null)
+        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
+        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
@@ -63,6 +66,15 @@ public sealed class AcadSharpDwgWriter
             var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
                 ? suppliedRecognition
                 : new HatchRecognizer().Recognize(page.Entities);
+            var semantics = semanticRecognitionByPage is not null && semanticRecognitionByPage.TryGetValue(page.Number, out var suppliedSemantics)
+                ? suppliedSemantics
+                : null;
+            var consumedSemanticIds = semantics is null
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : semantics.Dimensions.SelectMany(candidate => candidate.ProvenanceIds)
+                    .Concat(semantics.Leaders.SelectMany(candidate => candidate.ProvenanceIds))
+                    .Concat(semantics.Axes.SelectMany(candidate => candidate.ProvenanceIds))
+                    .ToHashSet(StringComparer.Ordinal);
             var patternHatches = hatchRecognition.NativeHatches.Where(candidate => !candidate.IsSolid).ToArray();
             var consumedPatternLineIds = patternHatches.SelectMany(candidate => candidate.ProvenanceIds).ToHashSet(StringComparer.Ordinal);
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
@@ -72,6 +84,7 @@ public sealed class AcadSharpDwgWriter
                 {
                     continue;
                 }
+                if (consumedSemanticIds.Contains(sourceLine.SourceId)) continue;
                 var line = new Line(
                     new XYZ(sheet.ModelOriginX + sourceLine.Start.X, sheet.ModelOriginY + sourceLine.Start.Y, 0),
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
@@ -167,6 +180,7 @@ public sealed class AcadSharpDwgWriter
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
+                if (consumedSemanticIds.Contains(sourceText.SourceId)) continue;
                 var text = new TextEntity
                 {
                     Value = sourceText.Value,
@@ -175,16 +189,78 @@ public sealed class AcadSharpDwgWriter
                         sheet.ModelOriginY + sourceText.InsertionPoint.Y,
                         0),
                     Height = sourceText.HeightPoints * VectorPdfPage.MillimetresPerPoint,
-                    Rotation = sourceText.RotationRadians
+                    Rotation = sourceText.RotationRadians,
+                    Style = styles.GetPdfTextStyle()
                 };
                 styles.Apply(text, sourceText.Style);
                 document.Entities.Add(text);
+            }
+            if (semantics is not null)
+            {
+                foreach (var candidate in semantics.Dimensions)
+                    WriteDimension(document, styles, sheet, candidate);
+                foreach (var candidate in semantics.Leaders)
+                    WriteLeader(document, styles, sheet, candidate);
+                foreach (var candidate in semantics.Axes)
+                    WriteAxis(document, styles, sheet, candidate);
             }
         }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
         writer.Write();
         return output.ToArray();
+    }
+
+    private static void WriteDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, DimensionCandidate candidate)
+    {
+        var first = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint1.X, sheet.ModelOriginY + candidate.DefinitionPoint1.Y, 0d);
+        var second = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint2.X, sheet.ModelOriginY + candidate.DefinitionPoint2.Y, 0d);
+        var dimensionPoint = new XYZ(sheet.ModelOriginX + candidate.DimensionLinePoint.X, sheet.ModelOriginY + candidate.DimensionLinePoint.Y, 0d);
+        var dimension = new DimensionAligned(first, second)
+        {
+            DefinitionPoint = dimensionPoint,
+            Style = styles.GetDimensionStyle(candidate.DrawingScale),
+            Text = string.Empty,
+            Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ")
+        };
+        document.Entities.Add(dimension);
+    }
+
+    private static void WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)
+    {
+        var annotation = new TextEntity
+        {
+            Value = candidate.Text,
+            InsertPoint = new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d),
+            Height = 2.5d,
+            Layer = styles.GetAnnotationLayer("PDF_ВЫНОСКИ"),
+            Style = styles.GetPdfTextStyle()
+        };
+        var leader = new Leader
+        {
+            ArrowHeadEnabled = true,
+            CreationType = LeaderCreationType.CreatedWithTextAnnotation,
+            PathType = LeaderPathType.StraightLineSegments,
+            TextHeight = annotation.Height,
+            Style = styles.GetDimensionStyle(1d),
+            Layer = styles.GetAnnotationLayer("PDF_ВЫНОСКИ")
+        };
+        leader.Vertices.Add(new XYZ(sheet.ModelOriginX + candidate.ArrowPoint.X, sheet.ModelOriginY + candidate.ArrowPoint.Y, 0d));
+        leader.Vertices.Add(new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d));
+        document.Entities.Add(annotation);
+        document.Entities.Add(leader);
+    }
+
+    private static void WriteAxis(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, AxisCandidate candidate)
+    {
+        var axis = new Line(
+            new XYZ(sheet.ModelOriginX + candidate.Start.X, sheet.ModelOriginY + candidate.Start.Y, 0d),
+            new XYZ(sheet.ModelOriginX + candidate.End.X, sheet.ModelOriginY + candidate.End.Y, 0d))
+        {
+            Layer = styles.GetAnnotationLayer("PDF_ОСИ"),
+            LineType = styles.GetCenterLineType()
+        };
+        document.Entities.Add(axis);
     }
 
     private static LwPolyline CreateBoundary(IReadOnlyList<TeyPdfCad.Core.Geometry.Point2> loop, double originX, double originY, VectorStyle style, AcadSharpStyleCatalog styles, CadDocument document)
