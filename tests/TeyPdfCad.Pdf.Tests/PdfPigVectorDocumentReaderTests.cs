@@ -22,11 +22,12 @@ public sealed class PdfPigVectorDocumentReaderTests
         var line = lines[0];
         Assert.Equal(2, line.Style.StrokeWidthPoints);
         Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
+        Assert.Equal(0xFF0000, line.Style.RgbColor);
     }
 
     private static MemoryStream CreateMinimalPdf()
     {
-        const string contents = "2 w [4 2] 0 d 10 10 m 100 10 l 100 100 l S\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
+        const string contents = "1 0 0 RG 2 w [4 2] 0 d 10 10 m 100 10 l 100 100 l S\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",

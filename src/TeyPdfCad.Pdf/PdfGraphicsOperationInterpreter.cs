@@ -3,6 +3,7 @@ using TeyPdfCad.Core.Geometry;
 using UglyToad.PdfPig.Graphics.Operations.General;
 using UglyToad.PdfPig.Graphics.Operations.PathConstruction;
 using UglyToad.PdfPig.Graphics.Operations.PathPainting;
+using UglyToad.PdfPig.Graphics.Operations;
 
 namespace TeyPdfCad.Pdf;
 
@@ -17,6 +18,7 @@ public sealed class PdfGraphicsOperationInterpreter
         var segments = new List<(Point2 Start, Point2 End)>();
         var strokeWidth = 1d;
         IReadOnlyList<double>? dashPattern = null;
+        int? rgbColor = null;
         var sequence = 0;
 
         foreach (var operation in operations)
@@ -28,6 +30,9 @@ public sealed class PdfGraphicsOperationInterpreter
                     break;
                 case SetLineDashPattern dash:
                     dashPattern = dash.Pattern.Array;
+                    break;
+                case SetStrokeColorDeviceRgb color:
+                    rgbColor = ToRgb(color.R, color.G, color.B);
                     break;
                 case BeginNewSubpath move:
                     currentPoint = new Point2(move.X, move.Y);
@@ -45,7 +50,7 @@ public sealed class PdfGraphicsOperationInterpreter
                             $"page-{pageNumber}-line-{sequence}",
                             segment.Start,
                             segment.End,
-                            new VectorStyle(StrokeWidthPoints: strokeWidth, DashPatternPoints: dashPattern)));
+                            new VectorStyle(RgbColor: rgbColor, StrokeWidthPoints: strokeWidth, DashPatternPoints: dashPattern)));
                     }
                     segments.Clear();
                     break;
@@ -53,5 +58,13 @@ public sealed class PdfGraphicsOperationInterpreter
         }
 
         return entities;
+    }
+
+    private static int ToRgb(double red, double green, double blue)
+    {
+        var r = (int)Math.Round(Math.Clamp(red, 0d, 1d) * 255d);
+        var g = (int)Math.Round(Math.Clamp(green, 0d, 1d) * 255d);
+        var b = (int)Math.Round(Math.Clamp(blue, 0d, 1d) * 255d);
+        return (r << 16) | (g << 8) | b;
     }
 }
