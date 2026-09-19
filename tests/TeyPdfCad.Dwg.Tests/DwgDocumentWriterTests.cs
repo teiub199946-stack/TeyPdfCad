@@ -60,7 +60,7 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
-    public void Writer_creates_one_named_layout_per_source_page()
+    public void Writer_creates_no_user_layout_or_viewport_per_source_page()
     {
         var document = new VectorPdfDocument(Enumerable.Range(1, 3)
             .Select(number => new VectorPdfPage(number, 595.276, 841.89, 0, []))
@@ -69,18 +69,15 @@ public sealed class DwgDocumentWriterTests
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, plan)));
 
-        Assert.Contains(drawing.Layouts, layout => layout.Name == "Лист-001");
-        Assert.Contains(drawing.Layouts, layout => layout.Name == "Лист-003");
-        var firstLayout = drawing.Layouts.Single(layout => layout.Name == "Лист-001");
-        Assert.Equal(210, firstLayout.PaperWidth, 3);
-        Assert.Equal(297, firstLayout.PaperHeight, 3);
-        var frame = Assert.Single(firstLayout.AssociatedBlock.Entities.OfType<ACadSharp.Entities.LwPolyline>());
-        Assert.True(frame.IsClosed);
-        Assert.Equal(4, frame.Vertices.Count);
+        Assert.DoesNotContain(drawing.Layouts, layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
+        Assert.Empty(drawing.Layouts
+            .Where(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal))
+            .SelectMany(layout => layout.AssociatedBlock.Entities)
+            .OfType<ACadSharp.Entities.Viewport>());
     }
 
     [Fact]
-    public void Writer_isolates_each_page_in_model_space_and_views_its_region()
+    public void Writer_isolates_each_page_in_model_space_without_viewports()
     {
         var firstPage = new VectorPdfPage(1, 72, 72, 0,
             [new VectorLine("first", new Point2(0, 0), new Point2(72, 72), new VectorStyle())]);
@@ -95,12 +92,10 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal(0, lines[0].StartPoint.X, 6);
         Assert.Equal(plan.Sheets[1].ModelOriginX, lines[1].StartPoint.X, 6);
 
-        var secondLayout = drawing.Layouts.Single(layout => layout.Name == "Лист-002");
-        var viewport = Assert.Single(
-            secondLayout.AssociatedBlock.Entities.OfType<ACadSharp.Entities.Viewport>(),
-            candidate => !candidate.RepresentsPaper);
-        Assert.Equal(plan.Sheets[1].ModelOriginX + plan.Sheets[1].PaperWidthMillimetres / 2d, viewport.ViewCenter.X, 6);
-        Assert.Equal(plan.Sheets[1].PaperHeightMillimetres, viewport.ViewHeight, 6);
+        Assert.Empty(drawing.Layouts
+            .Where(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal))
+            .SelectMany(layout => layout.AssociatedBlock.Entities)
+            .OfType<ACadSharp.Entities.Viewport>());
     }
 
     [Fact]

@@ -24,41 +24,6 @@ public sealed class AcadSharpDwgWriter
 
         var document = new CadDocument();
         var styles = new AcadSharpStyleCatalog(document);
-        foreach (var sheet in plan.Sheets)
-        {
-            var layout = new Layout(sheet.LayoutName)
-            {
-                PaperWidth = sheet.PaperWidthMillimetres,
-                PaperHeight = sheet.PaperHeightMillimetres
-            };
-            layout.AssociatedBlock.Entities.Add(new LwPolyline([
-                new XY(0, 0),
-                new XY(sheet.PaperWidthMillimetres, 0),
-                new XY(sheet.PaperWidthMillimetres, sheet.PaperHeightMillimetres),
-                new XY(0, sheet.PaperHeightMillimetres)
-            ])
-            {
-                IsClosed = true
-            });
-            layout.AddViewport(new Viewport
-            {
-                Center = new XYZ(
-                    sheet.PaperWidthMillimetres / 2d,
-                    sheet.PaperHeightMillimetres / 2d,
-                    0),
-                Width = sheet.PaperWidthMillimetres,
-                Height = sheet.PaperHeightMillimetres,
-                ViewCenter = new XY(
-                    sheet.ModelOriginX + sheet.PaperWidthMillimetres / 2d,
-                    sheet.ModelOriginY + sheet.PaperHeightMillimetres / 2d),
-                ViewHeight = sheet.PaperHeightMillimetres,
-                ViewTarget = new XYZ(
-                    sheet.ModelOriginX + sheet.PaperWidthMillimetres / 2d,
-                    sheet.ModelOriginY + sheet.PaperHeightMillimetres / 2d,
-                    0)
-            });
-            document.Layouts.Add(layout);
-        }
         var sheetsByPage = plan.Sheets.ToDictionary(sheet => sheet.PageNumber);
         foreach (var page in source.Pages)
         {
