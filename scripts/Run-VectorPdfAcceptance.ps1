@@ -9,6 +9,9 @@ param(
 
     [string]$AutoCadCoreConsole,
 
+    [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
+    [string]$TemplateManifest,
+
     [string]$Configuration = 'Release'
 )
 
@@ -25,7 +28,11 @@ $reportPath = Join-Path $outputFullPath 'conversion-report.json'
 $auditScriptPath = Join-Path $outputFullPath 'RUN_VECTOR_PDF_ACCEPTANCE.scr'
 $auditLogPath = Join-Path $outputFullPath 'autocad-audit.log'
 
-& dotnet run --project $cliProject --configuration $Configuration -- convert --input $inputFullPath --output $dwgPath --report $reportPath
+$conversionArguments = @('run', '--project', $cliProject, '--configuration', $Configuration, '--', 'convert', '--input', $inputFullPath, '--output', $dwgPath, '--report', $reportPath)
+if ($TemplateManifest) {
+    $conversionArguments += @('--template-manifest', (Resolve-Path -LiteralPath $TemplateManifest).Path)
+}
+& dotnet @conversionArguments
 if ($LASTEXITCODE -ne 0) {
     throw "Vector conversion failed with exit code $LASTEXITCODE. Inspect $reportPath."
 }
@@ -54,6 +61,7 @@ $manifest = [ordered]@{
     pagesProcessed = $report.pagesProcessed
     complete = $report.complete
     autoCadAuditScript = $auditScriptPath
+    templateManifest = $TemplateManifest
 }
 
 if ($AutoCadCoreConsole) {

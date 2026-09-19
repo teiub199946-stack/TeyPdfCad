@@ -220,7 +220,7 @@ public sealed class ReconstructionCommands
         foreach (DBDictionaryEntry entry in layouts)
         {
             var layout = (Layout)transaction.GetObject(entry.Value, OpenMode.ForRead);
-            if (layout.ModelType) continue;
+            if (layout.ModelType || !layout.LayoutName.StartsWith("Лист-", StringComparison.Ordinal)) continue;
             layoutCount++;
             var paperSpace = (BlockTableRecord)transaction.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
             viewportCount += paperSpace.Cast<ObjectId>()
