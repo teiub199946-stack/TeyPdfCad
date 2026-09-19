@@ -78,4 +78,51 @@ public sealed class DwgDocumentWriterTests
         Assert.True(frame.IsClosed);
         Assert.Equal(4, frame.Vertices.Count);
     }
+
+    [Fact]
+    public void Writer_isolates_each_page_in_model_space_and_views_its_region()
+    {
+        var firstPage = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine("first", new Point2(0, 0), new Point2(72, 72), new VectorStyle())]);
+        var secondPage = new VectorPdfPage(2, 72, 72, 0,
+            [new VectorLine("second", new Point2(0, 0), new Point2(72, 72), new VectorStyle())]);
+        var document = new VectorPdfDocument([firstPage, secondPage]);
+        var plan = new DocumentLayoutPlanner().Create(document);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, plan)));
+
+        var lines = drawing.Entities.OfType<ACadSharp.Entities.Line>().OrderBy(line => line.StartPoint.X).ToArray();
+        Assert.Equal(0, lines[0].StartPoint.X, 6);
+        Assert.Equal(plan.Sheets[1].ModelOriginX, lines[1].StartPoint.X, 6);
+
+        var secondLayout = drawing.Layouts.Single(layout => layout.Name == "Лист-002");
+        var viewport = Assert.Single(
+            secondLayout.AssociatedBlock.Entities.OfType<ACadSharp.Entities.Viewport>(),
+            candidate => !candidate.RepresentsPaper);
+        Assert.Equal(plan.Sheets[1].ModelOriginX + plan.Sheets[1].PaperWidthMillimetres / 2d, viewport.ViewCenter.X, 6);
+        Assert.Equal(plan.Sheets[1].PaperHeightMillimetres, viewport.ViewHeight, 6);
+    }
+
+    [Fact]
+    public void Writer_preserves_source_layer_color_and_dashed_linetype()
+    {
+        var style = new VectorStyle(
+            SourceLayer: "Оси",
+            RgbColor: 0xFF0000,
+            StrokeWidthPoints: 0.5,
+            DashPatternPoints: [12, 6]);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine("axis", new Point2(0, 0), new Point2(25.4, 0), style)]);
+        var document = new VectorPdfDocument([page]);
+        var plan = new DocumentLayoutPlanner().Create(document);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, plan)));
+
+        var line = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Equal("Оси", line.Layer.Name);
+        Assert.True(line.Color.IsTrueColor);
+        Assert.Equal(0xFF0000, line.Color.TrueColor);
+        Assert.NotEqual(ACadSharp.Tables.LineType.Continuous.Name, line.LineType.Name);
+        Assert.Equal(2, line.LineType.Segments.Count());
+    }
 }

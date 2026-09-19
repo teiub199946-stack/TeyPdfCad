@@ -16,6 +16,7 @@ public sealed class AcadSharpDwgWriter
         ArgumentNullException.ThrowIfNull(plan);
 
         var document = new CadDocument();
+        var styles = new AcadSharpStyleCatalog(document);
         foreach (var sheet in plan.Sheets)
         {
             var layout = new Layout(sheet.LayoutName)
@@ -32,21 +33,48 @@ public sealed class AcadSharpDwgWriter
             {
                 IsClosed = true
             });
+            layout.AddViewport(new Viewport
+            {
+                Center = new XYZ(
+                    sheet.PaperWidthMillimetres / 2d,
+                    sheet.PaperHeightMillimetres / 2d,
+                    0),
+                Width = sheet.PaperWidthMillimetres,
+                Height = sheet.PaperHeightMillimetres,
+                ViewCenter = new XY(
+                    sheet.ModelOriginX + sheet.PaperWidthMillimetres / 2d,
+                    sheet.ModelOriginY + sheet.PaperHeightMillimetres / 2d),
+                ViewHeight = sheet.PaperHeightMillimetres,
+                ViewTarget = new XYZ(
+                    sheet.ModelOriginX + sheet.PaperWidthMillimetres / 2d,
+                    sheet.ModelOriginY + sheet.PaperHeightMillimetres / 2d,
+                    0)
+            });
             document.Layouts.Add(layout);
         }
-        foreach (var sourceLine in source.Pages.SelectMany(page => page.Entities).OfType<VectorLine>())
+        var sheetsByPage = plan.Sheets.ToDictionary(sheet => sheet.PageNumber);
+        foreach (var page in source.Pages)
         {
-            document.Entities.Add(new Line(
-                new XYZ(sourceLine.Start.X, sourceLine.Start.Y, 0),
-                new XYZ(sourceLine.End.X, sourceLine.End.Y, 0)));
-        }
-        foreach (var sourcePolyline in source.Pages.SelectMany(page => page.Entities).OfType<VectorPolyline>())
-        {
-            var polyline = new LwPolyline(sourcePolyline.Vertices.Select(vertex => new XY(vertex.X, vertex.Y)))
+            var sheet = sheetsByPage[page.Number];
+            foreach (var sourceLine in page.Entities.OfType<VectorLine>())
             {
-                IsClosed = sourcePolyline.IsClosed
-            };
-            document.Entities.Add(polyline);
+                var line = new Line(
+                    new XYZ(sheet.ModelOriginX + sourceLine.Start.X, sheet.ModelOriginY + sourceLine.Start.Y, 0),
+                    new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
+                styles.Apply(line, sourceLine.Style);
+                document.Entities.Add(line);
+            }
+            foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
+            {
+                var polyline = new LwPolyline(sourcePolyline.Vertices.Select(vertex => new XY(
+                    sheet.ModelOriginX + vertex.X,
+                    sheet.ModelOriginY + vertex.Y)))
+                {
+                    IsClosed = sourcePolyline.IsClosed
+                };
+                styles.Apply(polyline, sourcePolyline.Style);
+                document.Entities.Add(polyline);
+            }
         }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
