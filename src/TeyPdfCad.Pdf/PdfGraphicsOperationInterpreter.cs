@@ -14,7 +14,7 @@ public sealed class PdfGraphicsOperationInterpreter
 
         var entities = new List<VectorEntity>();
         Point2? currentPoint = null;
-        Point2? segmentStart = null;
+        var segments = new List<(Point2 Start, Point2 End)>();
         var strokeWidth = 1d;
         IReadOnlyList<double>? dashPattern = null;
         var sequence = 0;
@@ -33,17 +33,21 @@ public sealed class PdfGraphicsOperationInterpreter
                     currentPoint = new Point2(move.X, move.Y);
                     break;
                 case AppendStraightLineSegment line when currentPoint is Point2 start:
-                    segmentStart = start;
-                    currentPoint = new Point2(line.X, line.Y);
+                    var end = new Point2(line.X, line.Y);
+                    segments.Add((start, end));
+                    currentPoint = end;
                     break;
-                case StrokePath when segmentStart is Point2 from && currentPoint is Point2 to:
-                    sequence++;
-                    entities.Add(new VectorLine(
-                        $"page-{pageNumber}-line-{sequence}",
-                        from,
-                        to,
-                        new VectorStyle(StrokeWidthPoints: strokeWidth, DashPatternPoints: dashPattern)));
-                    segmentStart = null;
+                case StrokePath:
+                    foreach (var segment in segments)
+                    {
+                        sequence++;
+                        entities.Add(new VectorLine(
+                            $"page-{pageNumber}-line-{sequence}",
+                            segment.Start,
+                            segment.End,
+                            new VectorStyle(StrokeWidthPoints: strokeWidth, DashPatternPoints: dashPattern)));
+                    }
+                    segments.Clear();
                     break;
             }
         }

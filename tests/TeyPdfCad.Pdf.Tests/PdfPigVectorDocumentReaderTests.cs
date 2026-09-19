@@ -17,14 +17,16 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(595.276, page.WidthPoints, 3);
         Assert.Equal(841.89, page.HeightPoints, 3);
         Assert.Contains(page.Entities, entity => entity is TeyPdfCad.Core.Documents.VectorText { Value: "A3" });
-        var line = Assert.IsType<TeyPdfCad.Core.Documents.VectorLine>(page.Entities.Single(entity => entity is TeyPdfCad.Core.Documents.VectorLine));
+        var lines = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>().ToArray();
+        Assert.Equal(2, lines.Length);
+        var line = lines[0];
         Assert.Equal(2, line.Style.StrokeWidthPoints);
         Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
     }
 
     private static MemoryStream CreateMinimalPdf()
     {
-        const string contents = "2 w [4 2] 0 d 10 10 m 100 10 l S\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
+        const string contents = "2 w [4 2] 0 d 10 10 m 100 10 l 100 100 l S\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
