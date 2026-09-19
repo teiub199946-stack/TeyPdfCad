@@ -11,7 +11,13 @@ public sealed class TemplateSheetSelectorTests
     {
         var library = new TemplateLibrary([new TemplateSheet("A3-landscape", StandardSheetFormat.A3, SheetOrientation.Landscape)]);
         var sheet = new SheetMetadata(420, 297, StandardSheetFormat.A3, SheetOrientation.Landscape);
-        var titleBlock = new TitleBlockMetadata(new TitleBlockRegion(290, 0, 420, 70, ["stamp-line", "stamp-text"]), [], true);
+        var titleBlock = new TitleBlockMetadata(new TitleBlockRegion(290, 0, 420, 70, ["stamp-line", "stamp-text"]), [], true)
+        {
+            Lines = [new TeyPdfCad.Core.Primitives.LinePrimitive(
+                new TeyPdfCad.Core.Geometry.Point2(290, 0),
+                new TeyPdfCad.Core.Geometry.Point2(420, 0),
+                SourceIds: ["stamp-line"])]
+        };
 
         var result = new TemplateSheetSelector(library).Select(sheet, titleBlock);
 
