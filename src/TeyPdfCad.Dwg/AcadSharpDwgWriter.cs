@@ -275,7 +275,8 @@ public sealed class AcadSharpDwgWriter
             PathType = LeaderPathType.StraightLineSegments,
             TextHeight = annotation.Height,
             Style = styles.GetDimensionStyle(1d),
-            Layer = styles.GetAnnotationLayer("PDF_ВЫНОСКИ")
+            Layer = styles.GetAnnotationLayer("PDF_ВЫНОСКИ"),
+            LineWeight = LineWeightType.W9
         };
         leader.Vertices.Add(new XYZ(sheet.ModelOriginX + candidate.ArrowPoint.X, sheet.ModelOriginY + candidate.ArrowPoint.Y, 0d));
         leader.Vertices.Add(new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d));

@@ -56,6 +56,26 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_emits_recognized_leader_with_service_lineweight()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Leaders = [new LeaderCandidate(new Point2(0, 0), new Point2(20, 10), "Текст", 1d, ["leader"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var leader = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Leader>());
+        Assert.Equal(ACadSharp.LineWeightType.W9, leader.LineWeight);
+        Assert.Equal("Текст", Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>()).Value);
+    }
+
+    [Fact]
     public void Writer_type_is_available_without_autocad()
     {
         var document = new VectorPdfDocument([new VectorPdfPage(1, 595.276, 841.89, 0, [])]);
