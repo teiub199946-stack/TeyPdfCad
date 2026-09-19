@@ -8,6 +8,23 @@ namespace TeyPdfCad.Tests.Recognition;
 public sealed class SemanticReconstructionEngineTests
 {
     [Fact]
+    public void Includes_only_high_confidence_axes_and_leaders_in_reconstruction()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 20), new Point2(120, 20), "ОСИ", ["axis"], DashPatternMm: [12, 3, 2, 3]));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(30, 0), SourceIds: ["shaft"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(4, 2), SourceIds: ["arrow-a"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(4, -2), SourceIds: ["arrow-b"]));
+        scene.Texts.Add(new TextPrimitive("Позиция 1", new Point2(31, 1), 2.5, 0, SourceIds: ["note"]));
+
+        var result = new SemanticReconstructionEngine().Analyze(scene);
+
+        Assert.Single(result.Axes);
+        Assert.Single(result.Leaders);
+        Assert.Equal(2, result.ReconstructedObjectCount);
+    }
+
+    [Fact]
     public void Reconstructs_Three_Dimension_Chain_And_Dominant_Scale()
     {
         var scene = new PrimitiveScene();

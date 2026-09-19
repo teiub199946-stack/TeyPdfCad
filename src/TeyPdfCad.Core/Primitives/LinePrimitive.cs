@@ -7,7 +7,10 @@ public sealed record LinePrimitive(
     Point2 End,
     string? Layer = null,
     IReadOnlyList<string>? SourceIds = null,
-    double? StrokeWidthMm = null)
+    double? StrokeWidthMm = null,
+    IReadOnlyList<double>? DashPatternMm = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
+
+    public IReadOnlyList<double> StrokeDashPattern => DashPatternMm ?? [];
 }

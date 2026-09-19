@@ -8,6 +8,8 @@ public sealed class SemanticReconstructionEngine
 {
     private readonly LinearDimensionRecognizer _dimensionRecognizer = new();
     private readonly DimensionChainDetector _chainDetector = new();
+    private readonly AxisRecognizer _axisRecognizer = new();
+    private readonly LeaderRecognizer _leaderRecognizer = new();
 
     public SemanticReconstructionResult Analyze(
         PrimitiveScene scene,
@@ -19,12 +21,19 @@ public sealed class SemanticReconstructionEngine
         var chains = _chainDetector.Detect(dimensions);
         var dominantScale = EstimateDominantScale(dimensions);
         var averageConfidence = dimensions.Count == 0 ? 0.0 : dimensions.Average(x => x.Confidence);
+        var axes = _axisRecognizer.Recognize(scene);
+        var leaders = _leaderRecognizer.Recognize(scene);
 
         return new SemanticReconstructionResult(
             dimensions,
             chains,
             dominantScale,
-            averageConfidence);
+            averageConfidence)
+        {
+            Axes = axes.NativeAxes,
+            Leaders = leaders.NativeLeaders,
+            Warnings = axes.Warnings.Concat(leaders.Warnings).ToArray()
+        };
     }
 
     private static double? EstimateDominantScale(IReadOnlyList<DimensionCandidate> dimensions)
