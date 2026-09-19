@@ -44,4 +44,18 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal(10, line.StartPoint.X);
         Assert.Equal(40, line.EndPoint.Y);
     }
+
+    [Fact]
+    public void Writer_emits_editable_polylines()
+    {
+        var page = new VectorPdfPage(1, 595.276, 841.89, 0,
+            [new VectorPolyline("poly-1", [new(0, 0), new(10, 0), new(10, 5)], true, new VectorStyle())]);
+        var plan = new DocumentLayoutPlanner().Create(new VectorPdfDocument([page]));
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(new VectorPdfDocument([page]), plan)));
+
+        var polyline = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>());
+        Assert.True(polyline.IsClosed);
+        Assert.Equal(3, polyline.Vertices.Count);
+    }
 }

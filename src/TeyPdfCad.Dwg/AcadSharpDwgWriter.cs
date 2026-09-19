@@ -21,6 +21,14 @@ public sealed class AcadSharpDwgWriter
                 new XYZ(sourceLine.Start.X, sourceLine.Start.Y, 0),
                 new XYZ(sourceLine.End.X, sourceLine.End.Y, 0)));
         }
+        foreach (var sourcePolyline in source.Pages.SelectMany(page => page.Entities).OfType<VectorPolyline>())
+        {
+            var polyline = new LwPolyline(sourcePolyline.Vertices.Select(vertex => new XY(vertex.X, vertex.Y)))
+            {
+                IsClosed = sourcePolyline.IsClosed
+            };
+            document.Entities.Add(polyline);
+        }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
         writer.Write();
