@@ -93,8 +93,8 @@ public sealed class TemplateManifestExporter
     private static IReadOnlyList<TemplateStyleManifest> ReadStyles(Database database, Transaction transaction)
     {
         var styles = new List<TemplateStyleManifest>();
-        AddStyleTable((TextStyleTable)transaction.GetObject(database.Textstyle, OpenMode.ForRead), transaction, styles);
-        AddStyleTable((DimStyleTable)transaction.GetObject(database.Dimstyle, OpenMode.ForRead), transaction, styles);
+        AddStyleTable((TextStyleTable)transaction.GetObject(database.TextStyleTableId, OpenMode.ForRead), transaction, styles);
+        AddStyleTable((DimStyleTable)transaction.GetObject(database.DimStyleTableId, OpenMode.ForRead), transaction, styles);
         AddStyleTable((LayerTable)transaction.GetObject(database.LayerTableId, OpenMode.ForRead), transaction, styles);
         return styles.OrderBy(style => style.ObjectClass, StringComparer.Ordinal)
             .ThenBy(style => style.Name, StringComparer.Ordinal)
