@@ -13,9 +13,11 @@ public sealed class DwgAcceptanceAuditTests
             ModelSpaceEntityCount: 102,
             ViewportCount: 51,
             LayerCount: 8,
+            LineTypeCount: 6,
+            HatchCount: 12,
             DimensionCount: 3,
             LeaderCount: 2));
 
-        Assert.Equal("{\"layoutCount\":51,\"modelSpaceEntityCount\":102,\"viewportCount\":51,\"layerCount\":8,\"dimensionCount\":3,\"leaderCount\":2}", json);
+        Assert.Equal("{\"layoutCount\":51,\"modelSpaceEntityCount\":102,\"viewportCount\":51,\"layerCount\":8,\"lineTypeCount\":6,\"hatchCount\":12,\"dimensionCount\":3,\"leaderCount\":2}", json);
     }
 }

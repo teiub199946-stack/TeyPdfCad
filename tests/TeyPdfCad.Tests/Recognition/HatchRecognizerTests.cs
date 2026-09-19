@@ -82,6 +82,35 @@ public sealed class HatchRecognizerTests
         Assert.Contains(result.Warnings, warning => warning.Code == "hatch-low-confidence");
     }
 
+    [Fact]
+    public void Very_large_pages_skip_quadratic_pattern_recognition_without_losing_geometry()
+    {
+        var entities = Enumerable.Range(0, 2_001)
+            .Select(index => (VectorEntity)new VectorLine($"line-{index}", new Point2(0, index), new Point2(10, index), new VectorStyle()))
+            .Append(new VectorPolyline("boundary", [new(0, 0), new(20, 0), new(20, 3000), new(0, 3000)], true, new VectorStyle()))
+            .ToArray();
+
+        var result = new HatchRecognizer().Recognize(entities);
+
+        Assert.Empty(result.NativeHatches);
+        Assert.Contains(result.Warnings, warning => warning.Code == "hatch-recognition-skipped-complexity");
+    }
+
+    [Fact]
+    public void Nested_boundaries_do_not_duplicate_the_same_pattern_lines()
+    {
+        var result = new HatchRecognizer().Recognize([
+            new VectorPolyline("outer", [new(0, 0), new(30, 0), new(30, 30), new(0, 30)], true, new VectorStyle()),
+            new VectorPolyline("inner", [new(5, 5), new(25, 5), new(25, 25), new(5, 25)], true, new VectorStyle()),
+            new VectorLine("line-1", new(6, 10), new(24, 10), new VectorStyle()),
+            new VectorLine("line-2", new(6, 15), new(24, 15), new VectorStyle()),
+            new VectorLine("line-3", new(6, 20), new(24, 20), new VectorStyle())
+        ]);
+
+        Assert.Single(result.NativeHatches, candidate => !candidate.IsSolid);
+        Assert.Contains(result.NativeHatches, candidate => candidate.ProvenanceIds[0] == "inner");
+    }
+
     private static VectorEntity[] RectangleWithHorizontalLines(IReadOnlyList<double> yCoordinates)
         => [
             new VectorPolyline(

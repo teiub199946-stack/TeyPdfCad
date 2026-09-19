@@ -5,12 +5,16 @@ using ACadSharp.Objects;
 using CSMath;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
+using TeyPdfCad.Core.Recognition;
 
 namespace TeyPdfCad.Dwg;
 
 public sealed class AcadSharpDwgWriter
 {
-    public byte[] Write(VectorPdfDocument source, DwgDocumentPlan plan)
+    public byte[] Write(
+        VectorPdfDocument source,
+        DwgDocumentPlan plan,
+        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
@@ -56,8 +60,18 @@ public sealed class AcadSharpDwgWriter
         foreach (var page in source.Pages)
         {
             var sheet = sheetsByPage[page.Number];
+            var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
+                ? suppliedRecognition
+                : new HatchRecognizer().Recognize(page.Entities);
+            var patternHatches = hatchRecognition.NativeHatches.Where(candidate => !candidate.IsSolid).ToArray();
+            var consumedPatternLineIds = patternHatches.SelectMany(candidate => candidate.ProvenanceIds).ToHashSet(StringComparer.Ordinal);
+            var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
             foreach (var sourceLine in page.Entities.OfType<VectorLine>())
             {
+                if (consumedPatternLineIds.Contains(sourceLine.SourceId))
+                {
+                    continue;
+                }
                 var line = new Line(
                     new XYZ(sheet.ModelOriginX + sourceLine.Start.X, sheet.ModelOriginY + sourceLine.Start.Y, 0),
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
@@ -78,6 +92,10 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(polyline, sourcePolyline.Style);
                 document.Entities.Add(polyline);
+                if (sourcePolyline.IsClosed)
+                {
+                    writtenBoundaries[sourcePolyline.SourceId] = polyline;
+                }
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
@@ -119,6 +137,39 @@ public sealed class AcadSharpDwgWriter
                 styles.Apply(hatch, sourceFill.Style);
                 document.Entities.Add(hatch);
             }
+            foreach (var candidate in patternHatches)
+            {
+                if (candidate.PatternAngleRadians is not { } angle
+                    || candidate.PatternSpacingMillimetres is not { } spacing
+                    || spacing <= 0d
+                    || !TryFindInteriorSeed(candidate.Boundary, [], out var seed))
+                {
+                    continue;
+                }
+
+                var boundary = candidate.ProvenanceIds
+                    .Select(sourceId => writtenBoundaries.GetValueOrDefault(sourceId))
+                    .FirstOrDefault(polyline => polyline is not null)
+                    ?? CreateBoundary(candidate.Boundary, sheet.ModelOriginX, sheet.ModelOriginY, candidate.Style, styles, document);
+                var pattern = new HatchPattern("TEYPDFCAD_LINEAR");
+                pattern.Lines.Add(new HatchPattern.Line
+                {
+                    Angle = angle,
+                    BasePoint = new XY(0d, 0d),
+                    Offset = new XY(-Math.Sin(angle) * spacing, Math.Cos(angle) * spacing)
+                });
+                var hatch = new Hatch
+                {
+                    IsSolid = false,
+                    Pattern = pattern,
+                    PatternType = HatchPatternType.Custom,
+                    PatternScale = 1d,
+                    SeedPoints = [new XY(sheet.ModelOriginX + seed.X, sheet.ModelOriginY + seed.Y)]
+                };
+                hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
+                styles.Apply(hatch, candidate.Style);
+                document.Entities.Add(hatch);
+            }
         }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
@@ -141,9 +192,14 @@ public sealed class AcadSharpDwgWriter
         => fill.Loops.Any(loop => loop.Count == polyline.Vertices.Count && loop.SequenceEqual(polyline.Vertices));
 
     private static bool TryFindInteriorSeed(VectorFilledPath fill, out TeyPdfCad.Core.Geometry.Point2 seed)
+        => TryFindInteriorSeed(fill.Boundary, fill.InteriorBoundaries, out seed);
+
+    private static bool TryFindInteriorSeed(
+        IReadOnlyList<TeyPdfCad.Core.Geometry.Point2> polygon,
+        IReadOnlyList<IReadOnlyList<TeyPdfCad.Core.Geometry.Point2>> holes,
+        out TeyPdfCad.Core.Geometry.Point2 seed)
     {
         seed = default;
-        var polygon = fill.Boundary;
         if (!IsValidBoundary(polygon)) return false;
         var minX = polygon.Min(point => point.X);
         var maxX = polygon.Max(point => point.X);
@@ -158,7 +214,7 @@ public sealed class AcadSharpDwgWriter
                     var candidate = new TeyPdfCad.Core.Geometry.Point2(minX + (maxX - minX) * x / divisions, minY + (maxY - minY) * y / divisions);
                     if (Contains(polygon, candidate)
                         && !IsOnBoundary(polygon, candidate)
-                        && !fill.InteriorBoundaries.Any(hole => Contains(hole, candidate) || IsOnBoundary(hole, candidate))) { seed = candidate; return true; }
+                        && !holes.Any(hole => Contains(hole, candidate) || IsOnBoundary(hole, candidate))) { seed = candidate; return true; }
                 }
             }
         }

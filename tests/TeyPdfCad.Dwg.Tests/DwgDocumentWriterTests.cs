@@ -188,4 +188,27 @@ public sealed class DwgDocumentWriterTests
         Assert.InRange(seed.X, 0d, 4d);
         Assert.InRange(seed.Y, 4d, 12d);
     }
+
+    [Fact]
+    public void Writer_replaces_confirmed_parallel_source_lines_with_a_native_pattern_hatch()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorPolyline("boundary", [new(0, 0), new(20, 0), new(20, 20), new(0, 20)], true, new VectorStyle("ШТРИХОВКА")),
+            new VectorLine("hatch-1", new(1, 4), new(19, 4), new VectorStyle()),
+            new VectorLine("hatch-2", new(1, 8), new(19, 8), new VectorStyle()),
+            new VectorLine("hatch-3", new(1, 12), new(19, 12), new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, new DocumentLayoutPlanner().Create(document))));
+
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>());
+        var hatch = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>());
+        Assert.False(hatch.IsSolid);
+        Assert.Equal(ACadSharp.Entities.HatchPatternType.Custom, hatch.PatternType);
+        Assert.Single(hatch.Pattern.Lines);
+        Assert.Equal("ШТРИХОВКА", hatch.Layer.Name);
+    }
 }

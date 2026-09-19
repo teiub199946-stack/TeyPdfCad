@@ -8,6 +8,8 @@ public sealed class HatchRecognizer
 {
     private const double ParallelToleranceRadians = 2d * Math.PI / 180d;
     private const double MaximumSpacingCoefficientOfVariation = 0.15d;
+    private const int MaximumPatternLineCandidates = 2_000;
+    private const int MaximumPatternBoundaryCandidates = 300;
 
     public HatchRecognitionResult Recognize(IReadOnlyList<VectorEntity> entities)
     {
@@ -17,6 +19,7 @@ public sealed class HatchRecognizer
         }
 
         var hatches = new List<HatchCandidate>();
+        var warnings = new List<SemanticWarning>();
         foreach (var filledPath in entities.OfType<VectorFilledPath>())
         {
             if (HasValidBoundary(filledPath.Boundary))
@@ -33,20 +36,41 @@ public sealed class HatchRecognizer
         }
 
         var lineEntities = entities.OfType<VectorLine>().ToArray();
-        foreach (var boundary in entities.OfType<VectorPolyline>().Where(path => path.IsClosed && HasValidBoundary(path.Vertices)))
+        var boundaries = entities.OfType<VectorPolyline>().Where(path => path.IsClosed && HasValidBoundary(path.Vertices)).ToArray();
+        var patternRecognitionSkipped = lineEntities.Length > MaximumPatternLineCandidates
+            || boundaries.Length > MaximumPatternBoundaryCandidates;
+        if (patternRecognitionSkipped)
         {
-            var interiorLines = lineEntities
-                .Where(line => IsEntirelyInside(boundary.Vertices, line))
-                .ToArray();
-            var pattern = TryCreatePatternCandidate(boundary, interiorLines, entities.OfType<VectorText>().ToArray());
-            if (pattern is not null)
+            warnings.Add(new SemanticWarning(
+                "hatch-recognition-skipped-complexity",
+                $"Pattern hatch recognition was skipped safely for {lineEntities.Length} lines and {boundaries.Length} closed boundaries.",
+                []));
+        }
+        else
+        {
+            var consumedPatternLineIds = new HashSet<string>(StringComparer.Ordinal);
+            var texts = entities.OfType<VectorText>().ToArray();
+            foreach (var boundary in boundaries.OrderBy(boundary => Math.Abs(SignedArea(boundary.Vertices))))
             {
-                hatches.Add(pattern);
+                var interiorLines = lineEntities
+                    .Where(line => !consumedPatternLineIds.Contains(line.SourceId))
+                    .Where(line => IsEntirelyInside(boundary.Vertices, line))
+                    .ToArray();
+                var pattern = TryCreatePatternCandidate(boundary, interiorLines, texts);
+                if (pattern is not null)
+                {
+                    hatches.Add(pattern);
+                    foreach (var sourceId in pattern.ProvenanceIds.Skip(1))
+                    {
+                        consumedPatternLineIds.Add(sourceId);
+                    }
+                }
             }
         }
 
-        var warnings = new List<SemanticWarning>();
-        if (HasPlausibleParallelGroup(lineEntities) && !hatches.Any(candidate => !candidate.IsSolid))
+        if (!patternRecognitionSkipped
+            && HasPlausibleParallelGroup(lineEntities)
+            && !hatches.Any(candidate => !candidate.IsSolid))
         {
             warnings.Add(new SemanticWarning(
                 "hatch-low-confidence",
@@ -59,6 +83,18 @@ public sealed class HatchRecognizer
 
     private static bool HasValidBoundary(IReadOnlyList<Point2> boundary)
         => boundary.Count >= 3 && boundary.Distinct().Count() >= 3;
+
+    private static double SignedArea(IReadOnlyList<Point2> boundary)
+    {
+        var twiceArea = 0d;
+        for (var index = 0; index < boundary.Count; index++)
+        {
+            var current = boundary[index];
+            var next = boundary[(index + 1) % boundary.Count];
+            twiceArea += current.X * next.Y - next.X * current.Y;
+        }
+        return twiceArea / 2d;
+    }
 
     private static HatchCandidate? TryCreatePatternCandidate(
         VectorPolyline boundary,

@@ -234,11 +234,14 @@ public sealed class ReconstructionCommands
             .OfType<Entity>()
             .ToArray();
         var layerTable = (LayerTable)transaction.GetObject(database.LayerTableId, OpenMode.ForRead);
+        var lineTypeTable = (LinetypeTable)transaction.GetObject(database.LinetypeTableId, OpenMode.ForRead);
         var snapshot = new DwgAcceptanceSnapshot(
             layoutCount,
             entities.Length,
             viewportCount,
             layerTable.Cast<ObjectId>().Count(),
+            lineTypeTable.Cast<ObjectId>().Count(),
+            entities.Count(entity => entity is Hatch),
             entities.Count(entity => entity is Dimension),
             entities.Count(entity => entity is Leader or MLeader));
         document.Editor.WriteMessage("\nTEYPDFCAD_AUDIT " + DwgAcceptanceAudit.Format(snapshot) + "\n");

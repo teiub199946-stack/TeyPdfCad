@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ACadSharp.IO;
 using TeyPdfCad.Core.Conversion;
+using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Dwg;
 using TeyPdfCad.Pdf;
 
@@ -29,15 +30,18 @@ public sealed class ConversionPipeline
             ValidatePaths(inputPdfPath, outputDwgPath, reportPath);
             await using var input = File.OpenRead(inputPdfPath);
             var document = await new PdfPigVectorDocumentReader().ReadAsync(input, cancellationToken);
+            var hatchRecognition = document.Pages.ToDictionary(
+                page => page.Number,
+                page => new HatchRecognizer().Recognize(page.Entities));
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
-                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document), cancellationToken);
+                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition), cancellationToken);
                 return new ConversionResult(ConversionOutcome.UnsupportedVectorContent, reportPath, null);
             }
 
             var plan = new DocumentLayoutPlanner().Create(document);
-            var bytes = new AcadSharpDwgWriter().Write(document, plan);
+            var bytes = new AcadSharpDwgWriter().Write(document, plan, hatchRecognition);
             var readBack = DwgReader.Read(new MemoryStream(bytes));
             var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
             if (layoutsReadBack != document.PageCount)
@@ -50,7 +54,7 @@ public sealed class ConversionPipeline
                 ? Array.Empty<string>()
                 : ["One or more PDF pages contained no usable vector entities; DWG is partial."];
             var complete = warnings.Length == 0;
-            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document), cancellationToken);
+            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition), cancellationToken);
             return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
         }
         catch (OperationCanceledException) { throw; }
@@ -108,13 +112,18 @@ public sealed class ConversionPipeline
             throw new InvalidDataException("DWG read-back found no model-space entities for a non-empty vector PDF.");
     }
 
-    private static IReadOnlyList<PageReport> CreatePageReports(TeyPdfCad.Core.Documents.VectorPdfDocument document)
+    private static IReadOnlyList<PageReport> CreatePageReports(
+        TeyPdfCad.Core.Documents.VectorPdfDocument document,
+        IReadOnlyDictionary<int, HatchRecognitionResult> hatchRecognition)
         => document.Pages.Select(page => new PageReport(
             page.Number,
             page.WidthMillimetres,
             page.HeightMillimetres,
             page.RotationDegrees,
             page.Entities.Count,
+            hatchRecognition[page.Number].NativeHatches.Count(candidate => candidate.IsSolid),
+            hatchRecognition[page.Number].NativeHatches.Count(candidate => !candidate.IsSolid),
+            hatchRecognition[page.Number].Warnings.Select(warning => warning.Code).Distinct().ToArray(),
             page.Entities.Count > 0)).ToArray();
 
     private static Task WriteReportAsync(string path, bool complete, int pagesRead, int pagesProcessed, int layoutsReadBack, IReadOnlyList<string> warnings, IReadOnlyList<PageReport> pages, CancellationToken cancellationToken)
@@ -126,7 +135,7 @@ public sealed class ConversionPipeline
             layoutsReadBack,
             warnings,
             pages
-        }, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
+        }, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), cancellationToken);
 
     private static async Task WriteAtomicallyAsync(string path, byte[] bytes, CancellationToken cancellationToken)
     {
@@ -150,5 +159,8 @@ public sealed class ConversionPipeline
         double HeightMillimetres,
         int RotationDegrees,
         int SourceEntityCount,
+        int SolidHatchCount,
+        int PatternHatchCount,
+        IReadOnlyList<string> RecognitionWarnings,
         bool Complete);
 }

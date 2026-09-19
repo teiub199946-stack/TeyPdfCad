@@ -80,6 +80,28 @@ public sealed class ConversionPipelineTests
         Assert.Equal(original, await File.ReadAllBytesAsync(input));
     }
 
+    [Fact]
+    public async Task Pipeline_reports_and_writes_a_confirmed_pattern_hatch()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "hatch.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        const string content = "0 0 20 20 re S 1 4 m 19 4 l S 1 8 m 19 8 l S 1 12 m 19 12 l S";
+        await File.WriteAllBytesAsync(input, CreateMinimalPdf(content));
+
+        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
+
+        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Equal(1, page.GetProperty("patternHatchCount").GetInt32());
+        var drawing = ACadSharp.IO.DwgReader.Read(output);
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>(), hatch => !hatch.IsSolid);
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+    }
+
     private static byte[] CreateMinimalPdf(string contents)
     {
         var objects = new[]
