@@ -6,7 +6,7 @@ public enum StandardSheetFormat
     A0,
     A1,
     A2,
-    A3 = 3,
+    A3,
     A4,
 }
 

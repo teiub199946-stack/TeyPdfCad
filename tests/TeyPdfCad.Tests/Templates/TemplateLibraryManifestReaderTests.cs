@@ -22,5 +22,8 @@ public sealed class TemplateLibraryManifestReaderTests
         Assert.Equal("A3-landscape", block.Name);
         Assert.Equal(2, Assert.Single(block.Entities).Points.Count);
         Assert.Equal("SHEET", Assert.Single(block.Attributes).Tag);
+        var sheet = Assert.Single(library.Sheets);
+        Assert.Equal(TeyPdfCad.Core.Sheets.StandardSheetFormat.A3, sheet.Format);
+        Assert.Equal(TeyPdfCad.Core.Sheets.SheetOrientation.Landscape, sheet.Orientation);
     }
 }

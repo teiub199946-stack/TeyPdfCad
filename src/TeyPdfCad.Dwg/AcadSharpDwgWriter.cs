@@ -9,6 +9,7 @@ using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Semantics.Dimensions;
+using TeyPdfCad.Core.Templates;
 
 namespace TeyPdfCad.Dwg;
 
@@ -18,7 +19,9 @@ public sealed class AcadSharpDwgWriter
         VectorPdfDocument source,
         DwgDocumentPlan plan,
         IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
-        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null)
+        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
+        TemplateLibrary? templateLibrary = null,
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
@@ -29,6 +32,16 @@ public sealed class AcadSharpDwgWriter
         foreach (var page in source.Pages)
         {
             var sheet = sheetsByPage[page.Number];
+            if (templateLibrary is not null
+                && templateSelectionsByPage is not null
+                && templateSelectionsByPage.TryGetValue(page.Number, out var templateSelection)
+                && templateSelection is { IsConfirmed: true, TemplateName: not null })
+            {
+                var template = templateLibrary.Blocks.SingleOrDefault(block =>
+                    string.Equals(block.Name, templateSelection.TemplateName, StringComparison.Ordinal));
+                if (template is not null)
+                    WriteTemplateInsert(document, styles, sheet, template);
+            }
             var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
                 ? suppliedRecognition
                 : new HatchRecognizer().Recognize(page.Entities);
@@ -190,6 +203,53 @@ public sealed class AcadSharpDwgWriter
             Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ")
         };
         document.Entities.Add(dimension);
+    }
+
+    private static void WriteTemplateInsert(
+        CadDocument document,
+        AcadSharpStyleCatalog styles,
+        SheetPlan sheet,
+        TemplateBlockDefinition template)
+    {
+        if (!document.BlockRecords.TryGetValue(template.Name, out var block))
+        {
+            block = new BlockRecord(template.Name);
+            foreach (var entity in template.Entities)
+            {
+                if (entity.ObjectClass == "AcDbLine" && entity.Points.Count == 2)
+                {
+                    var line = new Line(
+                        new XYZ(entity.Points[0].X, entity.Points[0].Y, 0d),
+                        new XYZ(entity.Points[1].X, entity.Points[1].Y, 0d));
+                    styles.Apply(line, new VectorStyle(entity.Layer ?? "0"));
+                    block.Entities.Add(line);
+                }
+                else if (entity.ObjectClass == "AcDbPolyline" && entity.Points.Count >= 2)
+                {
+                    var polyline = new LwPolyline(entity.Points.Select(point => new XY(point.X, point.Y)));
+                    styles.Apply(polyline, new VectorStyle(entity.Layer ?? "0"));
+                    block.Entities.Add(polyline);
+                }
+                else if (entity.Text is not null && entity.Points.Count > 0)
+                {
+                    var text = new TextEntity
+                    {
+                        Value = entity.Text,
+                        InsertPoint = new XYZ(entity.Points[0].X, entity.Points[0].Y, 0d),
+                        Height = entity.TextHeight ?? 2.5d,
+                        Style = styles.GetPdfTextStyle()
+                    };
+                    styles.Apply(text, new VectorStyle(entity.Layer ?? "0"));
+                    block.Entities.Add(text);
+                }
+            }
+            document.BlockRecords.Add(block);
+        }
+
+        document.Entities.Add(new Insert(block)
+        {
+            InsertPoint = new XYZ(sheet.ModelOriginX, sheet.ModelOriginY, 0d)
+        });
     }
 
     private static void WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)

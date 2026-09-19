@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using TeyPdfCad.Core.Sheets;
 
 namespace TeyPdfCad.Core.Templates;
 
@@ -28,7 +29,30 @@ public sealed class TemplateLibraryManifestReader
                     attribute.Prompt ?? string.Empty,
                     attribute.DefaultValue ?? string.Empty)).ToArray()))
             .ToArray();
-        return new TemplateLibrary([], blocks);
+        var sheets = blocks
+            .Select(TryInferSheet)
+            .Where(sheet => sheet is not null)
+            .Cast<TemplateSheet>()
+            .ToArray();
+        return new TemplateLibrary(sheets, blocks);
+    }
+
+    private static TemplateSheet? TryInferSheet(TemplateBlockDefinition block)
+    {
+        var name = block.Name.Replace('_', '-');
+        var format = Enum.GetValues<StandardSheetFormat>()
+            .Where(value => value != StandardSheetFormat.Unknown)
+            .FirstOrDefault(value => name.IndexOf(value.ToString(), StringComparison.OrdinalIgnoreCase) >= 0);
+        if (format == StandardSheetFormat.Unknown) return null;
+
+        var orientation = name.IndexOf("landscape", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("альбом", StringComparison.OrdinalIgnoreCase) >= 0
+            ? SheetOrientation.Landscape
+            : name.IndexOf("portrait", StringComparison.OrdinalIgnoreCase) >= 0
+              || name.IndexOf("книж", StringComparison.OrdinalIgnoreCase) >= 0
+                ? SheetOrientation.Portrait
+                : SheetOrientation.Unknown;
+        return orientation == SheetOrientation.Unknown ? null : new TemplateSheet(block.Name, format, orientation);
     }
 
     private sealed class ManifestDto
