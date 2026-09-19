@@ -131,7 +131,7 @@ public sealed class DwgDocumentWriterTests
     {
         var style = new VectorStyle(SourceLayer: "ТЕКСТ", RgbColor: 0x112233);
         var page = new VectorPdfPage(1, 72, 72, 0,
-            [new VectorText("note", "Марка оси", new Point2(5, 7), 10, style)]);
+            [new VectorText("note", "Марка оси", new Point2(5, 7), 10, style, RotationRadians: Math.PI / 2d)]);
         var document = new VectorPdfDocument([page]);
         var plan = new DocumentLayoutPlanner().Create(document);
 
@@ -142,8 +142,28 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal(5, text.InsertPoint.X, 6);
         Assert.Equal(7, text.InsertPoint.Y, 6);
         Assert.Equal(10 * VectorPdfPage.MillimetresPerPoint, text.Height, 6);
+        Assert.Equal(Math.PI / 2d, text.Rotation, 6);
         Assert.Equal("ТЕКСТ", text.Layer.Name);
         Assert.Equal(0x112233, text.Color.TrueColor);
+    }
+
+    [Fact]
+    public void Writer_promotes_a_tessellated_circular_path_to_a_native_circle()
+    {
+        var vertices = Enumerable.Range(0, 64)
+            .Select(index => new Point2(10d + 5d * Math.Cos(index * Math.PI / 32d), 20d + 5d * Math.Sin(index * Math.PI / 32d)))
+            .ToArray();
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorPolyline("circle", vertices, true, new VectorStyle("КРУГИ"))]);
+        var document = new VectorPdfDocument([page]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, new DocumentLayoutPlanner().Create(document))));
+
+        var circle = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Circle>());
+        Assert.Equal(10d, circle.Center.X, 6);
+        Assert.Equal(20d, circle.Center.Y, 6);
+        Assert.Equal(5d, circle.Radius, 6);
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>());
     }
 
     [Fact]

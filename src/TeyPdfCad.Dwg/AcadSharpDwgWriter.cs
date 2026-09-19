@@ -84,6 +84,15 @@ public sealed class AcadSharpDwgWriter
                 {
                     continue;
                 }
+                if (TryGetCircle(sourcePolyline, out var center, out var radius))
+                {
+                    var circle = new Circle(
+                        new XYZ(sheet.ModelOriginX + center.X, sheet.ModelOriginY + center.Y, 0),
+                        radius);
+                    styles.Apply(circle, sourcePolyline.Style);
+                    document.Entities.Add(circle);
+                    continue;
+                }
                 var polyline = new LwPolyline(sourcePolyline.Vertices.Select(vertex => new XY(
                     sheet.ModelOriginX + vertex.X,
                     sheet.ModelOriginY + vertex.Y)))
@@ -96,20 +105,6 @@ public sealed class AcadSharpDwgWriter
                 {
                     writtenBoundaries[sourcePolyline.SourceId] = polyline;
                 }
-            }
-            foreach (var sourceText in page.Entities.OfType<VectorText>())
-            {
-                var text = new TextEntity
-                {
-                    Value = sourceText.Value,
-                    InsertPoint = new XYZ(
-                        sheet.ModelOriginX + sourceText.InsertionPoint.X,
-                        sheet.ModelOriginY + sourceText.InsertionPoint.Y,
-                        0),
-                    Height = sourceText.HeightPoints * VectorPdfPage.MillimetresPerPoint
-                };
-                styles.Apply(text, sourceText.Style);
-                document.Entities.Add(text);
             }
             foreach (var sourceFill in page.Entities.OfType<VectorFilledPath>())
             {
@@ -170,6 +165,21 @@ public sealed class AcadSharpDwgWriter
                 styles.Apply(hatch, candidate.Style);
                 document.Entities.Add(hatch);
             }
+            foreach (var sourceText in page.Entities.OfType<VectorText>())
+            {
+                var text = new TextEntity
+                {
+                    Value = sourceText.Value,
+                    InsertPoint = new XYZ(
+                        sheet.ModelOriginX + sourceText.InsertionPoint.X,
+                        sheet.ModelOriginY + sourceText.InsertionPoint.Y,
+                        0),
+                    Height = sourceText.HeightPoints * VectorPdfPage.MillimetresPerPoint,
+                    Rotation = sourceText.RotationRadians
+                };
+                styles.Apply(text, sourceText.Style);
+                document.Entities.Add(text);
+            }
         }
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
@@ -190,6 +200,30 @@ public sealed class AcadSharpDwgWriter
 
     private static bool HasSameBoundary(VectorFilledPath fill, VectorPolyline polyline)
         => fill.Loops.Any(loop => loop.Count == polyline.Vertices.Count && loop.SequenceEqual(polyline.Vertices));
+
+    private static bool TryGetCircle(VectorPolyline polyline, out TeyPdfCad.Core.Geometry.Point2 center, out double radius)
+    {
+        center = default;
+        radius = 0d;
+        if (!polyline.IsClosed || polyline.Vertices.Count < 12) return false;
+
+        var minimumX = polyline.Vertices.Min(point => point.X);
+        var maximumX = polyline.Vertices.Max(point => point.X);
+        var minimumY = polyline.Vertices.Min(point => point.Y);
+        var maximumY = polyline.Vertices.Max(point => point.Y);
+        var width = maximumX - minimumX;
+        var height = maximumY - minimumY;
+        if (width <= 1e-6 || height <= 1e-6 || Math.Abs(width - height) > Math.Max(width, height) * 0.01d)
+            return false;
+
+        center = new TeyPdfCad.Core.Geometry.Point2((minimumX + maximumX) / 2d, (minimumY + maximumY) / 2d);
+        radius = (width + height) / 4d;
+        var candidateCenter = center;
+        var candidateRadius = radius;
+        var maximumRadialError = polyline.Vertices.Max(point => Math.Abs(
+            Math.Sqrt(Math.Pow(point.X - candidateCenter.X, 2d) + Math.Pow(point.Y - candidateCenter.Y, 2d)) - candidateRadius));
+        return maximumRadialError <= Math.Max(radius * 0.01d, 1e-5);
+    }
 
     private static bool TryFindInteriorSeed(VectorFilledPath fill, out TeyPdfCad.Core.Geometry.Point2 seed)
         => TryFindInteriorSeed(fill.Boundary, fill.InteriorBoundaries, out seed);

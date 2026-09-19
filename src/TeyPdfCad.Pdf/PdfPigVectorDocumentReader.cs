@@ -37,6 +37,14 @@ public sealed class PdfPigVectorDocumentReader
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
                 var first = word.Letters[0];
+                var last = word.Letters[^1];
+                var baselineX = last.EndBaseLine.X - first.StartBaseLine.X;
+                var baselineY = last.EndBaseLine.Y - first.StartBaseLine.Y;
+                if (Math.Abs(baselineX) <= 1e-9 && Math.Abs(baselineY) <= 1e-9)
+                {
+                    baselineX = first.EndBaseLine.X - first.StartBaseLine.X;
+                    baselineY = first.EndBaseLine.Y - first.StartBaseLine.Y;
+                }
                 textSequence++;
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
@@ -44,8 +52,9 @@ public sealed class PdfPigVectorDocumentReader
                     InsertionPoint: new Point2(
                         first.StartBaseLine.X * VectorPdfPage.MillimetresPerPoint,
                         first.StartBaseLine.Y * VectorPdfPage.MillimetresPerPoint),
-                    HeightPoints: word.Letters.Max(letter => letter.FontSize),
-                    Style: new VectorStyle()));
+                    HeightPoints: word.Letters.Max(letter => letter.PointSize),
+                    Style: new VectorStyle(RgbColor: ToRgb(first.Color.ToRGBValues())),
+                    RotationRadians: Math.Atan2(baselineY, baselineX)));
             }
 
             pages.Add(new VectorPdfPage(
@@ -59,4 +68,9 @@ public sealed class PdfPigVectorDocumentReader
 
         return Task.FromResult(new VectorPdfDocument(pages));
     }
+
+    private static int ToRgb((double R, double G, double B) color)
+        => ((int)Math.Round(Math.Clamp(color.R, 0d, 1d) * 255d) << 16)
+            | ((int)Math.Round(Math.Clamp(color.G, 0d, 1d) * 255d) << 8)
+            | (int)Math.Round(Math.Clamp(color.B, 0d, 1d) * 255d);
 }

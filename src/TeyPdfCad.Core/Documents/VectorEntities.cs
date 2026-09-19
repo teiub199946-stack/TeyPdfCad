@@ -55,5 +55,6 @@ public sealed record VectorText(
     Point2 InsertionPoint,
     double HeightPoints,
     VectorStyle Style,
-    double Confidence = 1d)
+    double Confidence = 1d,
+    double RotationRadians = 0d)
     : VectorEntity(SourceId, Style, Confidence);
