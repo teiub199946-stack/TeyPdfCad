@@ -29,6 +29,20 @@ public sealed record VectorPolyline(
     double Confidence = 1d)
     : VectorEntity(SourceId, Style, Confidence);
 
+public enum VectorFillRule
+{
+    NonZero,
+    EvenOdd
+}
+
+public sealed record VectorFilledPath(
+    string SourceId,
+    IReadOnlyList<Point2> Boundary,
+    VectorFillRule FillRule,
+    VectorStyle Style,
+    double Confidence = 1d)
+    : VectorEntity(SourceId, Style, Confidence);
+
 public sealed record VectorText(
     string SourceId,
     string Value,
