@@ -7,6 +7,23 @@ namespace TeyPdfCad.Pdf.Tests;
 public sealed class PdfPigVectorDocumentReaderTests
 {
     [Fact]
+    public async Task Reader_preserves_one_boundary_and_one_fill_for_fill_and_stroke_path()
+    {
+        const string contents = "0 1 0 RG 1 w 0.2 0.4 0.6 rg 10 10 m 110 10 l 110 60 l 10 60 l 10 10 l B";
+        await using var input = CreateMinimalPdf(contents);
+
+        var document = await new PdfPigVectorDocumentReader().ReadAsync(input, default);
+        var page = Assert.Single(document.Pages);
+
+        var fill = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorFilledPath>());
+        Assert.Equal(4, fill.Boundary.Count);
+        Assert.Equal(0x336699, fill.Style.RgbColor);
+        var boundary = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>().ToArray();
+        Assert.Equal(4, boundary.Length);
+        Assert.All(boundary, line => Assert.Equal(0x00FF00, line.Style.RgbColor));
+    }
+
+    [Fact]
     public async Task Reader_preserves_page_size_and_positioned_text()
     {
         await using var input = CreateMinimalPdf();
@@ -25,14 +42,18 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(2, line.Style.StrokeWidthPoints);
         Assert.Equal([4d, 2d], line.Style.DashPatternPoints);
         Assert.Equal(0xFF0000, line.Style.RgbColor);
+        var filled = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorFilledPath>());
+        Assert.Equal(4, filled.Boundary.Count);
+        Assert.Equal(10 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, filled.Boundary[0].X, 6);
+        Assert.Equal(0x336699, filled.Style.RgbColor);
         var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
         Assert.Equal(72 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.X, 6);
         Assert.Equal(700 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.Y, 6);
     }
 
-    private static MemoryStream CreateMinimalPdf()
+    private static MemoryStream CreateMinimalPdf(string? contentsOverride = null)
     {
-        const string contents = "1 0 0 RG 2 w [4 2] 0 d 10 10 m 100 10 l 100 100 l S\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
+        var contents = contentsOverride ?? "1 0 0 RG 2 w [4 2] 0 d 10 10 m 100 10 l 100 100 l S\n0.2 0.4 0.6 rg 10 10 m 110 10 l 110 60 l 10 60 l h f\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
