@@ -23,6 +23,15 @@ public sealed class AcadSharpDwgWriter
                 PaperWidth = sheet.PaperWidthMillimetres,
                 PaperHeight = sheet.PaperHeightMillimetres
             };
+            layout.AssociatedBlock.Entities.Add(new LwPolyline([
+                new XY(0, 0),
+                new XY(sheet.PaperWidthMillimetres, 0),
+                new XY(sheet.PaperWidthMillimetres, sheet.PaperHeightMillimetres),
+                new XY(0, sheet.PaperHeightMillimetres)
+            ])
+            {
+                IsClosed = true
+            });
             document.Layouts.Add(layout);
         }
         foreach (var sourceLine in source.Pages.SelectMany(page => page.Entities).OfType<VectorLine>())

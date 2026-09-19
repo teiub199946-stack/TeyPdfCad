@@ -74,5 +74,8 @@ public sealed class DwgDocumentWriterTests
         var firstLayout = drawing.Layouts.Single(layout => layout.Name == "Лист-001");
         Assert.Equal(210, firstLayout.PaperWidth, 3);
         Assert.Equal(297, firstLayout.PaperHeight, 3);
+        var frame = Assert.Single(firstLayout.AssociatedBlock.Entities.OfType<ACadSharp.Entities.LwPolyline>());
+        Assert.True(frame.IsClosed);
+        Assert.Equal(4, frame.Vertices.Count);
     }
 }
