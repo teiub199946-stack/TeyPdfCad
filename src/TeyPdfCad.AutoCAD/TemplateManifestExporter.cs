@@ -145,6 +145,11 @@ public sealed class TemplateManifestExporter
                     points.Add(new TemplatePointManifest(point.X, point.Y));
                 }
                 return points;
+            case Circle circle:
+                return [
+                    new TemplatePointManifest(circle.Center.X, circle.Center.Y),
+                    new TemplatePointManifest(circle.Center.X + circle.Radius, circle.Center.Y)
+                ];
             default:
                 return null;
         }

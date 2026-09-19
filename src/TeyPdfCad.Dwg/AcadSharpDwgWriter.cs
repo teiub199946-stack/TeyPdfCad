@@ -236,6 +236,16 @@ public sealed class AcadSharpDwgWriter
                     styles.Apply(polyline, new VectorStyle(entity.Layer ?? "0"));
                     block.Entities.Add(polyline);
                 }
+                else if (entity.ObjectClass == "AcDbCircle" && entity.Points.Count == 2)
+                {
+                    var center = entity.Points[0];
+                    var radiusPoint = entity.Points[1];
+                    var circle = new Circle(
+                        new XYZ(center.X, center.Y, 0d),
+                        Math.Sqrt(Math.Pow(radiusPoint.X - center.X, 2d) + Math.Pow(radiusPoint.Y - center.Y, 2d)));
+                    styles.Apply(circle, new VectorStyle(entity.Layer ?? "0"));
+                    block.Entities.Add(circle);
+                }
                 else if (entity.Text is not null && entity.Points.Count > 0)
                 {
                     var text = new TextEntity

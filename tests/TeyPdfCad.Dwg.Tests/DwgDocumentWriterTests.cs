@@ -19,7 +19,10 @@ public sealed class DwgDocumentWriterTests
         var document = new VectorPdfDocument([page]);
         var library = new TemplateLibrary([], [new TemplateBlockDefinition(
             "A3-landscape",
-            [new TemplateGeometryEntity("AcDbLine", "A1", [new TemplatePoint(0, 0), new TemplatePoint(420, 0)], null, null, "0")],
+            [
+                new TemplateGeometryEntity("AcDbLine", "A1", [new TemplatePoint(0, 0), new TemplatePoint(420, 0)], null, null, "0"),
+                new TemplateGeometryEntity("AcDbCircle", "A2", [new TemplatePoint(10, 10), new TemplatePoint(15, 10)], null, null, "0")
+            ],
             [])]);
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -34,6 +37,7 @@ public sealed class DwgDocumentWriterTests
         var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
         Assert.Equal("A3-landscape", insert.Block.Name);
         Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Single(insert.Block.Entities.OfType<ACadSharp.Entities.Circle>());
     }
 
     [Fact]
