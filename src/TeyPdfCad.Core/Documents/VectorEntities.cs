@@ -21,6 +21,14 @@ public sealed record VectorLine(
     double Confidence = 1d)
     : VectorEntity(SourceId, Style, Confidence);
 
+public sealed record VectorPolyline(
+    string SourceId,
+    IReadOnlyList<Point2> Vertices,
+    bool IsClosed,
+    VectorStyle Style,
+    double Confidence = 1d)
+    : VectorEntity(SourceId, Style, Confidence);
+
 public sealed record VectorText(
     string SourceId,
     string Value,
