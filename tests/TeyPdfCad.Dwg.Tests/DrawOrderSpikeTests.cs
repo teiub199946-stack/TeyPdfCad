@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
@@ -11,7 +12,7 @@ namespace TeyPdfCad.Dwg.Tests;
 
 public sealed class DrawOrderSpikeTests
 {
-    private const string ArtifactRoot =
+    private const string DefaultArtifactRoot =
         @"C:\Users\Admin\Documents\ChatGPT\TeyConvert\output\text-fidelity-review\spike-draw-order-report";
 
     private const string RedLine = "red-line";
@@ -30,12 +31,13 @@ public sealed class DrawOrderSpikeTests
             _ => throw new ArgumentException($"Unsupported draw-order spike mode: {mode}.")
         };
 
-        Directory.CreateDirectory(ArtifactRoot);
+        var artifactRoot = GetArtifactRoot();
+        Directory.CreateDirectory(artifactRoot);
         var summaries = new List<VariantSummary>();
 
         foreach (var variant in variants)
         {
-            var path = Path.Combine(ArtifactRoot, $"{GetFileStem(variant)}.dwg");
+            var path = Path.Combine(artifactRoot, $"{GetFileStem(variant)}.dwg");
             var document = CreateFixture(variant);
             var sourceOrder = document.Entities.Select(GetFixtureLabel).ToArray();
 
@@ -45,6 +47,8 @@ public sealed class DrawOrderSpikeTests
             }
 
             Save(document, path);
+            var dwgSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+            Assert.Matches("^[0-9a-f]{64}$", dwgSha256);
             var reopened = Read(path);
             var reopenedEntities = reopened.Entities.ToArray();
             AssertFixtureSurvived(reopenedEntities);
@@ -63,20 +67,30 @@ public sealed class DrawOrderSpikeTests
                 insertionOrder,
                 sortOrder,
                 insertionOrder.SequenceEqual(sourceOrder, StringComparer.Ordinal),
-                sortOrder.Length > 0));
+                sortOrder.Length > 0,
+                dwgSha256));
         }
 
         File.WriteAllText(
-            Path.Combine(ArtifactRoot, "read-back-summary.json"),
+            Path.Combine(artifactRoot, "read-back-summary.json"),
             JsonSerializer.Serialize(
                 new
                 {
                     acadSharpPackage = "3.7.1",
+                    artifactRoot,
                     variants = summaries
                 },
                 new JsonSerializerOptions { WriteIndented = true }));
 
         Assert.Equal(variants.Length, summaries.Count);
+    }
+
+    private static string GetArtifactRoot()
+    {
+        var configuredRoot = Environment.GetEnvironmentVariable("TEYPDFCAD_DRAW_ORDER_ARTIFACT_ROOT");
+        return string.IsNullOrWhiteSpace(configuredRoot)
+            ? DefaultArtifactRoot
+            : Path.GetFullPath(configuredRoot);
     }
 
     private static CadDocument CreateFixture(DrawOrderVariant variant)
@@ -232,7 +246,8 @@ public sealed class DrawOrderSpikeTests
         string[] ReopenedInsertionOrder,
         string[] ReopenedSortOrder,
         bool InsertionOrderSurvived,
-        bool SortEntitiesTablePresent)
+        bool SortEntitiesTablePresent,
+        string DwgSha256)
     {
     }
 }

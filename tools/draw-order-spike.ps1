@@ -4,6 +4,7 @@ param(
     [string] $Mode = 'Both',
     [string] $AutoCadPath,
     [string] $CoreConsolePath,
+    [string] $ArtifactRoot,
     [int] $TimeoutSeconds = 180
 )
 
@@ -15,7 +16,14 @@ if ($TimeoutSeconds -lt 30) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $testProject = Join-Path $repoRoot 'tests\TeyPdfCad.Dwg.Tests\TeyPdfCad.Dwg.Tests.csproj'
-$artifactRoot = 'C:\Users\Admin\Documents\ChatGPT\TeyConvert\output\text-fidelity-review\spike-draw-order-report'
+$defaultArtifactRoot = 'C:\Users\Admin\Documents\ChatGPT\TeyConvert\output\text-fidelity-review\spike-draw-order-report'
+if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {
+    $ArtifactRoot = $env:TEYPDFCAD_DRAW_ORDER_ARTIFACT_ROOT
+}
+if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {
+    $ArtifactRoot = $defaultArtifactRoot
+}
+$artifactRoot = [IO.Path]::GetFullPath($ArtifactRoot)
 $summaryPath = Join-Path $artifactRoot 'read-back-summary.json'
 $reportJsonPath = Join-Path $artifactRoot 'report.json'
 $reportMarkdownPath = Join-Path $artifactRoot 'report.md'
@@ -23,7 +31,9 @@ $reportMarkdownPath = Join-Path $artifactRoot 'report.md'
 New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
 
 $previousMode = $env:TEYPDFCAD_DRAW_ORDER_SPIKE_MODE
+$previousArtifactRoot = $env:TEYPDFCAD_DRAW_ORDER_ARTIFACT_ROOT
 $env:TEYPDFCAD_DRAW_ORDER_SPIKE_MODE = $Mode
+$env:TEYPDFCAD_DRAW_ORDER_ARTIFACT_ROOT = $artifactRoot
 try {
     & dotnet test $testProject --no-restore --filter 'FullyQualifiedName~DrawOrderSpikeTests' --verbosity minimal
     if ($LASTEXITCODE -ne 0) {
@@ -32,6 +42,7 @@ try {
 }
 finally {
     $env:TEYPDFCAD_DRAW_ORDER_SPIKE_MODE = $previousMode
+    $env:TEYPDFCAD_DRAW_ORDER_ARTIFACT_ROOT = $previousArtifactRoot
 }
 
 if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
@@ -91,70 +102,47 @@ function Quote-ProcessArgument {
     return '"' + $Value.Replace('"', '\"') + '"'
 }
 
-function Invoke-AutoCadRender {
+function Get-Sha256 {
+    param([string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-RendererVersion {
+    param([string] $Executable)
+
+    if ([string]::IsNullOrWhiteSpace($Executable) -or
+        -not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
+        return $null
+    }
+
+    return (Get-Item -LiteralPath $Executable).VersionInfo.FileVersion
+}
+
+function Invoke-CoreConsolePhase {
     param(
-        [string] $VariantName,
-        [string] $InputDwg,
         [string] $CoreConsole,
+        [string] $ScriptPath,
+        [string] $WorkingDirectory,
+        [string] $StdoutPath,
+        [string] $StderrPath,
+        [string] $WorkingDwg,
         [int] $Timeout
     )
 
-    $variantDirectory = Join-Path $artifactRoot "autocad\$VariantName"
-    New-Item -ItemType Directory -Force -Path $variantDirectory | Out-Null
-    $workingDwg = Join-Path $variantDirectory 'roundtrip.dwg'
-    $scriptPath = Join-Path $variantDirectory 'roundtrip-and-render.scr'
-    $pngPath = Join-Path $variantDirectory 'render.png'
-    $stdoutPath = Join-Path $variantDirectory 'accoreconsole.stdout.log'
-    $stderrPath = Join-Path $variantDirectory 'accoreconsole.stderr.log'
-
-    Copy-Item -LiteralPath $InputDwg -Destination $workingDwg -Force
-    $script = @(
-        '_.FILEDIA',
-        '0',
-        '_.CMDECHO',
-        '1',
-        '_.ZOOM',
-        '_E',
-        '_.PNGOUT',
-        (Quote-ProcessArgument $pngPath),
-        '_.QSAVE',
-        '_.CLOSE',
-        '_.OPEN',
-        (Quote-ProcessArgument $workingDwg),
-        '_.ZOOM',
-        '_E',
-        '_.PNGOUT',
-        (Quote-ProcessArgument $pngPath),
-        '_.QSAVE',
-        '_.QUIT',
-        '_Y'
-    )
-    [IO.File]::WriteAllLines($scriptPath, $script, [Text.UTF8Encoding]::new($false))
-
-    $configuration = Join-Path (Split-Path -Parent $CoreConsole) 'acad2022.cfg'
-    if (-not (Test-Path -LiteralPath $configuration -PathType Leaf)) {
-        return [pscustomobject]@{
-            status = 'blocked'
-            blocker = "AutoCAD configuration was not found beside Core Console: $configuration"
-            executable = $CoreConsole
-            inputDwg = $InputDwg
-            workingDwg = $workingDwg
-            script = $scriptPath
-            png = $pngPath
-            stdout = $stdoutPath
-            stderr = $stderrPath
-        }
-    }
-
     $arguments = @(
-        '/i', (Quote-ProcessArgument $workingDwg),
-        '/s', (Quote-ProcessArgument $scriptPath),
+        '/i', (Quote-ProcessArgument $WorkingDwg),
+        '/s', (Quote-ProcessArgument $ScriptPath),
         '/l', 'en-US'
     )
     $process = Start-Process -FilePath $CoreConsole -ArgumentList $arguments `
-        -WorkingDirectory $variantDirectory `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath `
+        -WorkingDirectory $WorkingDirectory `
+        -RedirectStandardOutput $StdoutPath `
+        -RedirectStandardError $StderrPath `
         -PassThru
 
     $deadline = [DateTime]::UtcNow.AddSeconds($Timeout)
@@ -167,25 +155,124 @@ function Invoke-AutoCadRender {
         try { $process.Kill($true) } catch { }
         try { $process.WaitForExit() } catch { }
         return [pscustomobject]@{
-            status = 'failed'
-            blocker = "AutoCAD Core Console exceeded the $Timeout second timeout."
-            executable = $CoreConsole
+            completed = $false
+            timedOut = $true
             exitCode = $null
-            inputDwg = $InputDwg
-            workingDwg = $workingDwg
-            script = $scriptPath
-            png = $pngPath
-            stdout = $stdoutPath
-            stderr = $stderrPath
-            saveReopenObserved = $false
-            renderProduced = $false
         }
     }
 
-    $renderProduced = Test-Path -LiteralPath $pngPath -PathType Leaf
-    $saveReopenObserved = Test-Path -LiteralPath $workingDwg -PathType Leaf
-    $status = if ($process.ExitCode -eq 0 -and $renderProduced -and $saveReopenObserved) {
-        'passed'
+    [pscustomobject]@{
+        completed = $process.ExitCode -eq 0
+        timedOut = $false
+        exitCode = $process.ExitCode
+    }
+}
+
+function Invoke-AutoCadRender {
+    param(
+        [string] $VariantName,
+        [string] $InputDwg,
+        [string] $CoreConsole,
+        [string] $RendererVersion,
+        [int] $Timeout
+    )
+
+    $variantDirectory = Join-Path $artifactRoot "autocad\$VariantName"
+    New-Item -ItemType Directory -Force -Path $variantDirectory | Out-Null
+    $workingDwg = Join-Path $variantDirectory 'roundtrip.dwg'
+    $saveScriptPath = Join-Path $variantDirectory 'save-and-exit.scr'
+    $renderScriptPath = Join-Path $variantDirectory 'reopen-and-render.scr'
+    $pngPath = Join-Path $variantDirectory 'render.png'
+    $saveStdoutPath = Join-Path $variantDirectory 'save.stdout.log'
+    $saveStderrPath = Join-Path $variantDirectory 'save.stderr.log'
+    $renderStdoutPath = Join-Path $variantDirectory 'render.stdout.log'
+    $renderStderrPath = Join-Path $variantDirectory 'render.stderr.log'
+
+    Copy-Item -LiteralPath $InputDwg -Destination $workingDwg -Force
+    $saveScript = @(
+        '_.FILEDIA',
+        '0',
+        '_.CMDECHO',
+        '1',
+        '_.QSAVE',
+        '_.QUIT',
+        '_Y'
+    )
+    $renderScript = @(
+        '_.FILEDIA',
+        '0',
+        '_.CMDECHO',
+        '1',
+        '_.ZOOM',
+        '_E',
+        '_.PNGOUT',
+        (Quote-ProcessArgument $pngPath),
+        '_.QSAVE',
+        '_.QUIT',
+        '_Y'
+    )
+    [IO.File]::WriteAllLines($saveScriptPath, $saveScript, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllLines($renderScriptPath, $renderScript, [Text.UTF8Encoding]::new($false))
+
+    $configuration = Join-Path (Split-Path -Parent $CoreConsole) 'acad2022.cfg'
+    if (-not (Test-Path -LiteralPath $configuration -PathType Leaf)) {
+        return [pscustomobject]@{
+            status = 'blocked'
+            blocker = "AutoCAD configuration was not found beside Core Console: $configuration"
+            executable = $CoreConsole
+            rendererVersion = $RendererVersion
+            inputDwg = $InputDwg
+            inputDwgSha256 = Get-Sha256 $InputDwg
+            workingDwg = $workingDwg
+            workingDwgSha256 = $null
+            saveScript = $saveScriptPath
+            renderScript = $renderScriptPath
+            png = $pngPath
+            saveStdout = $saveStdoutPath
+            saveStderr = $saveStderrPath
+            renderStdout = $renderStdoutPath
+            renderStderr = $renderStderrPath
+            saveReopenObserved = $false
+            renderArtifactProduced = $false
+        }
+    }
+
+    $savePhase = Invoke-CoreConsolePhase $CoreConsole $saveScriptPath $variantDirectory `
+        $saveStdoutPath $saveStderrPath $workingDwg $Timeout
+    if (-not $savePhase.completed) {
+        return [pscustomobject]@{
+            status = 'failed'
+            blocker = if ($savePhase.timedOut) {
+                "AutoCAD Core Console save phase exceeded the $Timeout second timeout."
+            }
+            else {
+                'AutoCAD Core Console save phase failed; inspect save.stdout.log/save.stderr.log.'
+            }
+            executable = $CoreConsole
+            rendererVersion = $RendererVersion
+            exitCode = $savePhase.exitCode
+            inputDwg = $InputDwg
+            inputDwgSha256 = Get-Sha256 $InputDwg
+            workingDwg = $workingDwg
+            workingDwgSha256 = Get-Sha256 $workingDwg
+            saveScript = $saveScriptPath
+            renderScript = $renderScriptPath
+            png = $pngPath
+            saveStdout = $saveStdoutPath
+            saveStderr = $saveStderrPath
+            renderStdout = $renderStdoutPath
+            renderStderr = $renderStderrPath
+            saveReopenObserved = $false
+            renderArtifactProduced = $false
+        }
+    }
+
+    $renderPhase = Invoke-CoreConsolePhase $CoreConsole $renderScriptPath $variantDirectory `
+        $renderStdoutPath $renderStderrPath $workingDwg $Timeout
+    $renderArtifactProduced = Test-Path -LiteralPath $pngPath -PathType Leaf
+    $saveReopenObserved = $renderPhase.completed
+    $status = if ($renderPhase.completed -and $renderArtifactProduced) {
+        'completed'
     }
     else {
         'failed'
@@ -194,31 +281,44 @@ function Invoke-AutoCadRender {
     [pscustomobject]@{
         status = $status
         blocker = if ($status -eq 'failed') {
-            'AutoCAD Core Console did not complete save/reopen/render successfully; inspect stdout/stderr.'
+            if ($renderPhase.timedOut) {
+                "AutoCAD Core Console reopen/render phase exceeded the $Timeout second timeout."
+            }
+            else {
+                'AutoCAD Core Console reopen/render phase failed; inspect render.stdout.log/render.stderr.log.'
+            }
         }
         else {
             $null
         }
         executable = $CoreConsole
-        exitCode = $process.ExitCode
+        rendererVersion = $RendererVersion
+        exitCode = $renderPhase.exitCode
         inputDwg = $InputDwg
+        inputDwgSha256 = Get-Sha256 $InputDwg
         workingDwg = $workingDwg
-        script = $scriptPath
+        workingDwgSha256 = Get-Sha256 $workingDwg
+        saveScript = $saveScriptPath
+        renderScript = $renderScriptPath
         png = $pngPath
-        stdout = $stdoutPath
-        stderr = $stderrPath
+        saveStdout = $saveStdoutPath
+        saveStderr = $saveStderrPath
+        renderStdout = $renderStdoutPath
+        renderStderr = $renderStderrPath
         saveReopenObserved = $saveReopenObserved
-        renderProduced = $renderProduced
+        renderArtifactProduced = $renderArtifactProduced
     }
 }
 
 $coreConsole = Resolve-CoreConsole $CoreConsolePath $AutoCadPath
+$rendererVersion = Get-RendererVersion $coreConsole
 $autoCadRuns = @()
 if ($null -eq $coreConsole) {
     $autoCadRuns += [pscustomobject]@{
         status = 'blocked'
         blocker = 'AutoCAD Core Console was not found. Pass -CoreConsolePath or -AutoCadPath; ACadSharp read-back is not used as a render substitute.'
         executable = $null
+        rendererVersion = $null
     }
 }
 else {
@@ -228,27 +328,39 @@ else {
             -VariantName $variantName `
             -InputDwg $variant.DwgPath `
             -CoreConsole $coreConsole `
+            -RendererVersion $rendererVersion `
             -Timeout $TimeoutSeconds
     }
 }
 
 $autoCadBlocked = @($autoCadRuns | Where-Object { $_.status -eq 'blocked' }).Count -gt 0
 $autoCadFailed = @($autoCadRuns | Where-Object { $_.status -eq 'failed' }).Count -gt 0
-$autoCadPassed = $autoCadRuns.Count -gt 0 -and @($autoCadRuns | Where-Object { $_.status -eq 'passed' }).Count -eq $autoCadRuns.Count
 $status = if ($autoCadBlocked -or $autoCadFailed) { 'draw-order-blocked' } else { $structuralFinding }
 
 $report = [ordered]@{
     status = $status
+    statusScope = 'structural-only'
     structuralFinding = $structuralFinding
+    structuralOnly = $true
+    provisionalUntilAutoCadRenderPass = $true
+    visualStatus = 'pending'
+    visualProof = 'not-claimed'
     acadSharpPackage = '3.7.1'
     mode = $Mode
+    artifactRoot = $artifactRoot
     insertionOrderStable = $insertionStable
     explicitSortEntitiesTableObserved = $hasExplicitSort
-    visualPassInferred = $false
+    variants = $variants
     autoCad = [ordered]@{
-        status = if ($autoCadPassed) { 'passed' } elseif ($autoCadFailed) { 'failed' } else { 'blocked' }
+        status = if ($autoCadBlocked) { 'blocked' } elseif ($autoCadFailed) { 'failed' } else { 'completed' }
+        rendererVersion = $rendererVersion
+        visualStatus = 'pending'
+        visualProof = 'not-claimed'
         blocker = if ($autoCadBlocked) {
             ($autoCadRuns | Where-Object { $_.status -eq 'blocked' } | Select-Object -First 1).blocker
+        }
+        elseif ($autoCadFailed) {
+            ($autoCadRuns | Where-Object { $_.status -eq 'failed' } | Select-Object -First 1).blocker
         }
         else {
             $null
@@ -264,24 +376,38 @@ $markdown = @(
     '# Spike A: DWG draw order',
     '',
     "- Status: **$($report.status)**",
-    "- Structural finding: **$structuralFinding**",
+    "- Scope: **structural only**",
+    "- Structural finding: **$structuralFinding** (provisional until an AutoCAD render pass is available)",
     "- ACadSharp package: **3.7.1**",
     "- Insertion order stable after ACadSharp save/reopen: **$insertionStable**",
     "- Explicit `SortEntitiesTable` observed after reopen: **$hasExplicitSort**",
-    "- Visual pass inferred from entity lists: **false**",
+    "- Visual proof: **not claimed**",
+    [string]::Format('- Artifact root: `{0}`', $artifactRoot),
+    '',
+    '> `insertion-order-stable` and the `SortEntitiesTable` result describe serialized DWG structure only. They do not prove AutoCAD display order and remain provisional until AutoCAD save/reopen/render succeeds.',
     '',
     '## Variants',
     ''
 )
 foreach ($variant in $variants) {
-    $markdown += "- $($variant.Variant): source=[$($variant.SourceOrder -join ', ')]; reopened insertion=[$($variant.ReopenedInsertionOrder -join ', ')]; reopened sort=[$($variant.ReopenedSortOrder -join ', ')]"
+    $markdown += [string]::Format('- {0}: SHA-256={1}; source=[{2}]; reopened insertion=[{3}]; reopened sort=[{4}]',
+        $variant.Variant,
+        $variant.DwgSha256,
+        ($variant.SourceOrder -join ', '),
+        ($variant.ReopenedInsertionOrder -join ', '),
+        ($variant.ReopenedSortOrder -join ', '))
 }
+$rendererVersionText = if ($null -eq $report.autoCad.rendererVersion) { 'null' } else { $report.autoCad.rendererVersion }
+$blockerText = if ($null -eq $report.autoCad.blocker) { 'none' } else { $report.autoCad.blocker }
 $markdown += @(
     '',
     '## AutoCAD batch/render',
     '',
-    "- Status: **$($report.autoCad.status)**",
-    "- Blocker: $($report.autoCad.blocker ?? 'none')",
+    [string]::Format('- Status: **{0}**', $report.autoCad.status),
+    [string]::Format('- Renderer version: {0}', $rendererVersionText),
+    [string]::Format('- Blocker: {0}', $blockerText),
+    '',
+    'Visual status remains pending unless a real AutoCAD Core Console invocation produces the recorded render artifact. Even then, the report records invocation evidence only and does not claim human visual acceptance.',
     '',
     'ACadSharp save/reopen is recorded separately and is not treated as a substitute for AutoCAD rendering.'
 )

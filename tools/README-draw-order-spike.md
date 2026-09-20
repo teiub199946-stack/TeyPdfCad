@@ -13,6 +13,12 @@ The xUnit test saves each variant with ACadSharp 3.7.1, reopens it with
 `DwgReader`, verifies the entities and colors, and records both the reopened
 insertion order and the reopened `BlockRecord.SortEntitiesTable`.
 
+These results are **structural only**. `insertion-order-stable` and a preserved
+`SortEntitiesTable` describe serialized DWG state; they do not prove AutoCAD
+display order. Both findings remain provisional until an AutoCAD
+save/reopen/render pass is available. The spike never infers a visual pass
+from ACadSharp entity lists.
+
 ## Structural run
 
 From the repository root:
@@ -25,6 +31,15 @@ The default run writes only to:
 
 ```text
 C:\Users\Admin\Documents\ChatGPT\TeyConvert\output\text-fidelity-review\spike-draw-order-report
+```
+
+The root can be overridden explicitly with `-ArtifactRoot` or with
+`TEYPDFCAD_DRAW_ORDER_ARTIFACT_ROOT`. The parameter takes precedence:
+
+```powershell
+pwsh -File .\tools\draw-order-spike.ps1 `
+  -Mode Both `
+  -ArtifactRoot 'C:\controlled\spike-draw-order-report'
 ```
 
 Expected artifacts include:
@@ -50,9 +65,18 @@ pwsh -File .\tools\draw-order-spike.ps1 `
   -CoreConsolePath 'C:\Program Files\Autodesk\AutoCAD 2022\accoreconsole.exe'
 ```
 
-The script checks for `acad2022.cfg` beside Core Console, performs a
-save/close/open/save cycle, invokes `PNGOUT`, and records the command script,
-stdout/stderr, round-tripped DWG, and PNG under the same report directory.
+The script checks for `acad2022.cfg` beside Core Console and uses two separate
+noninteractive processes. Phase 1 opens the copied DWG, runs `QSAVE`, and
+exits. Phase 2 starts a new Core Console process with that saved DWG, invokes
+`PNGOUT`, saves, and exits. It does not issue `CLOSE` followed by `OPEN`
+inside one Core Console script.
+
+The report records source and round-tripped DWG SHA-256 values, renderer file
+version, command scripts, stdout/stderr, round-tripped DWG, and PNG where
+available. If Core Console is unavailable, renderer version is explicitly
+`null` and the concrete blocker is recorded.
+
 If Core Console or its required configuration is unavailable, the report
 records `draw-order-blocked` with the concrete blocker. It does not claim a
-visual pass from ACadSharp entity order alone.
+visual pass from ACadSharp entity order alone. A generated PNG is invocation
+evidence, not a claim of human visual acceptance.
