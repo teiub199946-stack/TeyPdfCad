@@ -7,6 +7,19 @@ namespace TeyPdfCad.Pdf.Tests;
 public sealed class PdfPigVectorDocumentReaderTests
 {
     [Fact]
+    public async Task Reader_emits_independent_lines_for_ordinary_stroked_path_segments()
+    {
+        await using var input = CreateMinimalPdf("0 0 m 10 0 l 10 10 l S");
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        var lines = page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>().ToArray();
+        Assert.Equal(2, lines.Length);
+        Assert.Empty(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorPolyline>());
+        Assert.Equal(lines[0].End, lines[1].Start);
+    }
+
+    [Fact]
     public async Task Reader_preserves_one_boundary_and_one_fill_for_fill_and_stroke_path()
     {
         const string contents = "0 1 0 RG 1 w 0.2 0.4 0.6 rg 10 10 m 110 10 l 110 60 l 10 60 l 10 10 l B";

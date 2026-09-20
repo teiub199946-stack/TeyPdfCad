@@ -627,19 +627,41 @@ public sealed class PdfGraphicsOperationInterpreter
         currentPoint = end;
     }
 
-    private static void EmitStrokePaths(ICollection<VectorEntity> entities, IReadOnlyList<List<Point2>> subpaths, IReadOnlyList<(Point2 Start, Point2 End)> segments, int pageNumber, ref int sequence, int? color, double width, IReadOnlyList<double>? dashes)
+    private static void EmitStrokePaths(
+        ICollection<VectorEntity> entities,
+        IReadOnlyList<List<Point2>> subpaths,
+        IReadOnlyList<(Point2 Start, Point2 End)> segments,
+        int pageNumber,
+        ref int sequence,
+        int? color,
+        double width,
+        IReadOnlyList<double>? dashes)
     {
         var style = new VectorStyle(RgbColor: color, StrokeWidthPoints: width, DashPatternPoints: dashes);
         foreach (var subpath in subpaths)
         {
             var vertices = NormalizeLoop(subpath);
             if (vertices.Length < 2) continue;
-            var isClosed = IsClosedInSegments(vertices, segments);
-            sequence++;
-            if (vertices.Length == 2 && !isClosed)
-                entities.Add(new VectorLine($"page-{pageNumber}-line-{sequence}", vertices[0], vertices[1], style));
-            else
-                entities.Add(new VectorPolyline($"page-{pageNumber}-path-{sequence}", vertices, isClosed, style));
+            if (IsClosedInSegments(vertices, segments))
+            {
+                sequence++;
+                entities.Add(new VectorPolyline(
+                    $"page-{pageNumber}-path-{sequence}",
+                    vertices,
+                    true,
+                    style));
+                continue;
+            }
+
+            for (var index = 1; index < vertices.Length; index++)
+            {
+                sequence++;
+                entities.Add(new VectorLine(
+                    $"page-{pageNumber}-line-{sequence}",
+                    vertices[index - 1],
+                    vertices[index],
+                    style));
+            }
         }
     }
 
