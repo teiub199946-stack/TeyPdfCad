@@ -46,13 +46,14 @@ public sealed class PdfPigVectorDocumentReader
                     baselineY = first.EndBaseLine.Y - first.StartBaseLine.Y;
                 }
                 textSequence++;
+                var heightPoints = MeasureWordHeightPoints(word);
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
                     Value: word.Text,
                     InsertionPoint: new Point2(
                         first.StartBaseLine.X * VectorPdfPage.MillimetresPerPoint,
                         first.StartBaseLine.Y * VectorPdfPage.MillimetresPerPoint),
-                    HeightPoints: word.Letters.Max(letter => letter.PointSize),
+                    HeightPoints: heightPoints,
                     Style: new VectorStyle(RgbColor: ToRgb(first.Color.ToRGBValues())),
                     RotationRadians: Math.Atan2(baselineY, baselineX)));
             }
@@ -73,4 +74,23 @@ public sealed class PdfPigVectorDocumentReader
         => ((int)Math.Round(Math.Clamp(color.R, 0d, 1d) * 255d) << 16)
             | ((int)Math.Round(Math.Clamp(color.G, 0d, 1d) * 255d) << 8)
             | (int)Math.Round(Math.Clamp(color.B, 0d, 1d) * 255d);
+
+    // PDF `Letter.PointSize` is the nominal font size declared by the page, which
+    // regularly overshoots the visible glyph height (measured ~0.45-0.7x in real
+    // drawings), so using it as AutoCAD TEXT Height inflates text and causes
+    // overlapping headers/white spots. The glyph bounding box is the faithful
+    // source of the rendered height (ascender + descender), so prefer it and only
+    // fall back to the nominal size when the glyph boxes are unavailable.
+    private static double MeasureWordHeightPoints(UglyToad.PdfPig.Content.Word word)
+    {
+        var glyphHeights = word.Letters
+            .Select(letter => letter.GlyphRectangle.Height)
+            .Where(height => height > 1e-6)
+            .ToArray();
+
+        if (glyphHeights.Length == 0)
+            return word.Letters.Max(letter => letter.PointSize);
+
+        return glyphHeights.Max();
+    }
 }
