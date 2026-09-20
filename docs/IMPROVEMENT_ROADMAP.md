@@ -29,10 +29,12 @@ Status: accepted working roadmap, 2026-09-20.
 
 ## Current execution focus
 
-The immediate blocker is deterministic AutoCAD 2022 Core Console startup with
-the actual user configuration:
+AutoCAD 2022 Core Console, automatic PDF to DWG conversion and SPDS template
+export now have runtime acceptance evidence.
 
-`C:\Users\Admin\AppData\Local\Autodesk\AutoCAD 2022\R24.1\rus\acad2022.cfg`
+The current focus is template-guided vector-text evidence for the real A3 title
+block. The design is documented in:
 
-After the console health check passes, run the SPDS template exporter and then
-the real PDF to DWG bridge acceptance.
+`docs/superpowers/specs/2026-09-20-a3-vector-text-recognition-design.md`
+
+Implementation starts after design review and an approved implementation plan.
