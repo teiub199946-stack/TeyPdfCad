@@ -28,7 +28,8 @@ public sealed class LeaderRecognizer
             var text = scene.Texts
                 .OrderBy(candidate => GeometryMath.Distance(candidate.Position, shaft.End))
                 .FirstOrDefault();
-            var hasNearbyText = text is not null && GeometryMath.Distance(text.Position, shaft.End) <= Math.Max(10d, GeometryMath.Distance(shaft.Start, shaft.End) * 0.25d);
+            var shaftLength = GeometryMath.Distance(shaft.Start, shaft.End);
+            var hasNearbyText = text is not null && GeometryMath.Distance(text.Position, shaft.End) <= Math.Max(10d, shaftLength * 0.25d);
             var hasArrowPair = arrows.Length >= 2 && HasSeparatedArrowLegs(arrows, shaft.Start);
             var confidence = 0.4d + (hasArrowPair ? 0.3d : 0d) + (hasNearbyText ? 0.3d : 0d);
 

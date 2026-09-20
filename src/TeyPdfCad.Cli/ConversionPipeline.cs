@@ -3,6 +3,7 @@ using ACadSharp.IO;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Documents;
+using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Sheets;
@@ -203,6 +204,8 @@ public sealed class ConversionPipeline
             semanticRecognition[page.Number].DimensionCandidateCount,
             semanticRecognition[page.Number].AxisCandidateCount,
             semanticRecognition[page.Number].LeaderCandidateCount,
+            semanticRecognition[page.Number].LevelCandidateCount,
+            semanticRecognition[page.Number].ArcDimensionCandidateCount,
             semanticRecognition[page.Number].Warnings,
             templateSelections is not null
                 && templateSelections.TryGetValue(page.Number, out var selection)
@@ -221,36 +224,82 @@ public sealed class ConversionPipeline
     private static PageSemanticSummary AnalyzeSemantics(VectorPdfPage page)
     {
         var lines = page.Entities.OfType<VectorLine>().ToArray();
+        var polylines = page.Entities.OfType<VectorPolyline>().ToArray();
         var texts = page.Entities.OfType<VectorText>().ToArray();
+        var semanticPolylines = polylines
+            .Where(polyline => polyline.Vertices.Count is >= 2 and <= 64)
+            .ToArray();
+        var semanticLines = lines
+            .Concat(semanticPolylines.SelectMany(polyline => polyline.Vertices
+                .Zip(polyline.Vertices.Skip(1), (start, end) => new VectorLine(
+                    polyline.SourceId,
+                    start,
+                    end,
+                    polyline.Style))
+                .Concat(polyline.IsClosed
+                    ? [new VectorLine(polyline.SourceId, polyline.Vertices[^1], polyline.Vertices[0], polyline.Style)]
+                    : [])
+                .Where(segment => GeometryMath.Distance(segment.Start, segment.End) >= 0.75d)))
+            .ToArray();
         // Candidate dimension lines are spatially filtered around each text,
         // so the dominant cost is now the page-wide text/line scan.
         const long maximumSemanticWork = 1_000_000;
-        var estimatedWork = (long)lines.Length * Math.Max(texts.Length, 1);
-        if (lines.Length > 2_000 || texts.Length > 1_000 || estimatedWork > maximumSemanticWork)
-            return new PageSemanticSummary(0, 0, 0, ["semantic-recognition-skipped-complexity"], null);
+        var estimatedWork = (long)semanticLines.Length * Math.Max(texts.Length, 1);
+        if (lines.Length > 2_000 || semanticLines.Length > 5_000 || texts.Length > 1_000 || estimatedWork > maximumSemanticWork * 3)
+            return new PageSemanticSummary(0, 0, 0, 0, 0, ["semantic-recognition-skipped-complexity"], null);
 
-        var scene = new PrimitiveScene();
-        scene.Lines.AddRange(lines.Select(line => new LinePrimitive(
+        var baseScene = new PrimitiveScene();
+        baseScene.Lines.AddRange(lines.Select(line => new LinePrimitive(
             line.Start,
             line.End,
             line.Style.SourceLayer,
             [line.SourceId],
             line.Style.StrokeWidthPoints * VectorPdfPage.MillimetresPerPoint,
             line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray())));
-        scene.Texts.AddRange(texts.Select(text => new TextPrimitive(
+        var scene = new PrimitiveScene();
+        scene.Lines.AddRange(semanticLines.Select(line => new LinePrimitive(
+            line.Start,
+            line.End,
+            line.Style.SourceLayer,
+            [line.SourceId],
+            line.Style.StrokeWidthPoints * VectorPdfPage.MillimetresPerPoint,
+            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray())));
+        foreach (var polyline in semanticPolylines.Where(polyline => !polyline.IsClosed && polyline.Vertices.Count >= 5))
+        {
+            if (CircularArcDetector.TryFit(polyline.Vertices, out var arc))
+            {
+                scene.Arcs.Add(new ArcPrimitive(
+                    arc.Center,
+                    arc.Radius,
+                    arc.StartAngleRadians,
+                    arc.EndAngleRadians,
+                    polyline.Style.SourceLayer,
+                    [polyline.SourceId]));
+            }
+        }
+        var primitiveTexts = texts.Select(text => new TextPrimitive(
             text.Value,
             text.InsertionPoint,
             text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
-            [text.SourceId])));
+            [text.SourceId])).ToArray();
+        baseScene.Texts.AddRange(primitiveTexts);
+        scene.Texts.AddRange(primitiveTexts);
+        var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
         var analyzed = new SemanticReconstructionEngine().Analyze(scene);
         var semantic = analyzed with
         {
-            Dimensions = analyzed.Dimensions
+            Dimensions = baseAnalyzed.Dimensions
                 .Where(candidate => candidate.Confidence >= 0.90d && candidate.ArrowEvidence >= 0.5d)
                 .ToArray(),
-            Leaders = analyzed.Leaders
+            Leaders = baseAnalyzed.Leaders
+                .Where(candidate => candidate.Confidence >= 0.90d)
+                .ToArray(),
+            Levels = analyzed.Levels
+                .Where(candidate => candidate.Confidence >= 0.90d)
+                .ToArray(),
+            ArcDimensions = analyzed.ArcDimensions
                 .Where(candidate => candidate.Confidence >= 0.90d)
                 .ToArray()
         };
@@ -258,6 +307,8 @@ public sealed class ConversionPipeline
             semantic.Dimensions.Count,
             semantic.Axes.Count,
             semantic.Leaders.Count,
+            semantic.Levels.Count,
+            semantic.ArcDimensions.Count,
             semantic.Warnings.Select(warning => warning.Code).Distinct().ToArray(),
             semantic);
     }
@@ -269,6 +320,10 @@ public sealed class ConversionPipeline
             drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>().Count(),
             drawing.Entities.OfType<ACadSharp.Entities.TextEntity>().Count(),
             drawing.Entities.OfType<ACadSharp.Entities.Hatch>().Count(),
+            drawing.Entities.OfType<ACadSharp.Entities.Dimension>().Count(),
+            drawing.Entities.OfType<ACadSharp.Entities.DimensionArc>().Count(),
+            drawing.Entities.OfType<ACadSharp.Entities.Leader>().Count(),
+            drawing.Entities.OfType<ACadSharp.Entities.Insert>().Count(),
             drawing.Layouts.SelectMany(layout => layout.AssociatedBlock.Entities).OfType<ACadSharp.Entities.Viewport>().Count(viewport => !viewport.RepresentsPaper),
             drawing.Layers.Count(),
             drawing.LineTypes.Count());
@@ -313,6 +368,8 @@ public sealed class ConversionPipeline
         int DimensionCandidateCount,
         int AxisCandidateCount,
         int LeaderCandidateCount,
+        int LevelCandidateCount,
+        int ArcDimensionCandidateCount,
         IReadOnlyList<string> SemanticWarnings,
         bool TemplateSelected,
         string? TemplateName,
@@ -324,6 +381,8 @@ public sealed class ConversionPipeline
         int DimensionCandidateCount,
         int AxisCandidateCount,
         int LeaderCandidateCount,
+        int LevelCandidateCount,
+        int ArcDimensionCandidateCount,
         IReadOnlyList<string> Warnings,
         SemanticReconstructionResult? Result);
 
@@ -333,6 +392,10 @@ public sealed class ConversionPipeline
         int PolylineCount,
         int TextCount,
         int HatchCount,
+        int DimensionCount,
+        int ArcDimensionCount,
+        int LeaderCount,
+        int InsertCount,
         int ViewportCount,
         int LayerCount,
         int LineTypeCount);

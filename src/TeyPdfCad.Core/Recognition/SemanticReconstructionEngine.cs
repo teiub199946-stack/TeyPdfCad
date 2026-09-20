@@ -10,6 +10,8 @@ public sealed class SemanticReconstructionEngine
     private readonly DimensionChainDetector _chainDetector = new();
     private readonly AxisRecognizer _axisRecognizer = new();
     private readonly LeaderRecognizer _leaderRecognizer = new();
+    private readonly LevelRecognizer _levelRecognizer = new();
+    private readonly ArcDimensionRecognizer _arcDimensionRecognizer = new();
 
     public SemanticReconstructionResult Analyze(
         PrimitiveScene scene,
@@ -23,6 +25,8 @@ public sealed class SemanticReconstructionEngine
         var averageConfidence = dimensions.Count == 0 ? 0.0 : dimensions.Average(x => x.Confidence);
         var axes = _axisRecognizer.Recognize(scene);
         var leaders = _leaderRecognizer.Recognize(scene);
+        var levels = _levelRecognizer.Recognize(scene);
+        var arcDimensions = _arcDimensionRecognizer.Recognize(scene);
 
         return new SemanticReconstructionResult(
             dimensions,
@@ -32,7 +36,14 @@ public sealed class SemanticReconstructionEngine
         {
             Axes = axes.NativeAxes,
             Leaders = leaders.NativeLeaders,
-            Warnings = axes.Warnings.Concat(leaders.Warnings).ToArray()
+            Levels = levels.NativeLevels,
+            ArcDimensions = arcDimensions.NativeArcDimensions,
+            NativeFillPaths = scene.ClosedPaths,
+            Warnings = axes.Warnings
+                .Concat(leaders.Warnings)
+                .Concat(levels.Warnings)
+                .Concat(arcDimensions.Warnings)
+                .ToArray()
         };
     }
 

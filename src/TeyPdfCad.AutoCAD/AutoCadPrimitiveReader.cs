@@ -23,11 +23,32 @@ internal sealed class AutoCadPrimitiveReader
             switch (entity)
             {
                 case Line line:
-                    AddLine(scene, line.StartPoint, line.EndPoint, line.Layer, SourceId(line), StrokeWidthMm(line));
+                    AddLine(scene, line.StartPoint, line.EndPoint, line.Layer, SourceId(line), StrokeWidthMm(line), DashPattern(transaction, line));
                     break;
 
                 case Polyline polyline:
-                    AddPolyline(scene, polyline);
+                    AddPolyline(scene, transaction, polyline);
+                    if (polyline.Closed && polyline.NumberOfVertices >= 3
+                        && IsFillLayer(polyline.Layer))
+                    {
+                        var vertices = Enumerable.Range(0, polyline.NumberOfVertices)
+                            .Select(index => ToPoint2(polyline.GetPoint3dAt(index)))
+                            .ToArray();
+                        scene.ClosedPaths.Add(new ClosedPathPrimitive(
+                            vertices,
+                            new TeyPdfCad.Core.Documents.VectorStyle(polyline.Layer),
+                            [SourceId(polyline)]));
+                    }
+                    break;
+
+                case Arc arc:
+                    scene.Arcs.Add(new ArcPrimitive(
+                        ToPoint2(arc.Center),
+                        arc.Radius,
+                        arc.StartAngle,
+                        arc.EndAngle,
+                        arc.Layer,
+                        [SourceId(arc)]));
                     break;
 
                 case DBText text:
@@ -104,7 +125,7 @@ internal sealed class AutoCadPrimitiveReader
             ? value
             : 0;
 
-    private static void AddPolyline(PrimitiveScene scene, Polyline polyline)
+    private static void AddPolyline(PrimitiveScene scene, Transaction transaction, Polyline polyline)
     {
         var segmentCount = polyline.Closed ? polyline.NumberOfVertices : Math.Max(0, polyline.NumberOfVertices - 1);
         var handle = SourceId(polyline);
@@ -123,13 +144,21 @@ internal sealed class AutoCadPrimitiveReader
                         segment.EndPoint,
                         polyline.Layer,
                         sourceId,
-                        StrokeWidthMm(polyline));
+                        StrokeWidthMm(polyline),
+                        DashPattern(transaction, polyline));
                     break;
                 }
 
                 case SegmentType.Arc:
                 {
                     var arc = polyline.GetArcSegmentAt(i);
+                    scene.Arcs.Add(new ArcPrimitive(
+                        ToPoint2(arc.Center),
+                        arc.Radius,
+                        arc.StartAngle,
+                        arc.EndAngle,
+                        polyline.Layer,
+                        [sourceId]));
                     var steps = ArcTessellator.BuildSteps(arc.StartAngle, arc.EndAngle, sourceId);
                     foreach (var step in steps)
                     {
@@ -139,7 +168,8 @@ internal sealed class AutoCadPrimitiveReader
                             arc.EvaluatePoint(step.EndParameter),
                             polyline.Layer,
                             step.SourceId,
-                            StrokeWidthMm(polyline));
+                            StrokeWidthMm(polyline),
+                            DashPattern(transaction, polyline));
                     }
                     break;
                 }
@@ -153,14 +183,33 @@ internal sealed class AutoCadPrimitiveReader
         Autodesk.AutoCAD.Geometry.Point3d end,
         string? layer,
         string sourceId,
-        double? strokeWidthMm)
+        double? strokeWidthMm,
+        IReadOnlyList<double>? dashPatternMm = null)
     {
         scene.Lines.Add(new LinePrimitive(
             ToPoint2(start),
             ToPoint2(end),
             layer,
             [sourceId],
-            strokeWidthMm));
+            strokeWidthMm,
+            dashPatternMm));
+    }
+
+    private static IReadOnlyList<double> DashPattern(Transaction transaction, Entity entity)
+    {
+        if (entity.LinetypeId.IsNull)
+            return [];
+        if (transaction.GetObject(entity.LinetypeId, OpenMode.ForRead, false) is not LinetypeTableRecord linetype)
+            return [];
+
+        var values = new List<double>();
+        for (var index = 0; index < linetype.NumDashes; index++)
+        {
+            var length = Math.Abs(linetype.DashLengthAt(index));
+            if (length > 1e-9)
+                values.Add(length * Math.Max(entity.LinetypeScale, 1e-9));
+        }
+        return values;
     }
 
     private static double? StrokeWidthMm(Entity entity)
@@ -174,4 +223,11 @@ internal sealed class AutoCadPrimitiveReader
 
     private static string SourceId(Entity entity)
         => entity.Handle.ToString();
+
+    private static bool IsFillLayer(string? layer)
+        => layer is not null
+            && (layer.IndexOf("ЗАЛИВ", StringComparison.OrdinalIgnoreCase) >= 0
+                || layer.IndexOf("ШТРИХ", StringComparison.OrdinalIgnoreCase) >= 0
+                || layer.IndexOf("HATCH", StringComparison.OrdinalIgnoreCase) >= 0
+                || layer.IndexOf("FILL", StringComparison.OrdinalIgnoreCase) >= 0);
 }

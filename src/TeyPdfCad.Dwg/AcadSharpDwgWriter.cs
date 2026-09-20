@@ -198,6 +198,10 @@ public sealed class AcadSharpDwgWriter
                     WriteLeader(document, styles, sheet, candidate);
                 foreach (var candidate in semantics.Axes)
                     WriteAxis(document, styles, sheet, candidate);
+                foreach (var candidate in semantics.Levels)
+                    WriteLevel(document, styles, sheet, candidate);
+                foreach (var candidate in semantics.ArcDimensions)
+                    WriteArcDimension(document, styles, sheet, candidate);
             }
         }
         using var output = new MemoryStream();
@@ -366,6 +370,80 @@ public sealed class AcadSharpDwgWriter
             Layer = styles.GetAnnotationLayer("PDF_ОСИ")
         };
         document.Entities.Add(insert);
+    }
+
+    private static void WriteLevel(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LevelCandidate candidate)
+    {
+        const string blockName = "TEY_LEVEL";
+        if (!document.BlockRecords.TryGetValue(blockName, out var block))
+        {
+            block = new BlockRecord(blockName);
+            var stem = new Line(new XYZ(0d, 0d, 0d), new XYZ(5d, 0d, 0d))
+            {
+                Layer = styles.GetAnnotationLayer("PDF_ОТМЕТКИ"),
+                LineWeight = LineWeightType.W9
+            };
+            block.Entities.Add(stem);
+            var marker = new LwPolyline([new XY(0d, 0d), new XY(2d, 1.5d), new XY(2d, -1.5d)])
+            {
+                IsClosed = true,
+                Layer = styles.GetAnnotationLayer("PDF_ОТМЕТКИ"),
+                LineWeight = LineWeightType.W9
+            };
+            block.Entities.Add(marker);
+            var label = new TextEntity
+            {
+                Value = candidate.Value,
+                InsertPoint = new XYZ(6d, -1.25d, 0d),
+                Height = 2.5d,
+                Layer = styles.GetAnnotationLayer("PDF_ОТМЕТКИ"),
+                Style = styles.GetPdfTextStyle()
+            };
+            block.Entities.Add(label);
+            document.BlockRecords.Add(block);
+        }
+
+        var dx = candidate.TextPoint.X - candidate.MarkerPoint.X;
+        var dy = candidate.TextPoint.Y - candidate.MarkerPoint.Y;
+        document.Entities.Add(new Insert(block)
+        {
+            InsertPoint = new XYZ(sheet.ModelOriginX + candidate.MarkerPoint.X, sheet.ModelOriginY + candidate.MarkerPoint.Y, 0d),
+            Rotation = Math.Atan2(dy, dx),
+            Layer = styles.GetAnnotationLayer("PDF_ОТМЕТКИ")
+        });
+    }
+
+    private static void WriteArcDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, ArcDimensionCandidate candidate)
+    {
+        var center = new XYZ(
+            sheet.ModelOriginX + candidate.Center.X,
+            sheet.ModelOriginY + candidate.Center.Y,
+            0d);
+        var firstPoint = new XYZ(
+            center.X + candidate.Radius * Math.Cos(candidate.StartAngleRadians),
+            center.Y + candidate.Radius * Math.Sin(candidate.StartAngleRadians),
+            0d);
+        var secondPoint = new XYZ(
+            center.X + candidate.Radius * Math.Cos(candidate.EndAngleRadians),
+            center.Y + candidate.Radius * Math.Sin(candidate.EndAngleRadians),
+            0d);
+        var dimension = new DimensionArc
+        {
+            Center = center,
+            FirstPoint = firstPoint,
+            SecondPoint = secondPoint,
+            StartAngle = candidate.StartAngleRadians,
+            EndAngle = candidate.EndAngleRadians,
+            DefinitionPoint = new XYZ(
+                sheet.ModelOriginX + candidate.TextPoint.X,
+                sheet.ModelOriginY + candidate.TextPoint.Y,
+                0d),
+            Text = candidate.SourceText,
+            Style = styles.GetDimensionStyle(1d),
+            Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ"),
+            LineWeight = LineWeightType.W9
+        };
+        document.Entities.Add(dimension);
     }
 
     private static LwPolyline CreateBoundary(IReadOnlyList<TeyPdfCad.Core.Geometry.Point2> loop, double originX, double originY, VectorStyle style, AcadSharpStyleCatalog styles, CadDocument document)

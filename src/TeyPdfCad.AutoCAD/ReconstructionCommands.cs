@@ -346,7 +346,12 @@ public sealed class ReconstructionCommands
             }
         }
 
-        if (semantic.Dimensions.Count == 0)
+        var hasNativeAnnotations = semantic.Dimensions.Count > 0
+            || semantic.Axes.Count > 0
+            || semantic.Leaders.Count > 0
+            || semantic.Levels.Count > 0
+            || semantic.NativeFillPaths.Count > 0;
+        if (!hasNativeAnnotations)
         {
             if (sheetResult is null)
             {
@@ -367,36 +372,46 @@ public sealed class ReconstructionCommands
             return;
         }
 
-        if (semantic.DetectedDrawingScales.Count != 1)
+        var transform = Autodesk.AutoCAD.Geometry.Matrix3d.Identity;
+        SelectionScaleNormalizer? normalizer = null;
+        if (semantic.Dimensions.Count > 0 && semantic.DetectedDrawingScales.Count == 1)
+        {
+            normalizer = new SelectionScaleNormalizer();
+            transform = normalizer.BuildTransform(transaction, objectIds, semantic.DetectedDrawingScales[0]);
+
+            // Scaling the imported geometry is essential: the resulting native AutoCAD Dimension.Measurement
+            // must equal the real drawing distance instead of merely displaying an overridden label.
+            normalizer.Apply(transaction, objectIds, transform);
+        }
+        else if (semantic.Dimensions.Count > 0)
         {
             editor.WriteMessage(
-                $"\nTeyPdfCad: {semantic.DetectedDrawingScales.Count} scale groups were detected " +
-                $"[{string.Join(", ", semantic.DetectedDrawingScales.Select(x => x.ToString("G8")))}]. " +
-                "Automatic global scaling is intentionally blocked until spatial scale partitioning is enabled. Drawing was not changed.");
-            settings?.Fail("Multiple drawing scale groups were detected.");
-            return;
+                $"\nTeyPdfCad: {semantic.DetectedDrawingScales.Count} drawing scale groups detected; " +
+                "linear dimensions remain source geometry, independent annotations are still reconstructed.");
         }
 
-        var scale = semantic.DetectedDrawingScales[0];
-        var normalizer = new SelectionScaleNormalizer();
-        var transform = normalizer.BuildTransform(transaction, objectIds, scale);
-
-        // Scaling the imported geometry is essential: the resulting native AutoCAD Dimension.Measurement
-        // must equal the real drawing distance instead of merely displaying an overridden label.
-        normalizer.Apply(transaction, objectIds, transform);
-
         var currentSpace = (BlockTableRecord)transaction.GetObject(database.CurrentSpaceId, OpenMode.ForWrite);
-        var createdIds = new NativeDimensionWriter().Write(
+        var createdIds = normalizer is null
+            ? Array.Empty<ObjectId>()
+            : new NativeDimensionWriter().Write(
+                database,
+                transaction,
+                currentSpace,
+                semantic.Dimensions,
+                transform);
+        var annotationIds = new NativeAnnotationWriter().Write(
             database,
             transaction,
             currentSpace,
-            semantic.Dimensions,
+            semantic,
             transform);
 
-        var validation = new NativeDimensionValidator().Validate(
-            transaction,
-            createdIds,
-            semantic.Dimensions);
+        var validation = normalizer is null
+            ? new NativeDimensionValidationResult(true, 0d, null)
+            : new NativeDimensionValidator().Validate(
+                transaction,
+                createdIds,
+                semantic.Dimensions);
 
         if (!validation.Success)
         {
@@ -416,8 +431,8 @@ public sealed class ReconstructionCommands
         editor.Regen();
 
         editor.WriteMessage(
-            $"\nTeyPdfCad: reconstructed {createdIds.Count} native dimensions. " +
-            $"Scale={scale:G8}; max native measurement error={validation.MaxRelativeError:P4}. " +
+            $"\nTeyPdfCad: reconstructed {createdIds.Count} native dimensions and {annotationIds.Count} native annotation entities. " +
+            $"Scale={(normalizer is null ? "not-global" : semantic.DetectedDrawingScales[0].ToString("G8"))}; max native measurement error={validation.MaxRelativeError:P4}. " +
             (sheetResult is null
                 ? string.Empty
                 : $" Sheet layout={sheetResult.LayoutName}, title block={sheetResult.BlockName}. " +

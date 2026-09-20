@@ -6,6 +6,8 @@ public sealed class PrimitiveScene
 {
     public List<LinePrimitive> Lines { get; } = [];
     public List<TextPrimitive> Texts { get; } = [];
+    public List<ArcPrimitive> Arcs { get; } = [];
+    public List<ClosedPathPrimitive> ClosedPaths { get; } = [];
     public SheetMetadata? Sheet { get; set; }
     public TitleBlockMetadata? TitleBlock { get; set; }
 }

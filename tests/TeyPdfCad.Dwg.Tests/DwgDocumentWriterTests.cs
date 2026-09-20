@@ -12,6 +12,47 @@ namespace TeyPdfCad.Dwg.Tests;
 public sealed class DwgDocumentWriterTests
 {
     [Fact]
+    public void Writer_emits_level_as_named_editable_block()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Levels = [new LevelCandidate(new(10, 10), new(17, 10), "±0.000", 0.95d, ["level"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Equal("TEY_LEVEL", insert.Block.Name);
+        Assert.Contains(insert.Block.Entities.OfType<ACadSharp.Entities.TextEntity>(), text => text.Value == "±0.000");
+    }
+
+    [Fact]
+    public void Writer_emits_arc_length_as_native_arc_dimension()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            ArcDimensions = [new ArcDimensionCandidate(new(50, 50), 20, 0, Math.PI / 2, new(65, 65), "L=31,42", 0.95d, ["arc", "label"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var dimension = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.DimensionArc>());
+        Assert.Equal(50, dimension.Center.X, 6);
+        Assert.Equal(20, Math.Sqrt(Math.Pow(dimension.FirstPoint.X - dimension.Center.X, 2) + Math.Pow(dimension.FirstPoint.Y - dimension.Center.Y, 2)), 6);
+        Assert.Equal("L=31,42", dimension.Text);
+    }
+
+    [Fact]
     public void Writer_inserts_confirmed_template_block_in_model_space()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
