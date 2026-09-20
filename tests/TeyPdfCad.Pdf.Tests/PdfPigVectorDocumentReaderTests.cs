@@ -119,12 +119,50 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(["A3", "B4"], texts.Select(text => text.Value).ToArray());
         Assert.Equal(700 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, texts[0].InsertionPoint.X, 6);
         Assert.Equal((595.276 - 72) * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, texts[0].InsertionPoint.Y, 6);
-        Assert.Equal(12d, texts[0].HeightPoints, 6);
+        // Height must be derived from the visible glyph bounding box, not the
+        // nominal font size. Type1 Helvetica at 12 pt renders a glyph box of
+        // ~8.66 pt, so the emitted text height is ~8.66, not 12.
+        Assert.Equal(8.66d, texts[0].HeightPoints, 2);
         Assert.Equal(-Math.PI / 2d, texts[0].RotationRadians, 6);
         Assert.Equal(0x000000, texts[0].Style.RgbColor);
         var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
         Assert.Equal(20 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
         Assert.Equal((595.276 - 10) * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
+    }
+
+    [Fact]
+    public async Task Reader_derives_text_height_from_visible_glyph_box_not_nominal_font_size()
+    {
+        // Type1 Helvetica at a nominal 40 pt renders a glyph bounding box that
+        // differs from the font size; the emitted HeightPoints must track the
+        // rendered glyph, not the declared font size.
+        const string contents = "BT /F1 40 Tf 72 700 Td (A3) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+
+        // The nominal font size is 40, but the visible glyph box height is smaller;
+        // the reader must not emit the raw font size as the text height.
+        Assert.True(text.HeightPoints < 40d, $"Expected glyph-box height (<40) but got {text.HeightPoints}");
+        Assert.True(text.HeightPoints > 0d);
+    }
+
+    [Fact]
+    public async Task Reader_keeps_text_and_geometry_in_the_same_origin_when_media_box_is_offset()
+    {
+        // Text must be emitted in the same normalized page frame for every word,
+        // independent of a non-zero MediaBox origin. PdfPig already normalizes
+        // letter baselines by MediaBox.Left/Bottom, so text at PDF (172, 800) with
+        // MediaBox [100 100 ...] lands at (72, 700) in normalized points.
+        const string contents = "172 800 m 200 800 l S BT /F1 12 Tf 172 800 Td (A3) Tj ET";
+        await using var input = CreateMinimalPdf(contents, mediaBox: "100 100 695.276 941.89");
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+
+        Assert.Equal(72d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.X, 6);
+        Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.Y, 6);
     }
 
     [Fact]
@@ -164,14 +202,15 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(20d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.End.X, 6);
     }
 
-    private static MemoryStream CreateMinimalPdf(string? contentsOverride = null, int rotation = 0)
+    private static MemoryStream CreateMinimalPdf(string? contentsOverride = null, int rotation = 0, string? mediaBox = null)
     {
         var contents = contentsOverride ?? "1 0 0 RG 2 w [4 2] 0 d 10 10 m 100 10 l 100 10 m 100 100 l S\n0.2 0.4 0.6 rg 10 10 m 110 10 l 110 60 l 10 60 l h f\nBT /F1 12 Tf 72 700 Td (A3) Tj ET";
+        mediaBox ??= "0 0 595.276 841.89";
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.276 841.89] /Rotate {rotation} /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [{mediaBox}] /Rotate {rotation} /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
             $"<< /Length {Encoding.ASCII.GetByteCount(contents)} >>\nstream\n{contents}\nendstream",
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
         };
