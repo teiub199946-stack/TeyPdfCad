@@ -87,10 +87,6 @@ public sealed class AcadSharpDwgWriter
             }
             foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
             {
-                if (sourcePolyline.IsClosed && page.Entities.OfType<VectorFilledPath>().Any(fill => HasSameBoundary(fill, sourcePolyline)))
-                {
-                    continue;
-                }
                 if (TryGetCircle(sourcePolyline, out var center, out var radius))
                 {
                     var circle = new Circle(
@@ -119,6 +115,9 @@ public sealed class AcadSharpDwgWriter
                     .Where(IsValidBoundary)
                     .Select(loop => CreateBoundary(loop, sheet.ModelOriginX, sheet.ModelOriginY, sourceFill.Style, styles, document))
                     .ToArray();
+                // Fill support contours are not PDF strokes. Retain them for
+                // editing, but do not draw edges that were absent in the source.
+                foreach (var boundary in boundaries) boundary.IsInvisible = true;
                 if (boundaries.Length == 0 || !TryFindInteriorSeed(sourceFill, out var seed))
                 {
                     continue;
@@ -215,13 +214,18 @@ public sealed class AcadSharpDwgWriter
         var first = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint1.X, sheet.ModelOriginY + candidate.DefinitionPoint1.Y, 0d);
         var second = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint2.X, sheet.ModelOriginY + candidate.DefinitionPoint2.Y, 0d);
         var dimensionPoint = new XYZ(sheet.ModelOriginX + candidate.DimensionLinePoint.X, sheet.ModelOriginY + candidate.DimensionLinePoint.Y, 0d);
-        var dimension = new DimensionAligned(first, second)
-        {
-            DefinitionPoint = dimensionPoint,
-            Style = styles.GetDimensionStyle(candidate.DrawingScale),
-            Text = string.Empty,
-            Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ")
-        };
+        Dimension dimension = candidate.Kind == DimensionKind.Rotated
+            ? new DimensionLinear
+            {
+                FirstPoint = first,
+                SecondPoint = second,
+                Rotation = candidate.RotationRadians ?? Math.Atan2(second.Y - first.Y, second.X - first.X)
+            }
+            : new DimensionAligned(first, second);
+        dimension.DefinitionPoint = dimensionPoint;
+        dimension.Style = styles.GetDimensionStyle(candidate.DrawingScale);
+        dimension.Text = string.Empty;
+        dimension.Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ");
         document.Entities.Add(dimension);
     }
 
@@ -391,9 +395,10 @@ public sealed class AcadSharpDwgWriter
                 LineWeight = LineWeightType.W9
             };
             block.Entities.Add(marker);
-            var label = new TextEntity
+            var label = new AttributeDefinition
             {
-                Value = candidate.Value,
+                Tag = "LEVEL",
+                Value = string.Empty,
                 InsertPoint = new XYZ(6d, -1.25d, 0d),
                 Height = 2.5d,
                 Layer = styles.GetAnnotationLayer("PDF_ОТМЕТКИ"),
@@ -405,12 +410,16 @@ public sealed class AcadSharpDwgWriter
 
         var dx = candidate.TextPoint.X - candidate.MarkerPoint.X;
         var dy = candidate.TextPoint.Y - candidate.MarkerPoint.Y;
-        document.Entities.Add(new Insert(block)
+        var insert = new Insert(block)
         {
             InsertPoint = new XYZ(sheet.ModelOriginX + candidate.MarkerPoint.X, sheet.ModelOriginY + candidate.MarkerPoint.Y, 0d),
             Rotation = Math.Atan2(dy, dx),
             Layer = styles.GetAnnotationLayer("PDF_ОТМЕТКИ")
-        });
+        };
+        var attribute = insert.Attributes.Single();
+        attribute.Value = candidate.Value;
+        attribute.InsertPoint = new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d);
+        document.Entities.Add(insert);
     }
 
     private static void WriteArcDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, ArcDimensionCandidate candidate)

@@ -24,6 +24,7 @@ public sealed class LeaderRecognizer
             var arrows = scene.Lines
                 .Where(line => !ReferenceEquals(line, shaft))
                 .Where(line => Touches(line, shaft.Start))
+                .Where(line => IsArrowLeg(line, shaft))
                 .ToArray();
             var text = scene.Texts
                 .OrderBy(candidate => GeometryMath.Distance(candidate.Position, shaft.End))
@@ -56,6 +57,19 @@ public sealed class LeaderRecognizer
 
     private static bool Touches(LinePrimitive line, Point2 point)
         => GeometryMath.Distance(line.Start, point) <= EndpointTolerance || GeometryMath.Distance(line.End, point) <= EndpointTolerance;
+
+    private static bool IsArrowLeg(LinePrimitive line, LinePrimitive shaft)
+    {
+        var length = GeometryMath.Distance(line.Start, line.End);
+        if (length <= EndpointTolerance ||
+            length > Math.Min(8d, GeometryMath.Distance(shaft.Start, shaft.End) * 0.25d))
+            return false;
+        var far = GeometryMath.Distance(line.Start, shaft.Start) <= EndpointTolerance ? line.End : line.Start;
+        var direction = GeometryMath.Normalize(GeometryMath.Subtract(far, shaft.Start));
+        var shaftDirection = GeometryMath.Normalize(GeometryMath.Subtract(shaft.End, shaft.Start));
+        var dot = GeometryMath.Dot(direction, shaftDirection);
+        return dot > 0.5d && dot < 0.995d;
+    }
 
     private static bool HasSeparatedArrowLegs(IReadOnlyList<LinePrimitive> arrows, Point2 arrowPoint)
     {

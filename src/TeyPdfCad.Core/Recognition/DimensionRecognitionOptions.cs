@@ -9,6 +9,7 @@ public sealed record DimensionRecognitionOptions
     public double ScaleConsensusRelativeTolerance { get; init; } = 0.02;
     public int ScaleConsensusMinimumVotes { get; init; } = 2;
     public double PerpendicularAngleToleranceDegrees { get; init; } = 15.0;
+    public double TextRotationToleranceDegrees { get; init; } = 15.0;
     public double TextDistanceHeightMultiplier { get; init; } = 4.0;
     public double EndpointToleranceHeightMultiplier { get; init; } = 0.75;
 }

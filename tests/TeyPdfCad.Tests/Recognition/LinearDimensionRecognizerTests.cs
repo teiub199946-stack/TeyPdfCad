@@ -120,11 +120,42 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Stronger_scale_group_wins_when_different_texts_claim_the_same_geometry()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimension(scene, y: 0, importedLength: 100, displayedValue: "5000");
+        scene.Texts.Add(new TextPrimitive("500", new Point2(50, 3), 2.5, 0, SourceIds: ["wrong-500"]));
+        AddHorizontalDimension(scene, y: 30, importedLength: 100, displayedValue: "5000");
+        scene.Texts.Add(new TextPrimitive("500", new Point2(50, 33), 2.5, 0, SourceIds: ["wrong-500-2"]));
+        AddHorizontalDimension(scene, y: 60, importedLength: 100, displayedValue: "5000");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(3, dimensions.Count);
+        Assert.All(dimensions, dimension => Assert.Equal(50, dimension.DrawingScale, 6));
+        Assert.DoesNotContain(dimensions, dimension => dimension.SourceText == "500");
+    }
+
+    [Fact]
     public void Rejects_Number_Next_To_Ordinary_Line_Without_Extension_Lines()
     {
         var scene = new PrimitiveScene();
         scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(52, 0)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
+        Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    [Fact]
+    public void Rejects_dimension_geometry_perpendicular_to_text_orientation()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new(new(0, 0), new(52, 0)));
+        scene.Lines.Add(new(new(0, -12), new(0, 1)));
+        scene.Lines.Add(new(new(52, -12), new(52, 1)));
+        scene.Lines.Add(new(new(-1, -1), new(1, 1)));
+        scene.Lines.Add(new(new(51, -1), new(53, 1)));
+        scene.Texts.Add(new("5200", new(26, 3), 2.5, 90));
+
         Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
     }
 

@@ -21,5 +21,6 @@ public sealed record DimensionCandidate(
     double ArrowEvidence,
     IReadOnlyList<string>? SourcePrimitiveIds = null)
 {
+    public double? RotationRadians { get; init; }
     public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
 }

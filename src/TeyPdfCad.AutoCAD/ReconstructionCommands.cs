@@ -423,7 +423,10 @@ public sealed class ReconstructionCommands
         if (settings is not null)
         {
             if (!settings.PreserveSourceGeometry)
-                EraseSourceGeometry(transaction, objectIds);
+                EraseSourceGeometry(transaction, objectIds,
+                    normalizer is null
+                        ? Array.Empty<string>()
+                        : semantic.Dimensions.SelectMany(candidate => candidate.ProvenanceIds));
             settings.ApplyOutputUnits(database);
         }
 
@@ -438,14 +441,19 @@ public sealed class ReconstructionCommands
                 : $" Sheet layout={sheetResult.LayoutName}, title block={sheetResult.BlockName}. " +
                   (sheetResult.PlotWarning is null ? string.Empty : $"Plot warning: {sheetResult.PlotWarning} ")) +
             (settings?.PreserveSourceGeometry == false
-                ? "Source PDFIMPORT primitives were removed."
+                ? "Only whole source objects belonging to validated native dimensions were removed; other source geometry was preserved."
                 : "Source PDFIMPORT primitives were preserved for review."));
     }
 
-    private static void EraseSourceGeometry(Transaction transaction, ObjectId[] objectIds)
+    private static void EraseSourceGeometry(
+        Transaction transaction, ObjectId[] objectIds, IEnumerable<string> validatedProvenance)
     {
+        var removable = new HashSet<string>(SourceReplacementPolicy.SelectWholeObjects(
+            objectIds.Select(id => id.Handle.ToString()).ToArray(), validatedProvenance),
+            StringComparer.OrdinalIgnoreCase);
         foreach (var objectId in objectIds)
         {
+            if (!removable.Contains(objectId.Handle.ToString())) continue;
             if (transaction.GetObject(objectId, OpenMode.ForWrite, false) is Entity entity && !entity.IsErased)
                 entity.Erase();
         }

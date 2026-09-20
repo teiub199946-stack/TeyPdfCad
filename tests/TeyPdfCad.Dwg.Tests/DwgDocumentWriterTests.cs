@@ -18,7 +18,7 @@ public sealed class DwgDocumentWriterTests
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            Levels = [new LevelCandidate(new(10, 10), new(17, 10), "±0.000", 0.95d, ["level"])]
+            Levels = [new LevelCandidate(new(10, 10), new(17, 10), "±0.000", 0.95d, ["level"]), new LevelCandidate(new(30, 20), new(37, 20), "+3.600", 0.95d, ["level2"])]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -26,11 +26,12 @@ public sealed class DwgDocumentWriterTests
             new DocumentLayoutPlanner().Create(document),
             semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
 
-        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
-        Assert.Equal("TEY_LEVEL", insert.Block.Name);
-        Assert.Contains(insert.Block.Entities.OfType<ACadSharp.Entities.TextEntity>(), text => text.Value == "±0.000");
+        var inserts = drawing.Entities.OfType<ACadSharp.Entities.Insert>().ToArray();
+        Assert.Equal(2, inserts.Length);
+        Assert.All(inserts, insert => Assert.Equal("TEY_LEVEL", insert.Block.Name));
+        Assert.Equal("±0.000", Assert.Single(inserts[0].Attributes).Value);
+        Assert.Equal("+3.600", Assert.Single(inserts[1].Attributes).Value);
     }
-
     [Fact]
     public void Writer_emits_arc_length_as_native_arc_dimension()
     {
@@ -472,6 +473,7 @@ public sealed class DwgDocumentWriterTests
 
         var boundary = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>());
         Assert.True(boundary.IsClosed);
+        Assert.True(boundary.IsInvisible);
         Assert.Equal(4, boundary.Vertices.Count);
         var hatch = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>());
         Assert.True(hatch.IsSolid);
