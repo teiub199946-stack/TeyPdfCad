@@ -207,6 +207,7 @@ function Invoke-AutoCadRender {
         '_E',
         '_.PNGOUT',
         (Quote-ProcessArgument $pngPath),
+        '',
         '_.QSAVE',
         '_.QUIT',
         '_Y'
