@@ -35,15 +35,69 @@ public sealed class LinearDimensionRecognizer
 
                 if (combined.Count > 0)
                 {
-                    return combined
-                        .OrderBy(x => x.DimensionLinePoint.Y)
-                        .ThenBy(x => x.DimensionLinePoint.X)
-                        .ToArray();
+                    return SelectUniqueCandidates(combined, clusters);
                 }
             }
         }
 
         return RecognizeWithResolvedScale(scene, options);
+    }
+
+    private static IReadOnlyList<DimensionCandidate> SelectUniqueCandidates(
+        IReadOnlyList<DimensionCandidate> candidates,
+        IReadOnlyList<ScaleConsensus> clusters)
+    {
+        var scaleRank = clusters
+            .Select((cluster, index) => new ScaleRankEntry(cluster.Scale, index))
+            .ToArray();
+
+        var perText = candidates
+            .GroupBy(candidate => candidate.ProvenanceIds.FirstOrDefault(id =>
+                    id.StartsWith("page-", StringComparison.Ordinal)
+                    && id.IndexOf("-text-", StringComparison.Ordinal) >= 0)
+                ?? candidate.SourceText + "|" + Math.Round(candidate.DimensionLinePoint.X, 4) + "|" + Math.Round(candidate.DimensionLinePoint.Y, 4))
+            .Select(group => group
+                .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
+                .ThenByDescending(candidate => candidate.Confidence)
+                .ThenByDescending(candidate => candidate.ArrowEvidence)
+                .First())
+            .ToArray();
+
+        return perText
+            .GroupBy(GeometryKey)
+            .Select(group => group
+                .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
+                .ThenByDescending(candidate => candidate.Confidence)
+                .First())
+            .OrderBy(x => x.DimensionLinePoint.Y)
+            .ThenBy(x => x.DimensionLinePoint.X)
+            .ToArray();
+    }
+
+    private static int ScaleRank(double scale, IReadOnlyList<ScaleRankEntry> ranks)
+    {
+        for (var index = 0; index < ranks.Count; index++)
+            if (Math.Abs(ranks[index].Scale - scale) / Math.Max(scale, 1e-9) <= 0.02)
+                return ranks[index].Rank;
+        return int.MaxValue;
+    }
+
+    private static string GeometryKey(DimensionCandidate candidate)
+    {
+        var first = candidate.DefinitionPoint1;
+        var second = candidate.DefinitionPoint2;
+        if (first.X > second.X || (Math.Abs(first.X - second.X) < 1e-6 && first.Y > second.Y))
+            (first, second) = (second, first);
+
+        return string.Join("|",
+            candidate.Kind,
+            Math.Round(first.X, 2),
+            Math.Round(first.Y, 2),
+            Math.Round(second.X, 2),
+            Math.Round(second.Y, 2),
+            Math.Round(candidate.DimensionLinePoint.X, 2),
+            Math.Round(candidate.DimensionLinePoint.Y, 2),
+            Math.Round(candidate.RotationRadians ?? 0d, 4));
     }
 
     private static IReadOnlyList<ScaleObservation> CollectScaleObservations(
@@ -147,7 +201,7 @@ public sealed class LinearDimensionRecognizer
             NumericCompat.Clamp(confidence, 0.0, 1.0),
             text.Value,
             probe.Value.ArrowEvidence,
-            probe.Value.SourcePrimitiveIds);
+            probe.Value.SourcePrimitiveIds) { RotationRadians = probe.Value.RotationRadians };
     }
 
     private static GeometryProbe? TryAnalyzeGeometry(
@@ -159,6 +213,10 @@ public sealed class LinearDimensionRecognizer
         var dimVector = GeometryMath.Subtract(dimensionLine.End, dimensionLine.Start);
         var dimLength = GeometryMath.Length(dimVector);
         if (dimLength <= 1e-9) return null;
+        var dimensionAngle = Math.Atan2(dimVector.Y, dimVector.X) * 180.0 / Math.PI;
+        if (ParallelAngleDifferenceDegrees(dimensionAngle, text.Rotation)
+            > options.TextRotationToleranceDegrees)
+            return null;
 
         var textTolerance = Math.Max(text.Height * options.TextDistanceHeightMultiplier, 1e-6);
         var textDistance = GeometryMath.DistancePointToInfiniteLine(text.Position, dimensionLine.Start, dimensionLine.End);
@@ -215,7 +273,7 @@ public sealed class LinearDimensionRecognizer
             projectedDistance,
             textScore,
             arrows,
-            provenanceIds);
+            provenanceIds, Math.Atan2(dimVector.Y, dimVector.X));
     }
 
     private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
@@ -271,6 +329,12 @@ public sealed class LinearDimensionRecognizer
         return value > 90.0 ? 180.0 - value : value;
     }
 
+    private static double ParallelAngleDifferenceDegrees(double first, double second)
+    {
+        var difference = Math.Abs(first - second) % 180d;
+        return Math.Min(difference, 180d - difference);
+    }
+
     private readonly record struct GeometryProbe(
         DimensionKind Kind,
         Point2 DefinitionPoint1,
@@ -279,5 +343,7 @@ public sealed class LinearDimensionRecognizer
         double ProjectedDistance,
         double TextScore,
         double ArrowEvidence,
-        IReadOnlyList<string> SourcePrimitiveIds);
+        IReadOnlyList<string> SourcePrimitiveIds, double RotationRadians);
+
+    private readonly record struct ScaleRankEntry(double Scale, int Rank);
 }
