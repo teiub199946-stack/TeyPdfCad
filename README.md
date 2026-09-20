@@ -37,6 +37,7 @@ TEYPDFCAD_AUTOCAD_TIMEOUT_SECONDS=600
 TEYPDFCAD_AUTOCAD_CORE_CONSOLE=C:\Program Files\Autodesk\AutoCAD 2022\accoreconsole.exe
 TEYPDFCAD_AUTOCAD_PLUGIN_DLL=C:\path\to\TeyPdfCad.AutoCAD.dll
 TEYPDFCAD_AUTOCAD_BASE_DWG=C:\path\to\base.dwg
+TEYPDFCAD_AUTOCAD_PDFIMPORT_SCALE=1
 TEYPDFCAD_ARTIFACT_RETENTION_HOURS=24
 TEYPDFCAD_RETENTION_SWEEP_MINUTES=5
 TEYPDFCAD_MAX_JOB_METADATA=10000
@@ -53,6 +54,8 @@ The API exposes `/ready` separately from `/health`. In AutoCAD mode, both endpoi
 AutoCAD readiness requires `acad2022.cfg` beside the configured Core Console
 executable and a trusted base DWG/DWT path. The bridge copies that base drawing
 into a fresh isolated job directory before launching Core Console.
+`TEYPDFCAD_AUTOCAD_PDFIMPORT_SCALE` defaults to `1`; use another positive
+invariant value only for a fixture whose PDF coordinate contract requires it.
 
 The bounded queue uses fail-fast backpressure. When `TEYPDFCAD_QUEUE_CAPACITY` pending jobs are already buffered, new submissions receive `429 queue_full` instead of holding an HTTP request open while waiting for a worker.
 

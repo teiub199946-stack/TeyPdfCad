@@ -30,7 +30,8 @@ public sealed class AutoCadLaunchPlanTests
         var lines = AutoCadLaunchPlan.CreateScriptLines(
             @"C:\plugin\TeyPdfCad.AutoCAD.dll",
             @"C:\work\input.pdf",
-            @"C:\work\result.dwg");
+            @"C:\work\result.dwg",
+            25.4);
 
         Assert.Contains("_F", lines);
         Assert.DoesNotContain("F", lines);
@@ -42,5 +43,26 @@ public sealed class AutoCadLaunchPlanTests
         Assert.True(complete > save);
         Assert.DoesNotContain("_.QUIT", lines);
         Assert.DoesNotContain("Y", lines);
+    }
+
+    [Theory]
+    [InlineData(null, 1d)]
+    [InlineData("", 1d)]
+    [InlineData("25.4", 25.4d)]
+    public void Import_scale_uses_safe_default_and_invariant_configuration(
+        string? configured,
+        double expected)
+    {
+        Assert.Equal(expected, AutoCadLaunchPlan.ParseImportScale(configured), 12);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("not-a-number")]
+    public void Import_scale_rejects_invalid_values(string configured)
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => AutoCadLaunchPlan.ParseImportScale(configured));
     }
 }

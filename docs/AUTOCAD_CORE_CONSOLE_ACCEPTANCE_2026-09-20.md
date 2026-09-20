@@ -1,6 +1,6 @@
 # AutoCAD Core Console Acceptance
 
-Date: 2026-09-19
+Date: 2026-09-20
 
 ## Environment
 
@@ -54,6 +54,32 @@ ACadSharp reopened the saved DWG and reported:
 This proves the automatic path:
 
 `PDF -> AutoCAD Core Console PDFIMPORT -> TeyPdfCad reconstruction -> native DIMENSION -> saved DWG -> independent read-back`.
+
+## Clean semantic output gate
+
+The same fixture was converted with `preserveSourceGeometry=false`. Source
+objects were erased only after native-dimension validation succeeded.
+Independent read-back reported:
+
+- total Model Space entities: 1;
+- `DimensionLinear`: 1;
+- native measurement: `5200.000888888887`;
+- source polylines: 0;
+- source text: 0;
+- DWG SHA-256:
+  `D087FF9921633816BC94843221C3C0409BE5985773E176E36B9B67B406D0C071`.
+
+## PDFIMPORT scale contract
+
+PDFIMPORT scale is input-dependent and is therefore explicit:
+
+- the generated ReportLab control fixture requires
+  `TEYPDFCAD_AUTOCAD_PDFIMPORT_SCALE=25.4`;
+- production default is `1`;
+- the real A3 PDF at scale `1` produced extents approximately
+  `41999.67 x 29700.45` drawing units, confirming the known contract of
+  approximately `100 drawing units/mm`;
+- applying `25.4` globally would corrupt real drawing scale and is prohibited.
 
 It does not prove universal conversion quality for arbitrary PDFs. Real drawing
 acceptance, SPDS template extraction, geometry normalization and performance

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace TeyPdfCad.AutoCAD.Bridge;
@@ -20,7 +21,8 @@ internal sealed record AutoCadLaunchPlan(IReadOnlyList<string> Arguments)
     public static IReadOnlyList<string> CreateScriptLines(
         string pluginDll,
         string inputPdf,
-        string outputDwg)
+        string outputDwg,
+        double importScale)
     {
         static string Quote(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
 
@@ -30,7 +32,8 @@ internal sealed record AutoCadLaunchPlan(IReadOnlyList<string> Arguments)
             "_.CMDECHO", "1",
             "_.SECURELOAD", "0",
             "_.NETLOAD", Quote(pluginDll),
-            "_.-PDFIMPORT", "_F", Quote(inputPdf), "1", "0,0", "25.4", "0",
+            "_.-PDFIMPORT", "_F", Quote(inputPdf), "1", "0,0",
+            importScale.ToString("R", CultureInfo.InvariantCulture), "0",
             "_.TEYPDFDUMPALL",
             "_.TEYPDFRECONSTRUCTALL",
             "_.SAVEAS", "2018", Quote(outputDwg),
@@ -42,9 +45,30 @@ internal sealed record AutoCadLaunchPlan(IReadOnlyList<string> Arguments)
         string path,
         string pluginDll,
         string inputPdf,
-        string outputDwg)
+        string outputDwg,
+        double importScale)
         => File.WriteAllLines(
             path,
-            CreateScriptLines(pluginDll, inputPdf, outputDwg),
+            CreateScriptLines(pluginDll, inputPdf, outputDwg, importScale),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+    public static double ParseImportScale(string? configured)
+    {
+        if (string.IsNullOrWhiteSpace(configured))
+            return 1d;
+
+        if (!double.TryParse(
+                configured.Trim(),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var scale)
+            || !double.IsFinite(scale)
+            || scale <= 0d)
+        {
+            throw new InvalidOperationException(
+                "TEYPDFCAD_AUTOCAD_PDFIMPORT_SCALE must be a positive invariant number.");
+        }
+
+        return scale;
+    }
 }

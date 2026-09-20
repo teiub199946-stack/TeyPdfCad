@@ -11,6 +11,8 @@ internal static class AutoCadExecutor
         var coreConsole = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_CORE_CONSOLE");
         var pluginDll = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_PLUGIN_DLL");
         var baseDrawing = Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_BASE_DWG");
+        var importScale = AutoCadLaunchPlan.ParseImportScale(
+            Environment.GetEnvironmentVariable("TEYPDFCAD_AUTOCAD_PDFIMPORT_SCALE"));
         if (string.IsNullOrWhiteSpace(coreConsole)
             || string.IsNullOrWhiteSpace(pluginDll)
             || string.IsNullOrWhiteSpace(baseDrawing))
@@ -58,7 +60,7 @@ internal static class AutoCadExecutor
             File.Copy(request.InputPath, inputPdf, overwrite: true);
             File.Copy(baseDrawing, inputDrawing, overwrite: true);
             Directory.CreateDirectory(isolatedUserData);
-            AutoCadLaunchPlan.WriteScript(script, pluginDll, inputPdf, outputDwg);
+            AutoCadLaunchPlan.WriteScript(script, pluginDll, inputPdf, outputDwg, importScale);
 
             var info = new ProcessStartInfo
             {

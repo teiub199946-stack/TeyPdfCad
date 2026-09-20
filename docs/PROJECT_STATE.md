@@ -1,6 +1,6 @@
 # TeyPdfCad — verified project state
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 This file records verified engineering facts and near-term priorities. It is intended to be the durable project-memory checkpoint for work across chats and branches. Claims belong here only after direct evidence or CI evidence exists.
 
@@ -14,7 +14,7 @@ Current temporary pipeline:
 
 Semantic Core must remain independent of the AutoCAD host so PDFIMPORT can later be replaced by a direct PDF primitive reader.
 
-## Automated Core Console E2E proof — 2026-09-19
+## Automated Core Console E2E proof — 2026-09-20
 
 The AutoCAD 2022 Core Console runtime blocker is closed for the controlled
 fixture path. `acad2022.cfg` is available beside `accoreconsole.exe`; the
@@ -32,9 +32,20 @@ the result:
 - 1 source `MText`;
 - no dimension text override was required.
 
-Evidence is recorded in `docs/AUTOCAD_CORE_CONSOLE_ACCEPTANCE_2026-09-19.md`.
+Evidence is recorded in `docs/AUTOCAD_CORE_CONSOLE_ACCEPTANCE_2026-09-20.md`.
 
-## SPDS template runtime proof — 2026-09-19
+The clean-output variant was also verified with
+`preserveSourceGeometry=false`: independent read-back found exactly one
+`DimensionLinear`, measurement `5200.000888888887`, and no remaining source
+linework or text.
+
+PDFIMPORT scale is now explicit through
+`TEYPDFCAD_AUTOCAD_PDFIMPORT_SCALE`. It defaults to `1`; the generated
+ReportLab dimension fixture uses `25.4`. The real A3 fixture was recaptured at
+scale `1` with extents approximately `41999.67 x 29700.45`, preserving its
+verified `100 drawing units/mm` contract.
+
+## SPDS template runtime proof — 2026-09-20
 
 The real SPDS template drawing now exports successfully through AutoCAD 2022
 Core Console. All ten A0-A4 orientation variants contain reconstructable
@@ -45,7 +56,17 @@ unsupported.
 The direct A3 test correctly reports `title-block-not-confirmed` because that
 PDF supplies no extractable text. It preserves the original editable geometry
 instead of applying an unsafe template replacement. Evidence is recorded in
-`docs/SPDS_TEMPLATE_ACCEPTANCE_2026-09-19.md`.
+`docs/SPDS_TEMPLATE_ACCEPTANCE_2026-09-20.md`.
+
+The real A3 PDFIMPORT capture is preserved as
+`tests/fixtures/real/autocad2022_a3_vector_titleblock.json`:
+
+- 199 selected AutoCAD objects;
+- 2,005 line primitives;
+- zero text primitives;
+- 173 provenance object groups;
+- 82 compact glyph-like groups;
+- 14 normalized shapes repeated more than once.
 
 ## Verified host target
 
