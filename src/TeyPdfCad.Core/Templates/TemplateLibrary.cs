@@ -32,7 +32,10 @@ public sealed record TemplateGeometryEntity(
     double? TextHeight,
     string? Layer,
     bool IsClosed = false,
-    double RotationRadians = 0d);
+    double RotationRadians = 0d,
+    double? ArcRadius = null,
+    double? StartAngleRadians = null,
+    double? EndAngleRadians = null);
 
 public sealed record TemplatePoint(double X, double Y);
 

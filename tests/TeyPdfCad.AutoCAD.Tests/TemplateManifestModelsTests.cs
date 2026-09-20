@@ -90,6 +90,27 @@ public sealed class TemplateManifestModelsTests
         Assert.Contains("\"textHeight\": 3.5", json);
     }
 
+    [Fact]
+    public void Manifest_serializes_native_arc_parameters()
+    {
+        var entity = new TemplateEntityManifest(
+            "AcDbArc", "A4", 0, 0, 10, 10,
+            [new TemplatePointManifest(5, 5)],
+            Layer: "0",
+            ArcRadius: 5,
+            StartAngleRadians: 0,
+            EndAngleRadians: Math.PI / 2d);
+
+        var json = new TemplateLibraryManifest(
+            "1",
+            [new TemplateBlockManifest("A3-landscape", [entity], [])],
+            [],
+            []).ToJson();
+
+        Assert.Contains("\"arcRadius\": 5.0", json);
+        Assert.Contains("\"endAngleRadians\": 1.5707963267948966", json);
+    }
+
     private sealed record ExpansionNode(string Name, IReadOnlyList<ExpansionNode>? Items = null)
     {
         public IReadOnlyList<ExpansionNode> Children => Items ?? [];

@@ -36,7 +36,10 @@ public sealed record TemplateEntityManifest(
     double? TextHeight = null,
     string? Layer = null,
     bool? IsClosed = null,
-    double? RotationRadians = null);
+    double? RotationRadians = null,
+    double? ArcRadius = null,
+    double? StartAngleRadians = null,
+    double? EndAngleRadians = null);
 
 public sealed record TemplatePointManifest(double X, double Y);
 

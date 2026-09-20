@@ -33,7 +33,8 @@ public sealed class TemplateLibraryManifestReaderTests
           "entities":[
             {"objectClass":"AcDbLine","handle":"A1","minX":1000,"minY":2000,"maxX":1420,"maxY":2000,"points":[{"x":1000,"y":2000},{"x":1420,"y":2000}],"layer":"0"},
             {"objectClass":"AcDbPolyline","handle":"A2","minX":1000,"minY":2000,"maxX":1010,"maxY":2010,"points":[{"x":1000,"y":2000},{"x":1010,"y":2000},{"x":1010,"y":2010}],"layer":"0","isClosed":true},
-            {"objectClass":"AcDbText","handle":"A3","minX":1005,"minY":2005,"maxX":1020,"maxY":2010,"points":[{"x":1005,"y":2005}],"text":"Лист","textHeight":3.5,"rotationRadians":1.5707963267948966,"layer":"0"}
+            {"objectClass":"AcDbText","handle":"A3","minX":1005,"minY":2005,"maxX":1020,"maxY":2010,"points":[{"x":1005,"y":2005}],"text":"Лист","textHeight":3.5,"rotationRadians":1.5707963267948966,"layer":"0"},
+            {"objectClass":"AcDbArc","handle":"A4","minX":1000,"minY":2000,"maxX":1010,"maxY":2010,"points":[{"x":1005,"y":2005}],"arcRadius":5,"startAngleRadians":0,"endAngleRadians":1.5707963267948966,"layer":"0"}
           ],
           "attributes":[{"tag":"SHEET","prompt":"Лист","defaultValue":"1"}]
         }], "styles":[], "unsupportedEntityClasses":[] }
@@ -47,6 +48,8 @@ public sealed class TemplateLibraryManifestReaderTests
         Assert.Equal(new TemplatePoint(1000, 2000), block.Origin);
         Assert.True(block.Entities[1].IsClosed);
         Assert.Equal(Math.PI / 2d, block.Entities[2].RotationRadians, 12);
+        Assert.Equal(5d, block.Entities[3].ArcRadius!.Value, 12);
+        Assert.Equal(Math.PI / 2d, block.Entities[3].EndAngleRadians!.Value, 12);
         Assert.Equal("SHEET", Assert.Single(block.Attributes).Tag);
         var sheet = Assert.Single(library.Sheets);
         Assert.Equal(TeyPdfCad.Core.Sheets.StandardSheetFormat.A3, sheet.Format);

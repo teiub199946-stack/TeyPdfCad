@@ -116,6 +116,43 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_preserves_template_arc_as_native_arc()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var document = new VectorPdfDocument([page]);
+        var library = new TemplateLibrary([], [new TemplateBlockDefinition(
+            "A3-landscape",
+            [new TemplateGeometryEntity(
+                "AcDbArc",
+                "A1",
+                [new TemplatePoint(15, 25)],
+                null,
+                null,
+                "0",
+                ArcRadius: 5,
+                StartAngleRadians: 0,
+                EndAngleRadians: Math.PI / 2d)],
+            [],
+            new TemplatePoint(10, 20))]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            templateLibrary: library,
+            templateSelectionsByPage: new Dictionary<int, TemplateSelection>
+            {
+                [1] = new(true, "A3-landscape", "test")
+            })));
+
+        var arc = Assert.Single(Assert.Single(
+            drawing.Entities.OfType<ACadSharp.Entities.Insert>()).Block.Entities.OfType<ACadSharp.Entities.Arc>());
+        Assert.Equal(5d, arc.Center.X, 6);
+        Assert.Equal(5d, arc.Center.Y, 6);
+        Assert.Equal(5d, arc.Radius, 6);
+        Assert.Equal(Math.PI / 2d, arc.EndAngle, 12);
+    }
+
+    [Fact]
     public void Writer_emits_high_confidence_axis_as_editable_named_block()
     {
         var page = new VectorPdfPage(1, 72, 72, 0, []);

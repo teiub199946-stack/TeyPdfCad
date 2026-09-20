@@ -1,6 +1,6 @@
 # TeyPdfCad — verified project state
 
-Last updated: 2026-09-20
+Last updated: 2026-09-19
 
 This file records verified engineering facts and near-term priorities. It is intended to be the durable project-memory checkpoint for work across chats and branches. Claims belong here only after direct evidence or CI evidence exists.
 
@@ -14,7 +14,7 @@ Current temporary pipeline:
 
 Semantic Core must remain independent of the AutoCAD host so PDFIMPORT can later be replaced by a direct PDF primitive reader.
 
-## Automated Core Console E2E proof — 2026-09-20
+## Automated Core Console E2E proof — 2026-09-19
 
 The AutoCAD 2022 Core Console runtime blocker is closed for the controlled
 fixture path. `acad2022.cfg` is available beside `accoreconsole.exe`; the
@@ -32,7 +32,20 @@ the result:
 - 1 source `MText`;
 - no dimension text override was required.
 
-Evidence is recorded in `docs/AUTOCAD_CORE_CONSOLE_ACCEPTANCE_2026-09-20.md`.
+Evidence is recorded in `docs/AUTOCAD_CORE_CONSOLE_ACCEPTANCE_2026-09-19.md`.
+
+## SPDS template runtime proof — 2026-09-19
+
+The real SPDS template drawing now exports successfully through AutoCAD 2022
+Core Console. All ten A0-A4 orientation variants contain reconstructable
+polyline and MText geometry; `mcsDbObjectFormat` is fully expanded. Native arc
+parameters are preserved. Only non-printing `AcDbPoint` helpers remain
+unsupported.
+
+The direct A3 test correctly reports `title-block-not-confirmed` because that
+PDF supplies no extractable text. It preserves the original editable geometry
+instead of applying an unsafe template replacement. Evidence is recorded in
+`docs/SPDS_TEMPLATE_ACCEPTANCE_2026-09-19.md`.
 
 ## Verified host target
 

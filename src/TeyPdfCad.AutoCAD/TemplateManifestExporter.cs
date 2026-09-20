@@ -92,7 +92,10 @@ public sealed class TemplateManifestExporter
                         GetTextHeight(expandedEntity),
                         expandedEntity.Layer,
                         GetIsClosed(expandedEntity),
-                        GetRotationRadians(expandedEntity)));
+                        GetRotationRadians(expandedEntity),
+                        GetArcRadius(expandedEntity),
+                        GetStartAngleRadians(expandedEntity),
+                        GetEndAngleRadians(expandedEntity)));
                     },
                     expandedEntity => expandedEntity.Dispose());
             }
@@ -106,7 +109,7 @@ public sealed class TemplateManifestExporter
     }
 
     private static bool IsReconstructable(Entity entity)
-        => entity is Line or Polyline or Circle or DBText or MText;
+        => entity is Line or Polyline or Circle or Arc or DBText or MText;
 
     private static IReadOnlyList<Entity> ExplodeSafely(Entity entity)
     {
@@ -183,6 +186,8 @@ public sealed class TemplateManifestExporter
                     new TemplatePointManifest(circle.Center.X, circle.Center.Y),
                     new TemplatePointManifest(circle.Center.X + circle.Radius, circle.Center.Y)
                 ];
+            case Arc arc:
+                return [new TemplatePointManifest(arc.Center.X, arc.Center.Y)];
             case DBText text:
                 return [new TemplatePointManifest(text.Position.X, text.Position.Y)];
             case MText text:
@@ -218,4 +223,13 @@ public sealed class TemplateManifestExporter
             MText text => text.Rotation,
             _ => null
         };
+
+    private static double? GetArcRadius(Entity entity)
+        => entity is Arc arc ? arc.Radius : null;
+
+    private static double? GetStartAngleRadians(Entity entity)
+        => entity is Arc arc ? arc.StartAngle : null;
+
+    private static double? GetEndAngleRadians(Entity entity)
+        => entity is Arc arc ? arc.EndAngle : null;
 }

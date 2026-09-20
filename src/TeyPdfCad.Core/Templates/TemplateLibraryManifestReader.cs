@@ -25,7 +25,10 @@ public sealed class TemplateLibraryManifestReader
                     entity.TextHeight,
                     entity.Layer,
                     entity.IsClosed ?? false,
-                    entity.RotationRadians ?? 0d)).ToArray(),
+                    entity.RotationRadians ?? 0d,
+                    entity.ArcRadius,
+                    entity.StartAngleRadians,
+                    entity.EndAngleRadians)).ToArray(),
                 (block.Attributes ?? []).Select(attribute => new TemplateAttributeDefinition(
                     attribute.Tag ?? string.Empty,
                     attribute.Prompt ?? string.Empty,
@@ -85,6 +88,9 @@ public sealed class TemplateLibraryManifestReader
         public string? Layer { get; set; }
         public bool? IsClosed { get; set; }
         public double? RotationRadians { get; set; }
+        public double? ArcRadius { get; set; }
+        public double? StartAngleRadians { get; set; }
+        public double? EndAngleRadians { get; set; }
     }
 
     private sealed class PointDto { public double X { get; set; } public double Y { get; set; } }

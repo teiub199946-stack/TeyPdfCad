@@ -53,7 +53,7 @@ public sealed class ConversionPipeline
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
-                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition), null, cancellationToken);
+                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition, templateSelections), null, cancellationToken);
                 return new ConversionResult(ConversionOutcome.UnsupportedVectorContent, reportPath, null);
             }
 
@@ -83,7 +83,7 @@ public sealed class ConversionPipeline
             warnings.AddRange(document.Pages
                 .SelectMany(page => page.Diagnostics.Select(diagnostic => $"Page {page.Number}: {diagnostic.Message}")));
             var complete = warnings.Count == 0;
-            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition), readBackSummary, cancellationToken);
+            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, templateSelections), readBackSummary, cancellationToken);
             return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
         }
         catch (OperationCanceledException) { throw; }
@@ -166,7 +166,8 @@ public sealed class ConversionPipeline
     private static IReadOnlyList<PageReport> CreatePageReports(
         TeyPdfCad.Core.Documents.VectorPdfDocument document,
         IReadOnlyDictionary<int, HatchRecognitionResult> hatchRecognition,
-        IReadOnlyDictionary<int, PageSemanticSummary> semanticRecognition)
+        IReadOnlyDictionary<int, PageSemanticSummary> semanticRecognition,
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelections = null)
         => document.Pages.Select(page => new PageReport(
             page.Number,
             page.WidthMillimetres,
@@ -180,6 +181,17 @@ public sealed class ConversionPipeline
             semanticRecognition[page.Number].AxisCandidateCount,
             semanticRecognition[page.Number].LeaderCandidateCount,
             semanticRecognition[page.Number].Warnings,
+            templateSelections is not null
+                && templateSelections.TryGetValue(page.Number, out var selection)
+                && selection.IsConfirmed,
+            templateSelections is not null
+                && templateSelections.TryGetValue(page.Number, out var namedSelection)
+                ? namedSelection.TemplateName
+                : null,
+            templateSelections is not null
+                && templateSelections.TryGetValue(page.Number, out var reasonSelection)
+                ? reasonSelection.Reason
+                : "template-manifest-not-supplied",
             page.Diagnostics,
             page.Entities.Count > 0 && page.Diagnostics.Count == 0)).ToArray();
 
@@ -279,6 +291,9 @@ public sealed class ConversionPipeline
         int AxisCandidateCount,
         int LeaderCandidateCount,
         IReadOnlyList<string> SemanticWarnings,
+        bool TemplateSelected,
+        string? TemplateName,
+        string TemplateReason,
         IReadOnlyList<TeyPdfCad.Core.Documents.VectorPageDiagnostic> Diagnostics,
         bool Complete);
 

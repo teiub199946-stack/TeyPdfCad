@@ -281,6 +281,21 @@ public sealed class AcadSharpDwgWriter
                     styles.Apply(circle, new VectorStyle(entity.Layer ?? "0"));
                     block.Entities.Add(circle);
                 }
+                else if (entity.ObjectClass == "AcDbArc"
+                    && entity.Points.Count == 1
+                    && entity.ArcRadius.HasValue
+                    && entity.StartAngleRadians.HasValue
+                    && entity.EndAngleRadians.HasValue)
+                {
+                    var center = entity.Points[0];
+                    var arc = new Arc(
+                        new XYZ(center.X - origin.X, center.Y - origin.Y, 0d),
+                        entity.ArcRadius.Value,
+                        entity.StartAngleRadians.Value,
+                        entity.EndAngleRadians.Value);
+                    styles.Apply(arc, new VectorStyle(entity.Layer ?? "0"));
+                    block.Entities.Add(arc);
+                }
                 else if (entity.Text is not null && entity.Points.Count > 0)
                 {
                     var text = new TextEntity

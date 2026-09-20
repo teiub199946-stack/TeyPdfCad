@@ -99,6 +99,35 @@ public sealed class ConversionPipelineTests
     }
 
     [Fact]
+    public async Task Pipeline_reports_why_a_template_was_not_selected()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "source.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        var manifest = Path.Combine(directory, "templates.json");
+        await File.WriteAllBytesAsync(input, CreateMinimalPdf("0 0 m 10 10 l S"));
+        await File.WriteAllTextAsync(manifest, """
+        { "schemaVersion":"1", "blocks":[{
+          "name":"A3-landscape",
+          "entities":[{"objectClass":"AcDbLine","handle":"A1","points":[{"x":0,"y":0},{"x":420,"y":0}]}],
+          "attributes":[]
+        }] }
+        """);
+
+        var result = await new ConversionPipeline().ConvertAsync(
+            input, output, report, default, manifest);
+
+        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.False(page.GetProperty("templateSelected").GetBoolean());
+        Assert.Equal("title-block-not-confirmed", page.GetProperty("templateReason").GetString());
+        Assert.Equal(JsonValueKind.Null, page.GetProperty("templateName").ValueKind);
+    }
+
+    [Fact]
     public async Task Pipeline_reports_and_writes_a_confirmed_pattern_hatch()
     {
         var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
