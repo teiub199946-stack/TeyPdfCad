@@ -15,25 +15,7 @@ public sealed class TemplateLibraryManifestReader
 
         var blocks = (manifest.Blocks ?? [])
             .Where(block => !string.IsNullOrWhiteSpace(block.Name))
-            .Select(block => new TemplateBlockDefinition(
-                block.Name!,
-                (block.Entities ?? []).Select(entity => new TemplateGeometryEntity(
-                    entity.ObjectClass ?? string.Empty,
-                    entity.Handle ?? string.Empty,
-                    (entity.Points ?? []).Select(point => new TemplatePoint(point.X, point.Y)).ToArray(),
-                    entity.Text,
-                    entity.TextHeight,
-                    entity.Layer,
-                    entity.IsClosed ?? false,
-                    entity.RotationRadians ?? 0d,
-                    entity.ArcRadius,
-                    entity.StartAngleRadians,
-                    entity.EndAngleRadians)).ToArray(),
-                (block.Attributes ?? []).Select(attribute => new TemplateAttributeDefinition(
-                    attribute.Tag ?? string.Empty,
-                    attribute.Prompt ?? string.Empty,
-                    attribute.DefaultValue ?? string.Empty)).ToArray(),
-                block.Origin is null ? null : new TemplatePoint(block.Origin.X, block.Origin.Y)))
+            .Select(CreateBlock)
             .ToArray();
         var sheets = blocks
             .Select(TryInferSheet)
@@ -41,6 +23,31 @@ public sealed class TemplateLibraryManifestReader
             .Cast<TemplateSheet>()
             .ToArray();
         return new TemplateLibrary(sheets, blocks);
+    }
+
+    private static TemplateBlockDefinition CreateBlock(BlockDto block)
+    {
+        var entities = (block.Entities ?? []).Select(entity => new TemplateGeometryEntity(
+            entity.ObjectClass ?? string.Empty,
+            entity.Handle ?? string.Empty,
+            (entity.Points ?? []).Select(point => new TemplatePoint(point.X, point.Y)).ToArray(),
+            entity.Text,
+            entity.TextHeight,
+            entity.Layer,
+            entity.IsClosed ?? false,
+            entity.RotationRadians ?? 0d,
+            entity.ArcRadius,
+            entity.StartAngleRadians,
+            entity.EndAngleRadians)).ToArray();
+        var attributes = (block.Attributes ?? []).Select(attribute => new TemplateAttributeDefinition(
+            attribute.Tag ?? string.Empty,
+            attribute.Prompt ?? string.Empty,
+            attribute.DefaultValue ?? string.Empty)).ToArray();
+        return new TemplateBlockDefinition(
+            block.Name!,
+            entities,
+            attributes,
+            ResolveOrigin(block, entities));
     }
 
     private static TemplateSheet? TryInferSheet(TemplateBlockDefinition block)
@@ -63,6 +70,32 @@ public sealed class TemplateLibraryManifestReader
                 : SheetOrientation.Unknown;
         return orientation == SheetOrientation.Unknown ? null : new TemplateSheet(block.Name, format, orientation);
     }
+
+    private static TemplatePoint? ResolveOrigin(
+        BlockDto block,
+        IReadOnlyList<TemplateGeometryEntity> entities)
+    {
+        if (!IsStandardSheetBlockName(block.Name))
+            return block.Origin is null ? null : new TemplatePoint(block.Origin.X, block.Origin.Y);
+
+        var points = entities.SelectMany(entity => entity.Points).ToArray();
+        if (points.Length == 0)
+            return block.Origin is null ? null : new TemplatePoint(block.Origin.X, block.Origin.Y);
+
+        if (block.Origin is { } origin
+            && (Math.Abs(origin.X) > 1e-9 || Math.Abs(origin.Y) > 1e-9))
+            return new TemplatePoint(origin.X, origin.Y);
+
+        return new TemplatePoint(
+            points.Min(point => point.X),
+            points.Min(point => point.Y));
+    }
+
+    private static bool IsStandardSheetBlockName(string? name)
+        => !string.IsNullOrWhiteSpace(name)
+            && name!.IndexOf("landscape", StringComparison.OrdinalIgnoreCase) >= 0
+            || !string.IsNullOrWhiteSpace(name)
+                && name!.IndexOf("portrait", StringComparison.OrdinalIgnoreCase) >= 0;
 
     private sealed class ManifestDto
     {

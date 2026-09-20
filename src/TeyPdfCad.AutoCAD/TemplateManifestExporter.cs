@@ -103,10 +103,39 @@ public sealed class TemplateManifestExporter
                 block.Name,
                 entities,
                 attributes,
-                new TemplatePointManifest(block.Origin.X, block.Origin.Y)));
+                ResolveBlockOrigin(
+                    block.Name,
+                    block.Origin.X,
+                    block.Origin.Y,
+                    entities)));
         }
         return blocks.OrderBy(block => block.Name, StringComparer.Ordinal).ToArray();
     }
+
+    internal static TemplatePointManifest ResolveBlockOrigin(
+        string blockName,
+        double blockOriginX,
+        double blockOriginY,
+        IReadOnlyList<TemplateEntityManifest> entities)
+    {
+        if (!IsStandardSheetBlockName(blockName)
+            || Math.Abs(blockOriginX) > 1e-9
+            || Math.Abs(blockOriginY) > 1e-9)
+            return new TemplatePointManifest(blockOriginX, blockOriginY);
+
+        var points = entities
+            .SelectMany(entity => entity.Points ?? [])
+            .ToArray();
+        return points.Length == 0
+            ? new TemplatePointManifest(blockOriginX, blockOriginY)
+            : new TemplatePointManifest(
+                points.Min(point => point.X),
+                points.Min(point => point.Y));
+    }
+
+    private static bool IsStandardSheetBlockName(string name)
+        => name.IndexOf("landscape", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("portrait", StringComparison.OrdinalIgnoreCase) >= 0;
 
     private static bool IsReconstructable(Entity entity)
         => entity is Line or Polyline or Circle or Arc or DBText or MText;

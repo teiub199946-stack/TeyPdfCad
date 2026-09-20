@@ -6,6 +6,29 @@ namespace TeyPdfCad.AutoCAD.Tests;
 public sealed class TemplateManifestModelsTests
 {
     [Fact]
+    public void Sheet_origin_uses_geometry_minimum_when_block_origin_is_zero()
+    {
+        var entities = new[]
+        {
+            new TemplateEntityManifest(
+                "AcDbLine", "A1", 570401.7, 35136.4, 570821.7, 35136.4,
+                [new TemplatePointManifest(570401.7, 35136.4), new TemplatePointManifest(570821.7, 35136.4)]),
+            new TemplateEntityManifest(
+                "AcDbLine", "A2", 570401.7, 35136.4, 570401.7, 35433.4,
+                [new TemplatePointManifest(570401.7, 35136.4), new TemplatePointManifest(570401.7, 35433.4)])
+        };
+
+        var origin = TemplateManifestExporter.ResolveBlockOrigin(
+            "A3-landscape",
+            0,
+            0,
+            entities);
+
+        Assert.Equal(570401.7, origin.X, 6);
+        Assert.Equal(35136.4, origin.Y, 6);
+    }
+
+    [Fact]
     public void Expansion_flattens_nested_custom_entities_to_supported_leaf_geometry()
     {
         var root = new ExpansionNode("mcsDbObjectFormat",

@@ -125,11 +125,34 @@ public sealed class ConversionPipeline
         var detection = StandardSheetDetector.Detect(page.WidthMillimetres, page.HeightMillimetres);
         var sheet = new SheetMetadata(page.WidthMillimetres, page.HeightMillimetres, detection.Format, detection.Orientation);
         var scene = new PrimitiveScene { Sheet = sheet };
-        scene.Lines.AddRange(page.Entities.OfType<VectorLine>().Select(line => new LinePrimitive(
-            line.Start,
-            line.End,
-            line.Style.SourceLayer,
-            [line.SourceId])));
+        foreach (var line in page.Entities.OfType<VectorLine>())
+        {
+            scene.Lines.Add(new LinePrimitive(
+                line.Start,
+                line.End,
+                line.Style.SourceLayer,
+                [line.SourceId]));
+        }
+        foreach (var polyline in page.Entities.OfType<VectorPolyline>())
+        {
+            for (var index = 1; index < polyline.Vertices.Count; index++)
+            {
+                scene.Lines.Add(new LinePrimitive(
+                    polyline.Vertices[index - 1],
+                    polyline.Vertices[index],
+                    polyline.Style.SourceLayer,
+                    [polyline.SourceId]));
+            }
+
+            if (polyline.IsClosed && polyline.Vertices.Count > 2)
+            {
+                scene.Lines.Add(new LinePrimitive(
+                    polyline.Vertices[^1],
+                    polyline.Vertices[0],
+                    polyline.Style.SourceLayer,
+                    [polyline.SourceId]));
+            }
+        }
         scene.Texts.AddRange(page.Entities.OfType<VectorText>().Select(text => new TextPrimitive(
             text.Value,
             text.InsertionPoint,

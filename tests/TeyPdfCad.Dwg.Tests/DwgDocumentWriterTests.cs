@@ -75,7 +75,7 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
-    public void Writer_preserves_template_polyline_closure_and_text_rotation()
+    public void Writer_preserves_template_polyline_closure_without_static_text_duplication()
     {
         var page = new VectorPdfPage(1, 72, 72, 0, []);
         var document = new VectorPdfDocument([page]);
@@ -112,7 +112,39 @@ public sealed class DwgDocumentWriterTests
 
         var block = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>()).Block;
         Assert.True(Assert.Single(block.Entities.OfType<ACadSharp.Entities.LwPolyline>()).IsClosed);
-        Assert.Equal(Math.PI / 2d, Assert.Single(block.Entities.OfType<ACadSharp.Entities.TextEntity>()).Rotation, 12);
+        Assert.Empty(block.Entities.OfType<ACadSharp.Entities.TextEntity>());
+    }
+
+    [Fact]
+    public void Writer_does_not_duplicate_template_mtext_when_source_text_is_preserved()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("frame", new Point2(0, 0), new Point2(10, 0), new VectorStyle()),
+            new VectorText("value", "Исходное значение", new Point2(5, 5), 3, new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var library = new TemplateLibrary([], [new TemplateBlockDefinition(
+            "A3-landscape",
+            [
+                new TemplateGeometryEntity("AcDbLine", "F1", [new TemplatePoint(0, 0), new TemplatePoint(10, 0)], null, null, "0"),
+                new TemplateGeometryEntity("AcDbMText", "T1", [new TemplatePoint(5, 5)], "Статическая подпись", 3, "0")
+            ],
+            [])]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            templateLibrary: library,
+            templateSelectionsByPage: new Dictionary<int, TemplateSelection>
+            {
+                [1] = new(true, "A3-landscape", "test", ["frame"])
+            })));
+
+        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Empty(insert.Block.Entities.OfType<ACadSharp.Entities.TextEntity>());
+        Assert.Equal("Исходное значение", Assert.Single(
+            drawing.Entities.OfType<ACadSharp.Entities.TextEntity>()).Value);
     }
 
     [Fact]

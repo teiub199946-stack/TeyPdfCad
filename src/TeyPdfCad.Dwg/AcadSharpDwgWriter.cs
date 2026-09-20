@@ -298,19 +298,9 @@ public sealed class AcadSharpDwgWriter
                 }
                 else if (entity.Text is not null && entity.Points.Count > 0)
                 {
-                    var text = new TextEntity
-                    {
-                        Value = entity.Text,
-                        InsertPoint = new XYZ(
-                            entity.Points[0].X - origin.X,
-                            entity.Points[0].Y - origin.Y,
-                            0d),
-                        Height = entity.TextHeight ?? 2.5d,
-                        Rotation = entity.RotationRadians,
-                        Style = styles.GetPdfTextStyle()
-                    };
-                    styles.Apply(text, new VectorStyle(entity.Layer ?? "0"));
-                    block.Entities.Add(text);
+                    // Template MText is static reference content. Source PDF text
+                    // remains authoritative until field mapping is verified, so
+                    // do not duplicate it inside the inserted template block.
                 }
             }
             document.BlockRecords.Add(block);

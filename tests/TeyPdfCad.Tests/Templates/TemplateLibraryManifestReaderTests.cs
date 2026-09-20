@@ -6,6 +6,27 @@ namespace TeyPdfCad.Tests.Templates;
 public sealed class TemplateLibraryManifestReaderTests
 {
     [Fact]
+    public void Infers_sheet_origin_from_geometry_when_legacy_manifest_origin_is_zero()
+    {
+        const string json = """
+        { "schemaVersion":"1", "blocks":[{
+          "name":"A3-landscape",
+          "origin":{"x":0,"y":0},
+          "entities":[
+            {"objectClass":"AcDbLine","handle":"A1","points":[{"x":570401.7,"y":35136.4},{"x":570821.7,"y":35136.4}]},
+            {"objectClass":"AcDbLine","handle":"A2","points":[{"x":570401.7,"y":35136.4},{"x":570401.7,"y":35433.4}]}
+          ],
+          "attributes":[]
+        }] }
+        """;
+
+        var block = Assert.Single(new TemplateLibraryManifestReader().Read(json).Blocks);
+
+        Assert.Equal(570401.7, block.EffectiveOrigin.X, 6);
+        Assert.Equal(35136.4, block.EffectiveOrigin.Y, 6);
+    }
+
+    [Fact]
     public void Does_not_register_named_sheet_when_exported_block_has_no_reconstructable_geometry()
     {
         const string json = """
