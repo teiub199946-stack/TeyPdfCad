@@ -25,7 +25,9 @@ internal sealed class AcadSharpStyleCatalog
 
         if (style.RgbColor is { } rgbColor)
         {
-            entity.Color = Color.FromTrueColor((uint)rgbColor);
+            entity.Color = rgbColor == 0
+                ? new Color(7)
+                : Color.FromTrueColor((uint)rgbColor);
         }
 
         if (style.DashPatternPoints is { Count: > 0 } dashPattern)

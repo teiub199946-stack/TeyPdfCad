@@ -324,6 +324,26 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_maps_pdf_black_to_adaptive_autocad_color_seven()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine(
+                "black",
+                new Point2(0, 0),
+                new Point2(25.4, 0),
+                new VectorStyle(RgbColor: 0x000000))]);
+        var document = new VectorPdfDocument([page]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document))));
+
+        var line = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.False(line.Color.IsTrueColor);
+        Assert.Equal(7, line.Color.Index);
+    }
+
+    [Fact]
     public void Writer_emits_source_text_as_editable_dwg_text()
     {
         var style = new VectorStyle(SourceLayer: "ТЕКСТ", RgbColor: 0x112233);
