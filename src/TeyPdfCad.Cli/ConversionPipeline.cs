@@ -257,7 +257,7 @@ public sealed class ConversionPipeline
                 ? reasonSelection.Reason
                 : "template-manifest-not-supplied",
             page.Diagnostics,
-            replacementPlans[page.Number].SuppressedSourceIds.Count,
+            0,
             replacementPlans[page.Number].PreservedSourceIds.Count,
             replacementPlans[page.Number].DeferredCandidateKeys.Count,
             replacementPlans[page.Number].SourceCoverageMap.Count,
