@@ -130,6 +130,51 @@ public sealed class P0SourceReplacementRedTests
             && residual.Severity == ReplacementResidualSeverity.High);
     }
 
+
+    [Fact]
+    public void Dimension_MissingArrowGeometry_IsDeferred_NoEligibleSources()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("dim", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorLine("ext", new(0, 0), new(0, 5), new VectorStyle()),
+            new VectorText("text", "10", new(5, 2), 2.5, new VectorStyle())
+        };
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new(0, 0),
+            new(10, 0),
+            new(5, 2),
+            10,
+            10,
+            1,
+            0.95,
+            "10",
+            0,
+            ["dim", "ext", "text"])
+        {
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Dimensions = [candidate] },
+            pageNumber: 1);
+
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Equal(
+            new[] { "dim", "ext", "text" },
+            plan.PreservedSourceIds.OrderBy(value => value));
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims
+            && residual.Severity == ReplacementResidualSeverity.High);
+    }
+
     [Fact]
     public void SameSource_TwoRoles_SameCandidate_Violation()
     {
