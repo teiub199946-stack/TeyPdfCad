@@ -201,7 +201,11 @@ public sealed class LinearDimensionRecognizer
             NumericCompat.Clamp(confidence, 0.0, 1.0),
             text.Value,
             probe.Value.ArrowEvidence,
-            probe.Value.SourcePrimitiveIds) { RotationRadians = probe.Value.RotationRadians };
+            probe.Value.SourcePrimitiveIds)
+        {
+            RotationRadians = probe.Value.RotationRadians,
+            SourceClaims = probe.Value.SourceClaims
+        };
     }
 
     private static GeometryProbe? TryAnalyzeGeometry(
@@ -255,11 +259,32 @@ public sealed class LinearDimensionRecognizer
 
         var textScore = 1.0 - NumericCompat.Clamp(textDistance / textTolerance, 0.0, 1.0);
         var arrows = DimensionGeometryAnalysis.ArrowEvidence(scene.Lines, dimensionLine, text.Height, unitDim);
+        var arrowLines = DimensionGeometryAnalysis.FindArrowGeometryLines(
+            scene.Lines,
+            dimensionLine,
+            text.Height,
+            unitDim);
         var provenanceIds = MergeProvenance(
             text.ProvenanceIds,
             dimensionLine.ProvenanceIds,
             ext1.ProvenanceIds,
-            ext2.ProvenanceIds);
+            ext2.ProvenanceIds,
+            arrowLines.SelectMany(line => line.ProvenanceIds).ToArray());
+        var sourceClaims = RecognizerSourceClaimBuilder.FromProvenance(
+                SourceUsageRole.DimensionLine,
+                dimensionLine.ProvenanceIds)
+            .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                SourceUsageRole.ExtensionLine,
+                ext1.ProvenanceIds,
+                ext2.ProvenanceIds))
+            .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                SourceUsageRole.ArrowGeometry,
+                arrowLines.SelectMany(line => line.ProvenanceIds).ToArray()))
+            .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                SourceUsageRole.Text,
+                text.ProvenanceIds))
+            .Distinct()
+            .ToArray();
 
         var angle = Math.Atan2(dimVector.Y, dimVector.X) * 180.0 / Math.PI;
         var normalized = NormalizeAngle(angle);
@@ -273,7 +298,9 @@ public sealed class LinearDimensionRecognizer
             projectedDistance,
             textScore,
             arrows,
-            provenanceIds, Math.Atan2(dimVector.Y, dimVector.X));
+            provenanceIds,
+            sourceClaims,
+            Math.Atan2(dimVector.Y, dimVector.X));
     }
 
     private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
@@ -343,7 +370,9 @@ public sealed class LinearDimensionRecognizer
         double ProjectedDistance,
         double TextScore,
         double ArrowEvidence,
-        IReadOnlyList<string> SourcePrimitiveIds, double RotationRadians);
+        IReadOnlyList<string> SourcePrimitiveIds,
+        IReadOnlyList<RecognizerSourceClaim> SourceClaims,
+        double RotationRadians);
 
     private readonly record struct ScaleRankEntry(double Scale, int Rank);
 }
