@@ -145,7 +145,7 @@ public sealed class ConversionPipelineTests
         var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
         Assert.Equal(0, page.GetProperty("patternHatchCount").GetInt32());
         Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
-        Assert.Contains("hatch-uncertain", page.GetProperty("hatchWarnings").EnumerateArray()
+        Assert.Contains("hatch-uncertain", page.GetProperty("recognitionWarnings").EnumerateArray()
             .Select(value => value.GetString()));
         var drawing = ACadSharp.IO.DwgReader.Read(output);
         Assert.DoesNotContain(drawing.Entities.OfType<ACadSharp.Entities.Hatch>(), hatch => !hatch.IsSolid);
