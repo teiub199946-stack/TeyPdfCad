@@ -156,6 +156,45 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Skewed_extension_line_cannot_supply_missing_second_arrow()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(52, 0),
+            SourceIds: ["dim"]));
+
+        // Start extension is clearly perpendicular.
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, -12),
+            new Point2(0, 1),
+            SourceIds: ["ext-1"]));
+
+        // End extension is deliberately near the shared tolerance boundary:
+        // perpendicular enough to be selected as ExtensionLine, but diagonal
+        // enough that the old arrow detector could reuse it as arrow evidence.
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(54.65, -12),
+            new Point2(51.80, 1),
+            SourceIds: ["ext-2"]));
+
+        // Only one genuine arrow/tick exists.
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-1, -1),
+            new Point2(1, 1),
+            SourceIds: ["arrow-1"]));
+
+        scene.Texts.Add(new TextPrimitive(
+            "5200",
+            new Point2(26, 3),
+            2.5,
+            0,
+            SourceIds: ["text"]));
+
+        Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    [Fact]
     public void Rejects_Number_Next_To_Ordinary_Line_Without_Extension_Lines()
     {
         var scene = new PrimitiveScene();
