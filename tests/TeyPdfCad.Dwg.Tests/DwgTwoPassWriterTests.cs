@@ -377,18 +377,18 @@ public sealed class DwgTwoPassWriterTests
             }
 
             var inventory = new DwgReadBackVerifier().ReadStructuralInventory(path);
-            foreach (var source in result.SourceEmissionSummary.OutputFingerprintCountsBySource)
-            {
-                foreach (var expected in source.Value)
-                {
-                    Assert.True(
-                        inventory.OutputFingerprintCounts.TryGetValue(expected.Key, out var actualCount),
-                        $"On-disk probe is missing source fingerprint for {source.Key}: {expected.Key}");
-                    Assert.True(
-                        actualCount >= expected.Value,
-                        $"On-disk probe count {actualCount} is below source emission count {expected.Value} for {source.Key}.");
-                }
-            }
+            DwgStructuralSanity.ValidateDeclaredSourceEmissionParity(
+                inventory,
+                result.SourceEmissionSummary);
+
+            Assert.Equal(
+                result.SourceEmissionSummary.OutputFingerprintCountsBySource.Keys
+                    .Where(SourceMetadataCodec.CanEncode)
+                    .OrderBy(source => source.PageNumber)
+                    .ThenBy(source => source.SourceId, StringComparer.Ordinal),
+                inventory.SourceFingerprintCountsBySource.Keys
+                    .OrderBy(source => source.PageNumber)
+                    .ThenBy(source => source.SourceId, StringComparer.Ordinal));
         }
         finally
         {
