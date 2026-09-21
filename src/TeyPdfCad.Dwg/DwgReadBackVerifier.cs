@@ -118,7 +118,10 @@ public sealed class DwgReadBackVerifier
                 isVerified,
                 missing.Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
                 duplicates.Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
-                invalid.Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray());
+                invalid.Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray())
+            {
+                SourceEquivalenceComplete = expected.SourceEquivalenceComplete
+            };
         }
 
         return new NativeReadBackVerification(result);
