@@ -1,5 +1,4 @@
 using TeyPdfCad.Core.Documents;
-using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
 using Xunit;
@@ -16,95 +15,212 @@ public sealed class SourceReplacementPlannerTests
             new VectorLine("line", new(0, 0), new(10, 0), new VectorStyle())
         };
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, EmptySemantics());
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, EmptySemantics(), pageNumber: 1);
 
         Assert.Contains("line", plan.PreservedSourceIds);
-        Assert.Empty(plan.SuppressedSourceIds);
+        Assert.Empty(plan.EligibleSourceIds);
         Assert.True(plan.IsFullPassEligible);
     }
 
     [Fact]
-    public void Valid_whole_level_claim_suppresses_line_and_text()
+    public void Valid_explicit_level_claims_make_sources_eligible_but_not_authorized()
     {
         var sources = new VectorEntity[]
         {
             new VectorLine("line", new(0, 0), new(5, 0), new VectorStyle()),
             new VectorText("text", "+3.600", new(6, 0), 2.5, new VectorStyle())
         };
-        var semantics = EmptySemantics() with
+        var level = new LevelCandidate(new(0, 0), new(6, 0), "+3.600", 0.95, ["line", "text"])
         {
-            Levels = [new LevelCandidate(new(0, 0), new(6, 0), "+3.600", 0.95, ["line", "text"])]
+            SourceClaims =
+            [
+                new("line", SourceUsageRole.LevelMarker, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
         };
+        var semantics = EmptySemantics() with { Levels = [level] };
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, pageNumber: 1);
 
-        Assert.Equal(new[] { "line", "text" }, plan.SuppressedSourceIds.OrderBy(x => x));
+        Assert.Equal(new[] { "line", "text" }, plan.EligibleSourceIds.OrderBy(x => x));
         Assert.Empty(plan.Conflicts);
+        Assert.Empty(new SuppressionGate()
+            .Evaluate(plan, new NativeReadBackVerification(
+                new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)))
+            .SuppressSourceIds);
     }
 
     [Fact]
-    public void Unresolved_warning_blocks_suppression_for_same_source()
+    public void Unresolved_claim_defers_candidate_and_preserves_source()
     {
         var sources = new VectorEntity[]
         {
             new VectorLine("line", new(0, 0), new(20, 0), new VectorStyle())
         };
-        var semantics = EmptySemantics() with
+        var axis = new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["line"])
         {
-            Axes = [new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["line"])],
-            Warnings = [new SemanticWarning("axis-low-confidence", "review", ["line"])]
+            SourceClaims =
+            [
+                new("line", SourceUsageRole.AxisGeometry, SourceClaimState.Unresolved, false)
+            ]
         };
-
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
 
         Assert.Contains("line", plan.PreservedSourceIds);
-        Assert.DoesNotContain("line", plan.SuppressedSourceIds);
-        Assert.Contains(plan.Conflicts, conflict => conflict.Reason == ReplacementConflictReason.UnresolvedClaim);
-        Assert.False(plan.IsFullPassEligible);
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims
+            && residual.Severity == ReplacementResidualSeverity.High);
     }
 
     [Fact]
-    public void Partial_provenance_never_suppresses_whole_polyline()
+    public void Partial_claim_never_suppresses_whole_source()
     {
         var sources = new VectorEntity[]
         {
             new VectorPolyline("poly", [new(0, 0), new(10, 0), new(10, 10)], false, new VectorStyle())
         };
-        var semantics = EmptySemantics() with
+        var axis = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["poly#segment:0"])
         {
-            Axes = [new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["poly#segment:0"])]
+            SourceClaims =
+            [
+                new("poly", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, true)
+            ]
         };
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
 
         Assert.Contains("poly", plan.PreservedSourceIds);
-        Assert.Contains(plan.Conflicts, conflict => conflict.Reason == ReplacementConflictReason.PartialProvenance);
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims);
     }
 
     [Fact]
-    public void Two_different_native_candidates_on_same_source_are_preserved_as_conflict()
+    public void Planner_does_not_infer_role_from_vector_entity_runtime_type()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorText("text", "A", new(0, 0), 2.5, new VectorStyle())
+        };
+        var axis = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["text"])
+        {
+            SourceClaims =
+            [
+                new("text", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
+
+        Assert.Contains("text", plan.EligibleSourceIds);
+        Assert.DoesNotContain(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims);
+    }
+
+    [Fact]
+    public void Missing_explicit_claim_set_defers_candidate()
     {
         var sources = new VectorEntity[]
         {
             new VectorLine("line", new(0, 0), new(20, 0), new VectorStyle())
         };
-        var semantics = EmptySemantics() with
-        {
-            Axes = [new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["line"])],
-            Leaders = [new LeaderCandidate(new(0, 0), new(20, 0), "К-1", 0.95, ["line"])]
-        };
+        var axis = new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["line"]);
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
 
+        Assert.Empty(plan.EligibleSourceIds);
         Assert.Contains("line", plan.PreservedSourceIds);
-        Assert.Contains(plan.Conflicts, conflict => conflict.Reason == ReplacementConflictReason.MultipleCandidates);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims);
     }
 
     [Fact]
-    public void Pattern_hatch_suppresses_pattern_lines_but_preserves_boundary()
+    public void Two_candidates_on_same_source_are_deferred_as_shared()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("shared", new(0, 0), new(20, 0), new VectorStyle()),
+            new VectorLine("a-only", new(0, 1), new(20, 1), new VectorStyle()),
+            new VectorLine("b-only", new(0, 2), new(20, 2), new VectorStyle())
+        };
+        var axis = new AxisCandidate(new(0, 0), new(20, 1), 0.95, ["shared", "a-only"])
+        {
+            SourceClaims =
+            [
+                new("shared", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("a-only", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var leader = new LeaderCandidate(new(0, 0), new(20, 2), "K-1", 0.95, ["shared", "b-only"])
+        {
+            SourceClaims =
+            [
+                new("shared", SourceUsageRole.LeaderShaft, SourceClaimState.Valid, false),
+                new("b-only", SourceUsageRole.LeaderShaft, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis], Leaders = [leader] },
+            pageNumber: 1);
+
+        Assert.Equal(2, plan.DeferredCandidateKeys.Count);
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Equal(new[] { "a-only", "b-only", "shared" }, plan.PreservedSourceIds.OrderBy(x => x));
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredShared
+            && residual.Severity == ReplacementResidualSeverity.High);
+    }
+
+    [Fact]
+    public void Candidate_order_does_not_change_shared_deferral()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("shared", new(0, 0), new(20, 0), new VectorStyle())
+        };
+        var firstAxis = new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["shared"])
+        {
+            SourceClaims = [new("shared", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
+        };
+        var secondAxis = new AxisCandidate(new(0, 0), new(30, 0), 0.96, ["shared"])
+        {
+            SourceClaims = [new("shared", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
+        };
+
+        var first = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [firstAxis, secondAxis] },
+            pageNumber: 1);
+        var second = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [secondAxis, firstAxis] },
+            pageNumber: 1);
+
+        Assert.Equal(first.DeferredCandidateKeys, second.DeferredCandidateKeys);
+        Assert.Equal(first.PreservedSourceIds, second.PreservedSourceIds);
+        Assert.Equal(first.EligibleSourceIds, second.EligibleSourceIds);
+    }
+
+    [Fact]
+    public void Explicit_confident_hatch_preserves_boundary_and_marks_only_pattern_eligible()
     {
         var boundary = new VectorPolyline(
-            "boundary", [new(0, 0), new(20, 0), new(20, 20), new(0, 20)], true, new VectorStyle());
+            "boundary", [new(0, 0), new(20, 0), new(20, 20), new(0, 20)], true, new VectorStyle("ШТРИХОВКА"));
         var sources = new VectorEntity[]
         {
             boundary,
@@ -113,186 +229,107 @@ public sealed class SourceReplacementPlannerTests
             new VectorLine("h3", new(1, 12), new(19, 12), new VectorStyle())
         };
         var hatch = new HatchCandidate(
-            boundary.Vertices, false, 0, 4, new VectorStyle(), 0.95, ["boundary", "h1", "h2", "h3"]);
-        var hatchResult = new HatchRecognitionResult([hatch], []);
+            boundary.Vertices, false, 0, 4, boundary.Style, 0.95, ["boundary", "h1", "h2", "h3"]);
+        var candidateId = SourceReplacementPlanner.GetCandidateKey(hatch, 1);
+        var hatchResult = new HatchRecognitionResult(
+            [hatch],
+            [],
+            [new HatchClaim(candidateId, ["boundary"], ["h1", "h2", "h3"], HatchClassification.Confident)]);
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, EmptySemantics(), hatchResult);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics(),
+            hatchResult,
+            pageNumber: 1);
 
         Assert.Contains("boundary", plan.PreservedSourceIds);
-        Assert.DoesNotContain("boundary", plan.SuppressedSourceIds);
-        Assert.Equal(new[] { "h1", "h2", "h3" }, plan.SuppressedSourceIds.OrderBy(x => x));
+        Assert.Equal(new[] { "h1", "h2", "h3" }, plan.EligibleSourceIds.OrderBy(x => x));
         Assert.True(plan.IsFullPassEligible);
     }
 
     [Fact]
-    public void Protected_hatch_boundary_overlapping_semantic_candidate_is_preserved_and_reported()
+    public void Uncertain_hatch_emits_no_eligibility_and_preserves_all_sources()
     {
         var boundary = new VectorPolyline(
             "boundary", [new(0, 0), new(20, 0), new(20, 20), new(0, 20)], true, new VectorStyle());
-        var sources = new VectorEntity[] { boundary };
-        var semantics = EmptySemantics() with
+        var sources = new VectorEntity[]
         {
-            Axes = [new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["boundary"])]
+            boundary,
+            new VectorLine("h1", new(1, 4), new(19, 4), new VectorStyle())
         };
-        var hatch = new HatchCandidate(
-            boundary.Vertices, false, 0, 4, new VectorStyle(), 0.95, ["boundary"]);
-        var hatchResult = new HatchRecognitionResult([hatch], []);
+        var candidateId = SourceReplacementPlanner.CreateCandidateId(
+            1, "HATCH", ["boundary", "h1"], "fixture");
+        var hatchResult = new HatchRecognitionResult(
+            [],
+            [],
+            [new HatchClaim(candidateId, ["boundary"], ["h1"], HatchClassification.Uncertain)]);
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, hatchResult);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics(),
+            hatchResult,
+            pageNumber: 1);
 
-        Assert.Contains("boundary", plan.PreservedSourceIds);
-        Assert.Contains(plan.Conflicts, conflict => conflict.Reason == ReplacementConflictReason.ProtectedRoleOverlap);
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Equal(new[] { "boundary", "h1" }, plan.PreservedSourceIds.OrderBy(x => x));
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUncertainHatch
+            && residual.Severity == ReplacementResidualSeverity.Medium);
     }
 
     [Fact]
     public void Missing_source_claim_is_reported_deterministically()
     {
-        var semantics = EmptySemantics() with
+        var axis = new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["missing"])
         {
-            Axes = [new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["missing"])]
+            SourceClaims = [new("missing", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
         };
 
-        var plan = new SourceReplacementPlanner().BuildPlan([], semantics);
-
-        var conflict = Assert.Single(plan.Conflicts);
-        Assert.Equal("missing", conflict.SourceId);
-        Assert.Equal(ReplacementConflictReason.SourceMissingFromPage, conflict.Reason);
-        Assert.False(plan.IsFullPassEligible);
-    }
-
-    [Fact]
-    public void Candidate_order_does_not_change_source_decisions()
-    {
-        var sources = new VectorEntity[]
-        {
-            new VectorLine("a", new(0, 0), new(20, 0), new VectorStyle()),
-            new VectorLine("b", new(0, 10), new(20, 10), new VectorStyle())
-        };
-        var first = EmptySemantics() with
-        {
-            Axes =
-            [
-                new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["a"]),
-                new AxisCandidate(new(0, 10), new(20, 10), 0.95, ["b"])
-            ]
-        };
-        var second = first with { Axes = first.Axes.Reverse().ToArray() };
-
-        var planner = new SourceReplacementPlanner();
-        var plan1 = planner.BuildPlan(sources, first);
-        var plan2 = planner.BuildPlan(sources, second);
-
-        Assert.Equal(plan1.SuppressedSourceIds, plan2.SuppressedSourceIds);
-        Assert.Equal(plan1.PreservedSourceIds, plan2.PreservedSourceIds);
-        Assert.Equal(plan1.Conflicts, plan2.Conflicts);
-    }
-
-    [Fact]
-    public void Shared_source_defers_whole_candidates_and_preserves_their_other_sources()
-    {
-        var sources = new VectorEntity[]
-        {
-            new VectorLine("shared", new(0, 0), new(20, 0), new VectorStyle()),
-            new VectorLine("a-only", new(0, 1), new(20, 1), new VectorStyle()),
-            new VectorLine("b-only", new(0, 2), new(20, 2), new VectorStyle())
-        };
-        var first = new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["shared", "a-only"]);
-        var second = new LeaderCandidate(new(0, 0), new(20, 2), "K-1", 0.95, ["shared", "b-only"]);
-        var semantics = EmptySemantics() with
-        {
-            Axes = [first],
-            Leaders = [second]
-        };
-
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
-
-        Assert.Equal(2, plan.DeferredCandidateKeys.Count);
-        Assert.Empty(plan.SuppressedSourceIds);
-        Assert.Equal(new[] { "a-only", "b-only", "shared" }, plan.PreservedSourceIds.OrderBy(x => x));
-        Assert.Contains(plan.Residuals, residual =>
-            residual.Kind == ReplacementResidualKind.DeferredShared
-            && residual.Severity == ReplacementResidualSeverity.High);
-    }
-
-    [Fact]
-    public void Safe_suppression_exposes_candidate_coverage_map()
-    {
-        var sources = new VectorEntity[]
-        {
-            new VectorLine("line", new(0, 0), new(5, 0), new VectorStyle()),
-            new VectorText("text", "+3.600", new(6, 0), 2.5, new VectorStyle())
-        };
-        var level = new LevelCandidate(new(0, 0), new(6, 0), "+3.600", 0.95, ["line", "text"]);
-        var semantics = EmptySemantics() with { Levels = [level] };
-
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
-        var expectedKey = SourceReplacementPlanner.GetCandidateKey(level);
-
-        Assert.Equal(new[] { expectedKey }, plan.SourceCoverageMap["line"]);
-        Assert.Equal(new[] { expectedKey }, plan.SourceCoverageMap["text"]);
-        Assert.Empty(plan.DeferredCandidateKeys);
-    }
-
-    [Fact]
-    public void Empty_provenance_warning_becomes_page_level_unrecognized_residual()
-    {
-        var sources = new VectorEntity[]
-        {
-            new VectorLine("line", new(0, 0), new(10, 0), new VectorStyle())
-        };
-        var semantics = EmptySemantics() with
-        {
-            Warnings = [new SemanticWarning("page-level", "No source-specific provenance.", [])]
-        };
-
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
-
-        Assert.Empty(plan.Conflicts);
-        Assert.Contains(plan.Residuals, residual =>
-            residual.SourceId == "(page)"
-            && residual.Kind == ReplacementResidualKind.Unrecognized
-            && residual.Severity == ReplacementResidualSeverity.Medium);
-        Assert.Contains("line", plan.PreservedSourceIds);
-        Assert.False(plan.IsFullPassEligible);
-    }
-
-    [Fact]
-    public void Warning_for_missing_source_is_critical_conflict()
-    {
-        var semantics = EmptySemantics() with
-        {
-            Warnings = [new SemanticWarning("bad-provenance", "Missing source.", ["missing"])]
-        };
-
-        var plan = new SourceReplacementPlanner().BuildPlan([], semantics);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            [],
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
 
         Assert.Contains(plan.Conflicts, conflict =>
             conflict.SourceId == "missing"
             && conflict.Reason == ReplacementConflictReason.SourceMissingFromPage);
-        Assert.Contains(plan.Residuals, residual =>
-            residual.SourceId == "missing"
-            && residual.Severity == ReplacementResidualSeverity.Critical);
+        Assert.False(plan.IsFullPassEligible);
     }
 
     [Fact]
-    public void Partial_warning_blocks_whole_candidate_suppression()
+    public void Verified_candidate_is_the_only_path_from_eligibility_to_suppression()
     {
         var sources = new VectorEntity[]
         {
-            new VectorPolyline("poly", [new(0, 0), new(10, 0), new(10, 10)], false, new VectorStyle())
+            new VectorLine("line", new(0, 0), new(5, 0), new VectorStyle())
         };
-        var axis = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["poly"]);
-        var semantics = EmptySemantics() with
+        var axis = new AxisCandidate(new(0, 0), new(5, 0), 0.95, ["line"])
         {
-            Axes = [axis],
-            Warnings = [new SemanticWarning("partial-review", "Partial ambiguity.", ["poly#segment:0"])]
+            SourceClaims = [new("line", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
         };
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
+        var candidateId = Assert.Single(plan.SourceCoverageMap["line"]);
 
-        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+        var rejected = new SuppressionGate().Evaluate(
+            plan,
+            new NativeReadBackVerification(
+                new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)));
+        Assert.Empty(rejected.SuppressSourceIds);
+        Assert.Contains(rejected.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.CandidateNotVerified
+            && residual.Severity == ReplacementResidualSeverity.Critical);
 
-        Assert.Contains(SourceReplacementPlanner.GetCandidateKey(axis), plan.DeferredCandidateKeys);
-        Assert.Contains("poly", plan.PreservedSourceIds);
-        Assert.DoesNotContain("poly", plan.SuppressedSourceIds);
+        var accepted = new SuppressionGate().Evaluate(
+            plan,
+            new NativeReadBackVerification(
+                new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)
+                {
+                    [candidateId] = new(candidateId, true, [], [], [])
+                }));
+        Assert.Equal(new[] { "line" }, accepted.SuppressSourceIds.OrderBy(x => x));
     }
 
     private static SemanticReconstructionResult EmptySemantics()
