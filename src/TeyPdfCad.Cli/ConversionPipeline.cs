@@ -140,14 +140,24 @@ public sealed class ConversionPipeline
 
                 // Validate every requested removal against the actual closed probe
                 // before the final writer is allowed to suppress a source.
-                _ = DwgStructuralSanity.BuildExpectedFinalFingerprintMultiset(
-                    probeInventory,
-                    probeWrite.SourceEmissionSummary,
-                    authorizedSuppressedSources);
+                try
+                {
+                    _ = DwgStructuralSanity.BuildExpectedFinalFingerprintMultiset(
+                        probeInventory,
+                        probeWrite.SourceEmissionSummary,
+                        authorizedSuppressedSources);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: {exception.Message}",
+                        exception);
+                }
 
                 DwgWriteResult finalWrite;
-                using (var finalStream = File.Create(finalPath))
+                try
                 {
+                    using var finalStream = File.Create(finalPath);
                     finalWrite = writer.Write(
                         finalStream,
                         document,
@@ -158,6 +168,12 @@ public sealed class ConversionPipeline
                         templateSelections,
                         replacementPlans,
                         authorizedSuppressedSources);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: final writer rejected authorized suppression: {exception.Message}",
+                        exception);
                 }
 
                 ValidateManifestParity(probeWrite.Manifest, finalWrite.Manifest);
