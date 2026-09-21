@@ -102,13 +102,20 @@ public sealed class SourceReplacementPlanner
             .GroupBy(source => source.SourceId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var claims = new List<SourceClaim>();
+        var pageResiduals = new List<ReplacementResidual>();
 
         if (semantics is not null)
+        {
             AddSemanticClaims(sourceMap, semantics, claims);
+            AddPageLevelWarningResiduals(pageResiduals, semantics.Warnings, "semantic");
+        }
         if (hatchRecognition is not null)
+        {
             AddHatchClaims(sourceMap, hatchRecognition, claims);
+            AddPageLevelWarningResiduals(pageResiduals, hatchRecognition.Warnings, "hatch");
+        }
 
-        return Resolve(sourceMap, claims);
+        return Resolve(sourceMap, claims, pageResiduals);
     }
 
     public static string GetCandidateKey(DimensionCandidate candidate)
@@ -131,14 +138,15 @@ public sealed class SourceReplacementPlanner
 
     private static SourceReplacementPlan Resolve(
         IReadOnlyDictionary<string, VectorEntity> sourceMap,
-        IReadOnlyList<SourceClaim> claims)
+        IReadOnlyList<SourceClaim> claims,
+        IReadOnlyList<ReplacementResidual> pageResiduals)
     {
         var suppressed = new HashSet<string>(StringComparer.Ordinal);
         var preserved = new HashSet<string>(StringComparer.Ordinal);
         var deferred = new HashSet<string>(StringComparer.Ordinal);
         var coverage = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         var conflicts = new List<ReplacementConflict>();
-        var residuals = new List<ReplacementResidual>();
+        var residuals = new List<ReplacementResidual>(pageResiduals);
         var deferredReasons = new Dictionary<string, ReplacementResidualKind>(StringComparer.Ordinal);
 
         var claimsBySource = claims
@@ -345,6 +353,23 @@ public sealed class SourceReplacementPlanner
                 ? SourceUsageRole.Text
                 : SourceUsageRole.PrimaryGeometry;
             claims.Add(new SourceClaim(parsed.SourceId, candidateKey, semanticType, role, SourceClaimState.Valid, parsed.IsPartial));
+        }
+    }
+
+    private static void AddPageLevelWarningResiduals(
+        ICollection<ReplacementResidual> residuals,
+        IEnumerable<SemanticWarning> warnings,
+        string scope)
+    {
+        foreach (var warning in warnings.Where(warning => warning.ProvenanceIds.Count == 0))
+        {
+            AddResidual(
+                residuals,
+                "(page)",
+                null,
+                ReplacementResidualKind.Unrecognized,
+                ReplacementResidualSeverity.Medium,
+                scope + " warning " + warning.Code + ": " + warning.Message);
         }
     }
 
