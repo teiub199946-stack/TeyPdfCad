@@ -587,16 +587,49 @@ public sealed class AcadSharpDwgWriter
         }
     }
 
-    private static void ApplyExplicitPaintOrder(
-        CadDocument document,
+    private static void RegisterPaintKey(
+        IDictionary<Entity, PaintOrderKey> paintKeys,
+        Entity entity,
+        int pageNumber,
+        string sourceOrCandidateKey,
+        string role,
+        int stableOrdinal,
         IReadOnlySet<Entity> preservedBoundaryEntities)
     {
-        var ordered = PaintOrderEngine.OrderBottomToTop(document.Entities
-            .Select((entity, index) => new PaintOrderItem<Entity>(
+        if (paintKeys.ContainsKey(entity))
+            throw new InvalidOperationException("DWG entity already has an immutable paint identity.");
+
+        var key = string.IsNullOrWhiteSpace(sourceOrCandidateKey)
+            ? "invalid-source|" + DwgEntityFingerprint.ComputeOutput(entity)
+            : sourceOrCandidateKey;
+
+        paintKeys[entity] = new PaintOrderKey(
+            pageNumber,
+            key,
+            role,
+            ResolvePaintPriority(entity, preservedBoundaryEntities),
+            stableOrdinal);
+    }
+
+    private static void ApplyExplicitPaintOrder(
+        CadDocument document,
+        IReadOnlyDictionary<Entity, PaintOrderKey> paintKeys)
+    {
+        var missing = document.Entities
+            .Where(entity => !paintKeys.ContainsKey(entity))
+            .Select(entity => entity.GetType().Name)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"ModelSpace contains {missing.Length} entity/entities without immutable paint identity: {string.Join(", ", missing)}.");
+        }
+
+        var ordered = PaintOrderEngine.OrderBottomToTop(
+            document.Entities.Select(entity => new PaintOrderItem<Entity>(
                 entity,
-                ResolvePaintPriority(entity, preservedBoundaryEntities),
-                index,
-                (entity.Layer?.Name ?? string.Empty) + "|" + entity.GetType().Name)));
+                paintKeys[entity])));
 
         var sortTable = document.ModelSpace.CreateSortEntitiesTable();
         foreach (var entry in ordered)
