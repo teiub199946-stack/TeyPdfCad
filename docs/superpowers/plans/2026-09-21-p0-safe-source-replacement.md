@@ -95,7 +95,7 @@ flowchart LR
 
 **Interfaces:**
 
-Produces the neutral contracts consumed by DWG and CLI:
+Produces the neutral contracts consumed by DWG and CLI. SourceReplacementPlan is an existing Core contract modified in this task; HatchClaim and HatchClassification are new Core contracts introduced in this task.
 
 ~~~
 public sealed record ExpectedNativeEntity(
@@ -136,6 +136,14 @@ public sealed record RecognizerSourceClaim(
     SourceUsageRole Role,
     SourceClaimState State,
     bool IsPartial);
+
+public enum HatchClassification { Confident, Uncertain }
+
+public sealed record HatchClaim(
+    string CandidateId,
+    IReadOnlyList<string> BoundarySourceIds,
+    IReadOnlyList<string> PatternSourceIds,
+    HatchClassification Classification);
 ~~~
 
 - [ ] **Step 1: Write failing planner and gate tests**
@@ -466,6 +474,7 @@ Keep writer key count as diagnostic only. Reports and CandidateNotVerified use g
 Implement:
 - FULL_PASS: all probe verifier and final structural checks pass; no residual, CandidateNotVerified, SourceIdentityViolation, or SourceSuppressionViolation.
 - PASS_WITH_RESIDUALS: published output, but a page preserved source due to DeferredShared High, DeferredUncertainHatch Medium, CandidateNotVerified Critical, or SourceIdentityViolation Critical.
+- Fixed residual mapping: DeferredShared → High; DeferredUncertainHatch → Medium; CandidateNotVerified → Critical; SourceIdentityViolation → Critical; SourceSuppressionViolation → Critical.
 - PARTIAL: existing source-PDF diagnostics make page partial.
 - serialization, probe read-back, or final sanity failure: InvalidArgumentsOrIo and no final DWG.
 
@@ -518,7 +527,7 @@ Expected: FAIL until report fields use verifier/gate outcomes.
 
 - [ ] **Step 3: Implement report reconciliation**
 
-Emit per-page eligible, authorized-suppressed, preserved counts; candidate verification failures; residual kind/severity; document status from Task 4; and FULL_PASS limitations. Keep AutoCAD 2022 fixture scope unchanged: it confirms only tested metadata persistence, not Core Console or transform/copy paths. Update spec only for actual identifier naming; do not expand P0.
+Emit per-page eligible, authorized-suppressed, preserved counts; candidate verification failures; residual kind/severity; document status from Task 4; and FULL_PASS limitations. SourceIdentityViolation appears in the per-page residual list with Critical severity, forces PASS_WITH_RESIDUALS when output is publishable, and lists every duplicated/empty SourceId; those sources are counted as preserved and never as authorized-suppressed. Keep AutoCAD 2022 fixture scope unchanged: it confirms only tested metadata persistence, not Core Console or transform/copy paths. Update spec only for actual identifier naming; do not expand P0.
 
 - [ ] **Step 4: Run full verification and inspect CI**
 
