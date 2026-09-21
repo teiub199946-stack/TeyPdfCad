@@ -250,7 +250,7 @@ public sealed class DwgTwoPassWriterTests
             new VectorLine("z-line", new(0, 0), new(20, 0), new VectorStyle("GEOM")),
             new VectorText("a-text", "TOP", new(5, 0), 2.5, new VectorStyle("TEXT"))
         ];
-        var reversed = forward.Reverse().ToArray();
+        var reversed = forward.AsEnumerable().Reverse().ToArray();
 
         var first = WriteAndRead(new VectorPdfDocument(
         [
