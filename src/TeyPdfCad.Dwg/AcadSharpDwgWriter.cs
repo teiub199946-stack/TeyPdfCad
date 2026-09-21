@@ -365,7 +365,8 @@ public sealed class AcadSharpDwgWriter
                         Properties(
                             ("expectedMeasurement", Number(dimension.Measurement)),
                             ("measurementTolerance", "0.000001"),
-                            ("expectedDimensionText", dimension.Text ?? string.Empty)));
+                            ("expectedDimensionText", dimension.Text ?? string.Empty),
+                            ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension))));
                     RegisterPaintKey(
                         paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -471,7 +472,8 @@ public sealed class AcadSharpDwgWriter
                         Properties(
                             ("expectedMeasurement", Number(dimension.Measurement)),
                             ("measurementTolerance", "0.000001"),
-                            ("expectedDimensionText", candidate.SourceText)));
+                            ("expectedDimensionText", candidate.SourceText),
+                            ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension))));
                     RegisterPaintKey(
                         paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
