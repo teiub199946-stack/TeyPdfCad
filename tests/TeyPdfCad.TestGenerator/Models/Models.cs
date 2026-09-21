@@ -160,6 +160,7 @@ public sealed record ActualDimensionResult
     public ConfidenceClass? ConfidenceClass { get; init; }
     public bool IsDimensionTypeAmbiguous { get; init; }
     public bool SuppressionEvidenceEligible { get; init; }
+    public List<string> SuppressionBlockers { get; init; } = new();
     public bool IsMissing { get; init; }
     public List<string> Diagnostics { get; init; } = new();
 }
