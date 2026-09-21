@@ -164,7 +164,7 @@ Confident writes native HATCH, preserves BoundarySourceIds, and can suppress Pat
 
 ## Paint order
 
-P0 uses immutable identity, not document insertion enumeration. The sort key is page number, source/candidate key, role, priority, and stable ordinal inside a candidate. Its bottom-to-top policy is base geometry, solid fill, hatch pattern, preserved boundary, dimension/annotation/text, review overlay.
+P0 uses immutable identity, not document insertion enumeration. The bottom-to-top sort key is paint priority, then page number, source/candidate key, role, and stable ordinal inside a candidate. Its priority policy is base geometry, solid fill, hatch pattern, preserved boundary, dimension/annotation/text, review overlay.
 
 ## Failure policy
 
