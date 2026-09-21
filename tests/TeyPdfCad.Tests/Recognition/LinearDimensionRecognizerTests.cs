@@ -195,6 +195,47 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Nearby_diagonal_wall_line_does_not_fake_second_arrow()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(52, 0),
+            SourceIds: ["dim"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, -12),
+            new Point2(0, 1),
+            SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(52, -12),
+            new Point2(52, 1),
+            SourceIds: ["ext-2"]));
+
+        // Genuine arrow only at the first endpoint.
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-1, -1),
+            new Point2(1, 1),
+            SourceIds: ["arrow-1"]));
+
+        // Short diagonal is inside the old radius around the second endpoint,
+        // but it does not touch/cross that endpoint. It represents unrelated
+        // nearby wall/grid geometry and must not count as arrow evidence.
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(49, 2),
+            new Point2(51, 4),
+            SourceIds: ["wall-fragment"]));
+
+        scene.Texts.Add(new TextPrimitive(
+            "5200",
+            new Point2(26, 3),
+            2.5,
+            0,
+            SourceIds: ["text"]));
+
+        Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    [Fact]
     public void Rejects_Number_Next_To_Ordinary_Line_Without_Extension_Lines()
     {
         var scene = new PrimitiveScene();
