@@ -202,9 +202,11 @@ public sealed class ConversionPipelineTests
 
         var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
 
-        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
         var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
         Assert.Contains("semantic-recognition-skipped-complexity", page.GetProperty("semanticWarnings").EnumerateArray().Select(value => value.GetString()));
     }
 
