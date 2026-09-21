@@ -32,7 +32,8 @@ public static class ReplacementExecutionAuditor
         return new ReplacementExecutionReport(notVerified, readBackConfirmed);
     }
 
-    [Obsolete("Writer-created candidate keys are diagnostics only and cannot be used as P0 verification evidence.")]
+    // Transitional diagnostic overload. It never proves successful replacement;
+    // every eligible source is treated as not independently verified.
     public static ReplacementExecutionReport Build(
         SourceReplacementPlan plan,
         IReadOnlyCollection<string> createdCandidateKeys,
