@@ -88,6 +88,7 @@ public sealed class AcadSharpDwgWriter
         var styles = new AcadSharpStyleCatalog(document);
         var sheetsByPage = plan.Sheets.ToDictionary(sheet => sheet.PageNumber);
         var preservedBoundaryEntities = new HashSet<Entity>();
+        var paintKeys = new Dictionary<Entity, PaintOrderKey>();
         foreach (var page in source.Pages)
         {
             var sheet = sheetsByPage[page.Number];
@@ -101,7 +102,15 @@ public sealed class AcadSharpDwgWriter
                     string.Equals(block.Name, templateSelection.TemplateName, StringComparison.Ordinal));
                 if (template is not null)
                 {
-                    WriteTemplateInsert(document, styles, sheet, template);
+                    var templateInsert = WriteTemplateInsert(document, styles, sheet, template);
+                    RegisterPaintKey(
+                        paintKeys,
+                        templateInsert,
+                        page.Number,
+                        $"template:{template.Name}",
+                        "template",
+                        0,
+                        preservedBoundaryEntities);
                     templateSourceIds.UnionWith(templateSelection.SourceIdsToReplace);
                 }
             }
@@ -168,6 +177,8 @@ public sealed class AcadSharpDwgWriter
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
                 styles.Apply(line, GetReviewStyle(sourceLine.Style, sourceLine.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(line);
+                RegisterPaintKey(
+                    paintKeys, line, page.Number, sourceLine.SourceId, "source-line", 0, preservedBoundaryEntities);
                 RecordSourceEmission(page.Number, sourceLine.SourceId, line, sourceEmissionCounts);
             }
             foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
@@ -181,6 +192,8 @@ public sealed class AcadSharpDwgWriter
                         radius);
                     styles.Apply(circle, sourcePolyline.Style);
                     document.Entities.Add(circle);
+                    RegisterPaintKey(
+                        paintKeys, circle, page.Number, sourcePolyline.SourceId, "source-circle", 0, preservedBoundaryEntities);
                     RecordSourceEmission(page.Number, sourcePolyline.SourceId, circle, sourceEmissionCounts);
                     continue;
                 }
@@ -192,6 +205,8 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(polyline, GetReviewStyle(sourcePolyline.Style, sourcePolyline.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(polyline);
+                RegisterPaintKey(
+                    paintKeys, polyline, page.Number, sourcePolyline.SourceId, "source-polyline", 0, preservedBoundaryEntities);
                 RecordSourceEmission(page.Number, sourcePolyline.SourceId, polyline, sourceEmissionCounts);
                 if (sourcePolyline.IsClosed)
                 {
@@ -208,9 +223,18 @@ public sealed class AcadSharpDwgWriter
                     .ToArray();
                 // Fill support contours are not PDF strokes. Retain them for
                 // editing, but do not draw edges that were absent in the source.
-                foreach (var boundary in boundaries)
+                for (var boundaryIndex = 0; boundaryIndex < boundaries.Length; boundaryIndex++)
                 {
+                    var boundary = boundaries[boundaryIndex];
                     boundary.IsInvisible = true;
+                    RegisterPaintKey(
+                        paintKeys,
+                        boundary,
+                        page.Number,
+                        sourceFill.SourceId,
+                        "source-fill-boundary",
+                        boundaryIndex,
+                        preservedBoundaryEntities);
                     RecordSourceEmission(page.Number, sourceFill.SourceId, boundary, sourceEmissionCounts);
                 }
                 if (boundaries.Length == 0 || !TryFindInteriorSeed(sourceFill, out var seed))
@@ -232,6 +256,8 @@ public sealed class AcadSharpDwgWriter
                 }
                 styles.Apply(hatch, GetReviewStyle(sourceFill.Style, sourceFill.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(hatch);
+                RegisterPaintKey(
+                    paintKeys, hatch, page.Number, sourceFill.SourceId, "source-fill-hatch", 0, preservedBoundaryEntities);
                 RecordSourceEmission(page.Number, sourceFill.SourceId, hatch, sourceEmissionCounts);
             }
             foreach (var candidate in patternHatches)
@@ -298,6 +324,8 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(text, GetReviewStyle(sourceText.Style, sourceText.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(text);
+                RegisterPaintKey(
+                    paintKeys, text, page.Number, sourceText.SourceId, "source-text", 0, preservedBoundaryEntities);
                 RecordSourceEmission(page.Number, sourceText.SourceId, text, sourceEmissionCounts);
             }
             if (semantics is not null)
@@ -413,7 +441,7 @@ public sealed class AcadSharpDwgWriter
                 }
             }
         }
-        ApplyExplicitPaintOrder(document, preservedBoundaryEntities);
+        ApplyExplicitPaintOrder(document, paintKeys);
 
         var writer = new DwgWriter(destination, document)
         {
