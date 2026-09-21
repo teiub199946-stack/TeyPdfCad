@@ -40,6 +40,37 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
+    public async Task Borderline_ambiguous_case_uses_observable_one_sided_arrow_evidence_and_abstains()
+    {
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_ambiguous_one_sided_arrow",
+            ExpectedResult = ExpectedResult.Ambiguous,
+            ExpectedConfidenceClass = ConfidenceClass.Low,
+            Tags = ["ambiguous", "borderline-evidence"]
+        };
+
+        var scene = new DimensionCasePrimitiveSceneBuilder().Build(testCase);
+        var arrowSourceIds = scene.Lines
+            .SelectMany(line => line.ProvenanceIds)
+            .Where(id => id.Contains(":arrow:", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotEmpty(arrowSourceIds);
+        Assert.All(arrowSourceIds, id =>
+            Assert.Contains(":arrow:1", id, StringComparison.Ordinal));
+        Assert.DoesNotContain(arrowSourceIds, id =>
+            id.Contains(":arrow:2", StringComparison.Ordinal));
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Rejected, actual.Result);
+        Assert.Equal(0, actual.DetectedDimensions);
+        Assert.False(actual.SuppressionEvidenceEligible);
+    }
+
+    [Fact]
     public async Task LinesTextNoArrows_NegativePattern_Is_Not_Recognized()
     {
         var testCase = CleanHorizontalCase() with
