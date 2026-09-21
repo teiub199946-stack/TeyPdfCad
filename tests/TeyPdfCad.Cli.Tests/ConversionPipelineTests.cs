@@ -26,10 +26,10 @@ public sealed class ConversionPipelineTests
 
         var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
 
-        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
         Assert.True(File.Exists(output));
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
-        Assert.True(json.RootElement.GetProperty("complete").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
         Assert.Equal(1, json.RootElement.GetProperty("pagesProcessed").GetInt32());
         Assert.Equal(0, json.RootElement.GetProperty("layoutsReadBack").GetInt32());
     }
@@ -161,7 +161,7 @@ public sealed class ConversionPipelineTests
 
 
     [Fact]
-    public async Task Pipeline_publishes_final_only_when_fingerprint_multiset_matches_probe()
+    public async Task Pipeline_preserves_axis_sources_while_source_equivalence_is_incomplete()
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -192,7 +192,7 @@ public sealed class ConversionPipelineTests
         Assert.True(File.Exists(output));
 
         var drawing = ACadSharp.IO.DwgReader.Read(output);
-        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
         var axisInsert = Assert.Single(
             drawing.Entities.OfType<ACadSharp.Entities.Insert>());
         Assert.Equal("TEY_AXIS", axisInsert.Block.Name);
@@ -203,9 +203,13 @@ public sealed class ConversionPipelineTests
         var page = Assert.Single(
             json.RootElement.GetProperty("pages").EnumerateArray());
         Assert.Equal(1, page.GetProperty("axisCandidateCount").GetInt32());
-        Assert.Equal(3, page.GetProperty("suppressedSourceCount").GetInt32());
-        Assert.Equal("FULL_PASS", page.GetProperty("semanticAuditStatus").GetString());
-        Assert.True(page.GetProperty("complete").GetBoolean());
+        Assert.Equal(0, page.GetProperty("suppressedSourceCount").GetInt32());
+        Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
+        Assert.False(page.GetProperty("complete").GetBoolean());
+        Assert.Contains(
+            page.GetProperty("replacementResiduals").EnumerateArray(),
+            residual => residual.GetProperty("kind").GetInt32()
+                == (int)ReplacementResidualKind.SourceEquivalenceIncomplete);
     }
 
 
@@ -258,7 +262,7 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new MutateFinalAxisWriter(),
-            new ProductionDwgReadBackVerifier());
+            new ForceEquivalenceCompleteVerifier());
 
         var result = await pipeline.ConvertAsync(
             input,
@@ -294,7 +298,7 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new CorruptProbeSourceEmissionWriter(),
-            new ProductionDwgReadBackVerifier());
+            new ForceEquivalenceCompleteVerifier());
 
         var result = await pipeline.ConvertAsync(
             input,
@@ -330,7 +334,7 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new AddUnauthorizedSourceOnFinalWriter(),
-            new ProductionDwgReadBackVerifier());
+            new ForceEquivalenceCompleteVerifier());
 
         var result = await pipeline.ConvertAsync(
             input,
@@ -495,6 +499,29 @@ public sealed class ConversionPipelineTests
                 ".teypdfcad-*.dwg",
                 SearchOption.TopDirectoryOnly));
 
+    private sealed class ForceEquivalenceCompleteVerifier : IDwgReadBackVerifier
+    {
+        private readonly DwgReadBackVerifier _inner = new();
+
+        public NativeReadBackVerification Verify(
+            string dwgPath,
+            NativeWriteManifest manifest)
+        {
+            var actual = _inner.Verify(dwgPath, manifest);
+            return new NativeReadBackVerification(
+                actual.Candidates.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value with
+                    {
+                        SourceEquivalenceComplete = true
+                    },
+                    StringComparer.Ordinal));
+        }
+
+        public DwgStructuralInventory ReadStructuralInventory(string dwgPath)
+            => _inner.ReadStructuralInventory(dwgPath);
+    }
+
     private sealed class RejectFirstCandidateVerification : IDwgReadBackVerifier
     {
         private readonly DwgReadBackVerifier _inner = new();
@@ -515,6 +542,7 @@ public sealed class ConversionPipelineTests
                     pair => pair.Value with
                     {
                         IsVerified = false,
+                        SourceEquivalenceComplete = true,
                         InvalidEntities =
                         [
                             ..pair.Value.InvalidEntities,
