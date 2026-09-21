@@ -4,6 +4,7 @@ namespace TeyPdfCad.Core.Recognition;
 
 public enum SourceUsageRole
 {
+    Unknown = 0,
     DimensionLine,
     ExtensionLine,
     ArrowGeometry,
@@ -35,7 +36,9 @@ public enum ReplacementConflictReason
     ProtectedRoleOverlap,
     MultipleCandidates,
     SourceMissingFromPage,
-    SourceIdentityViolation
+    SourceIdentityViolation,
+    ClaimRoleConflict,
+    CandidateIdentityViolation
 }
 
 public enum ReplacementResidualKind
@@ -46,6 +49,7 @@ public enum ReplacementResidualKind
     CandidateNotVerified,
     SourceIdentityViolation,
     SourceSuppressionViolation,
+    CandidateIdentityViolation,
 
     // Legacy/reporting kinds kept while the remaining P0 stages are migrated.
     Unrecognized,
