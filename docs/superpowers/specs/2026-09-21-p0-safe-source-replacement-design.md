@@ -232,3 +232,7 @@ A semantic or verification failure on a page preserves its unsafe sources and co
 ## Acceptance
 
 P0 is complete only when CI proves source suppression comes from on-disk read-back verification, final structural sanity uses a verified output-fingerprint multiset and source-emission inventory rather than SourceId count, no writer counter grants suppression, and every required test passes. It is not a claim of visual WYSIWYG acceptance or recognition completeness.
+
+## Template replacement safety
+
+A confirmed template selection is not itself proof that replacing source geometry survived DWG serialization. Until template INSERT replacement is represented by the same persistent manifest/read-back mechanism, any TemplateSelection with non-empty SourceIdsToReplace is deferred: the template INSERT is not emitted, every source entity remains, and the page is PASS_WITH_RESIDUALS with reason template-source-replacement-deferred-p0. Additive template insertion with an empty replacement set remains allowed. No template path may bypass PageSourceRef authorization.
