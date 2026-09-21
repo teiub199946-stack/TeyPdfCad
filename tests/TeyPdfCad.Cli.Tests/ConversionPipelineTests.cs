@@ -275,6 +275,12 @@ public sealed class ConversionPipelineTests
             warning => warning.GetString()!.Contains(
                 "SourceSuppressionViolation",
                 StringComparison.Ordinal));
+        Assert.Contains(
+            json.RootElement.GetProperty("fatalResiduals").EnumerateArray(),
+            residual => residual.GetProperty("kind").GetInt32()
+                == (int)ReplacementResidualKind.SourceSuppressionViolation
+                && residual.GetProperty("severity").GetInt32()
+                == (int)ReplacementResidualSeverity.Critical);
     }
 
     [Fact]
@@ -305,6 +311,12 @@ public sealed class ConversionPipelineTests
             warning => warning.GetString()!.Contains(
                 "SourceSuppressionViolation",
                 StringComparison.Ordinal));
+        Assert.Contains(
+            json.RootElement.GetProperty("fatalResiduals").EnumerateArray(),
+            residual => residual.GetProperty("kind").GetInt32()
+                == (int)ReplacementResidualKind.SourceSuppressionViolation
+                && residual.GetProperty("severity").GetInt32()
+                == (int)ReplacementResidualSeverity.Critical);
     }
 
     [Fact]
@@ -335,6 +347,12 @@ public sealed class ConversionPipelineTests
             warning => warning.GetString()!.Contains(
                 "SourceSuppressionViolation",
                 StringComparison.Ordinal));
+        Assert.Contains(
+            json.RootElement.GetProperty("fatalResiduals").EnumerateArray(),
+            residual => residual.GetProperty("kind").GetInt32()
+                == (int)ReplacementResidualKind.SourceSuppressionViolation
+                && residual.GetProperty("severity").GetInt32()
+                == (int)ReplacementResidualSeverity.Critical);
     }
 
     [Fact]
