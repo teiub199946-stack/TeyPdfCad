@@ -133,12 +133,6 @@ public sealed record SourceReplacementPlan(
     IReadOnlyList<ReplacementConflict> Conflicts,
     IReadOnlyList<ReplacementResidual> Residuals)
 {
-    // Transitional compatibility for downstream code that is migrated in later
-    // P0 tasks. New P0 code must use EligibleSourceIds + SuppressionGate.
-    // Temporary compatibility surface for downstream stages that are migrated
-    // in later P0 tasks. It means eligibility only, never authorization.
-    public IReadOnlyCollection<string> SuppressedSourceIds => EligibleSourceIds;
-
     public bool HasCompleteCoveragePlan =>
         EligibleSourceIds.All(sourceId =>
             SourceCoverageMap.TryGetValue(sourceId, out var candidates)
