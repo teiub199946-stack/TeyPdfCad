@@ -81,9 +81,14 @@ public sealed class AcadSharpDwgWriter
         if (!destination.CanWrite)
             throw new ArgumentException("Destination stream must be writable.", nameof(destination));
 
+        var manifest = NativeExpectationBuilder.Build(
+            source,
+            plan,
+            hatchRecognitionByPage,
+            semanticRecognitionByPage,
+            sourceReplacementPlansByPage);
+
         var document = new CadDocument();
-        var manifestBuilders = new Dictionary<string, CandidateManifestBuilder>(StringComparer.Ordinal);
-        var equivalenceAssessments = new Dictionary<string, SourceEquivalenceAssessment>(StringComparer.Ordinal);
         var sourceEmissionCounts = new Dictionary<PageSourceRef, Dictionary<string, int>>();
         var diagnosticCreatedCandidateKeyCount = 0;
         var styles = new AcadSharpStyleCatalog(document);
@@ -128,18 +133,6 @@ public sealed class AcadSharpDwgWriter
                 && sourceReplacementPlansByPage.TryGetValue(page.Number, out var suppliedReplacementPlan)
                     ? suppliedReplacementPlan
                     : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition, page.Number);
-            var pageEquivalence = SourceEquivalenceAssessor.Build(
-                page,
-                semantics,
-                hatchRecognition);
-            foreach (var pair in pageEquivalence.Candidates)
-            {
-                if (!equivalenceAssessments.TryAdd(pair.Key, pair.Value))
-                {
-                    throw new InvalidOperationException(
-                        $"Duplicate source-equivalence assessment for candidate {pair.Key} across document pages.");
-                }
-            }
             var authorizedForPage = authorizedSuppressedSources is null
                 ? new HashSet<string>(StringComparer.Ordinal)
                 : authorizedSuppressedSources
@@ -324,16 +317,7 @@ public sealed class AcadSharpDwgWriter
                 };
                 hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 styles.Apply(hatch, candidate.Style);
-                AddExpectedNative(
-                    manifestBuilders,
-                    key,
-                    "HATCH",
-                    "primary",
-                    "Hatch",
-                    hatch,
-                    Properties(
-                        ("minimumArea", "0.000001"),
-                        ("boundaryFingerprint", DwgEntityFingerprint.ComputeHatchBoundary(hatch))));
+                StampNativeEntity(manifest, key, "primary", hatch);
                 document.Entities.Add(hatch);
                 RegisterPaintKey(
                     paintKeys, hatch, page.Number, key, "primary", 0, preservedBoundaryEntities);
@@ -368,18 +352,7 @@ public sealed class AcadSharpDwgWriter
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     var dimension = WriteDimension(document, styles, sheet, candidate);
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "DIMENSION",
-                        "primary",
-                        "Dimension",
-                        dimension,
-                        Properties(
-                            ("expectedMeasurement", Number(dimension.Measurement)),
-                            ("measurementTolerance", "0.000001"),
-                            ("expectedDimensionText", dimension.Text ?? string.Empty),
-                            ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension))));
+                    StampNativeEntity(manifest, key, "primary", dimension);
                     RegisterPaintKey(
                         paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -390,25 +363,8 @@ public sealed class AcadSharpDwgWriter
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     var emitted = WriteLeader(document, styles, sheet, candidate);
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "LEADER",
-                        "primary",
-                        "Leader",
-                        emitted.Leader,
-                        Properties(("minimumVertices", "2")));
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "LEADER",
-                        "annotation",
-                        "Text",
-                        emitted.Annotation,
-                        Properties(
-                            ("minimumHeight", Number(emitted.Annotation.Height)),
-                            ("nonEmpty", "true"),
-                            ("expectedText", candidate.Text)));
+                    StampNativeEntity(manifest, key, "primary", emitted.Leader);
+                    StampNativeEntity(manifest, key, "annotation", emitted.Annotation);
                     RegisterPaintKey(
                         paintKeys, emitted.Leader, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     RegisterPaintKey(
@@ -421,18 +377,7 @@ public sealed class AcadSharpDwgWriter
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     var axis = WriteAxis(document, styles, sheet, candidate);
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "AXIS",
-                        "primary",
-                        "Insert",
-                        axis,
-                        Properties(
-                            ("blockName", "TEY_AXIS"),
-                            ("blockDefinitionFingerprint", DwgEntityFingerprint.ComputeBlockDefinition(axis)),
-                            ("minimumScale", "0.000001"),
-                            ("minimumLength", "0.000001")));
+                    StampNativeEntity(manifest, key, "primary", axis);
                     RegisterPaintKey(
                         paintKeys, axis, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -443,28 +388,8 @@ public sealed class AcadSharpDwgWriter
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     var emitted = WriteLevel(document, styles, sheet, candidate);
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "LEVEL",
-                        "primary",
-                        "Insert",
-                        emitted.Insert,
-                        Properties(
-                            ("blockName", "TEY_LEVEL"),
-                            ("blockDefinitionFingerprint", DwgEntityFingerprint.ComputeBlockDefinition(emitted.Insert)),
-                            ("minimumScale", "0.000001")));
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "LEVEL",
-                        "attribute",
-                        "AttributeEntity",
-                        emitted.Attribute,
-                        Properties(
-                            ("attributeTag", "LEVEL"),
-                            ("nonEmptyValue", "true"),
-                            ("expectedAttributeValue", candidate.Value)));
+                    StampNativeEntity(manifest, key, "primary", emitted.Insert);
+                    StampNativeEntity(manifest, key, "attribute", emitted.Attribute);
                     RegisterPaintKey(
                         paintKeys, emitted.Insert, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -475,18 +400,7 @@ public sealed class AcadSharpDwgWriter
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     var dimension = WriteArcDimension(document, styles, sheet, candidate);
-                    AddExpectedNative(
-                        manifestBuilders,
-                        key,
-                        "ARC_DIMENSION",
-                        "primary",
-                        "Dimension",
-                        dimension,
-                        Properties(
-                            ("expectedMeasurement", Number(dimension.Measurement)),
-                            ("measurementTolerance", "0.000001"),
-                            ("expectedDimensionText", candidate.SourceText),
-                            ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension))));
+                    StampNativeEntity(manifest, key, "primary", dimension);
                     RegisterPaintKey(
                         paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -505,29 +419,6 @@ public sealed class AcadSharpDwgWriter
         };
         writer.Write();
 
-        var manifest = new NativeWriteManifest(
-            manifestBuilders
-                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .ToDictionary(
-                    pair => pair.Key,
-                    pair =>
-                    {
-                        if (!equivalenceAssessments.TryGetValue(pair.Key, out var assessment))
-                        {
-                            throw new InvalidOperationException(
-                                $"No pre-write source-equivalence assessment exists for emitted candidate {pair.Key}.");
-                        }
-
-                        return new ExpectedCandidate(
-                            pair.Key,
-                            pair.Value.SemanticType,
-                            pair.Value.Entities.ToArray())
-                        {
-                            SourceEquivalenceComplete = assessment.IsComplete,
-                            SourceEquivalenceReason = assessment.Reason
-                        };
-                    },
-                    StringComparer.Ordinal));
         var sourceSummary = new SourceEmissionSummary(
             sourceEmissionCounts
                 .OrderBy(pair => pair.Key.PageNumber)
@@ -565,65 +456,29 @@ public sealed class AcadSharpDwgWriter
             : 1;
     }
 
-    private static void AddExpectedNative(
-        IDictionary<string, CandidateManifestBuilder> manifestBuilders,
+    private static void StampNativeEntity(
+        NativeWriteManifest manifest,
         string candidateId,
-        string semanticType,
         string role,
-        string entityKind,
-        Entity entity,
-        IReadOnlyDictionary<string, string>? requiredProperties = null)
+        Entity entity)
     {
-        if (!manifestBuilders.TryGetValue(candidateId, out var candidate))
-        {
-            candidate = new CandidateManifestBuilder(semanticType);
-            manifestBuilders[candidateId] = candidate;
-        }
-        else if (!string.Equals(candidate.SemanticType, semanticType, StringComparison.Ordinal))
+        if (!manifest.Candidates.TryGetValue(candidateId, out var expected))
         {
             throw new InvalidOperationException(
-                $"CandidateId {candidateId} was emitted with conflicting semantic types.");
+                $"Writer emitted candidate {candidateId} without a pre-write native expectation.");
         }
 
-        if (candidate.Entities.Any(expected =>
-                string.Equals(expected.Role, role, StringComparison.Ordinal)))
+        var expectedRole = expected.Entities.SingleOrDefault(item =>
+            string.Equals(item.Role, role, StringComparison.Ordinal));
+        if (expectedRole is null)
         {
             throw new InvalidOperationException(
-                $"CandidateId {candidateId} emitted duplicate role '{role}'.");
+                $"Writer emitted unexpected role '{role}' for candidate {candidateId}.");
         }
 
         CandidateMetadataCodec.Write(
             entity,
             new CandidateEntityMetadata(candidateId, role));
-
-        candidate.Entities.Add(new ExpectedNativeEntity(
-            candidateId,
-            role,
-            entityKind,
-            DwgEntityFingerprint.ComputeGeometry(entity),
-            requiredProperties
-                ?? new Dictionary<string, string>(StringComparer.Ordinal)));
-    }
-
-    private static IReadOnlyDictionary<string, string> Properties(
-        params (string Key, string Value)[] values)
-        => values.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value,
-            StringComparer.Ordinal);
-
-    private static string Number(double value)
-        => value.ToString("R", CultureInfo.InvariantCulture);
-
-    private sealed class CandidateManifestBuilder
-    {
-        public string SemanticType { get; }
-        public List<ExpectedNativeEntity> Entities { get; } = [];
-
-        public CandidateManifestBuilder(string semanticType)
-        {
-            SemanticType = semanticType;
-        }
     }
 
     private static void RegisterPaintKey(
