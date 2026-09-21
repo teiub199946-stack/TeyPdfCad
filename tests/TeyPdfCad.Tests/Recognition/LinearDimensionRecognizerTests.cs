@@ -143,6 +143,19 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void One_sided_arrow_evidence_is_abstained_as_ambiguous()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(52, 0)));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, -12), new Point2(0, 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(52, -12), new Point2(52, 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1, -1), new Point2(1, 1)));
+        scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
+
+        Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    [Fact]
     public void Rejects_Number_Next_To_Ordinary_Line_Without_Extension_Lines()
     {
         var scene = new PrimitiveScene();
