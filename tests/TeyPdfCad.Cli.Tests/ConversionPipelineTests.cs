@@ -376,6 +376,59 @@ public sealed class ConversionPipelineTests
         Assert.Empty(page.GetProperty("diagnostics").EnumerateArray());
     }
 
+
+    [Fact]
+    public async Task Pipeline_reports_unsafe_page_independently_in_two_page_document()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "two-page.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+
+        const string uncertainHatchPage =
+            "0 0 60 60 re S " +
+            "5 10 m 55 10 l S " +
+            "5 20 m 55 20 l S " +
+            "5 30 m 55 30 l S";
+        const string ordinaryPage = "5 5 m 25 20 l S";
+        await File.WriteAllBytesAsync(
+            input,
+            CreateTwoPagePdf(
+                uncertainHatchPage,
+                ordinaryPage,
+                72,
+                72));
+
+        var result = await new ConversionPipeline().ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
+        Assert.True(File.Exists(output));
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
+        var pages = json.RootElement.GetProperty("pages").EnumerateArray().ToArray();
+        Assert.Equal(2, pages.Length);
+
+        Assert.Equal(1, pages[0].GetProperty("pageNumber").GetInt32());
+        Assert.Equal(
+            "PASS_WITH_RESIDUALS",
+            pages[0].GetProperty("semanticAuditStatus").GetString());
+        Assert.False(pages[0].GetProperty("complete").GetBoolean());
+        Assert.Contains(
+            pages[0].GetProperty("recognitionWarnings").EnumerateArray(),
+            warning => warning.GetString() is "hatch-uncertain" or "hatch-low-confidence");
+
+        Assert.Equal(2, pages[1].GetProperty("pageNumber").GetInt32());
+        Assert.Equal(
+            "FULL_PASS",
+            pages[1].GetProperty("semanticAuditStatus").GetString());
+        Assert.True(pages[1].GetProperty("complete").GetBoolean());
+    }
+
     [Fact]
     public async Task Pipeline_skips_advisory_semantics_when_page_complexity_is_too_high()
     {
@@ -594,6 +647,51 @@ public sealed class ConversionPipelineTests
                 sourceReplacementPlansByPage,
                 authorization);
         }
+    }
+
+
+    private static byte[] CreateTwoPagePdf(
+        string firstContents,
+        string secondContents,
+        int widthPoints,
+        int heightPoints)
+    {
+        var objects = new[]
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {widthPoints} {heightPoints}] /Contents 4 0 R >>",
+            $"<< /Length {Encoding.ASCII.GetByteCount(firstContents)} >>\nstream\n{firstContents}\nendstream",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {widthPoints} {heightPoints}] /Contents 6 0 R >>",
+            $"<< /Length {Encoding.ASCII.GetByteCount(secondContents)} >>\nstream\n{secondContents}\nendstream"
+        };
+
+        var builder = new StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int> { 0 };
+        for (var index = 0; index < objects.Length; index++)
+        {
+            offsets.Add(Encoding.ASCII.GetByteCount(builder.ToString()));
+            builder
+                .Append(index + 1)
+                .Append(" 0 obj\n")
+                .Append(objects[index])
+                .Append("\nendobj\n");
+        }
+
+        var startXref = Encoding.ASCII.GetByteCount(builder.ToString());
+        builder.Append("xref\n0 7\n0000000000 65535 f \n");
+        foreach (var offset in offsets.Skip(1))
+        {
+            builder
+                .Append(offset.ToString("D10"))
+                .Append(" 00000 n \n");
+        }
+
+        builder
+            .Append("trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n")
+            .Append(startXref)
+            .Append("\n%%EOF");
+        return Encoding.ASCII.GetBytes(builder.ToString());
     }
 
     private static byte[] CreateMinimalPdf(
