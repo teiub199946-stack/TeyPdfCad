@@ -26,21 +26,25 @@ public sealed class SourceReplacementPlanner
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
 
         var candidates = new List<CandidateDescriptor>();
+        var evidenceOnlySourceIds = new HashSet<string>(StringComparer.Ordinal);
         if (semantics is not null)
         {
             AddSemanticCandidates(candidates, semantics, pageNumber);
             AddWarningResiduals(pageResiduals, semantics.Warnings, "semantic");
+            AddWarningEvidence(evidenceOnlySourceIds, semantics.Warnings);
         }
 
         if (hatchRecognition is not null)
         {
             AddHatchCandidates(candidates, hatchRecognition);
             AddWarningResiduals(pageResiduals, hatchRecognition.Warnings, "hatch");
+            AddWarningEvidence(evidenceOnlySourceIds, hatchRecognition.Warnings);
         }
 
         return Resolve(
             sourceGroups,
             invalidSourceIds,
+            evidenceOnlySourceIds,
             candidates,
             pageResiduals,
             conflicts);
@@ -224,6 +228,7 @@ public sealed class SourceReplacementPlanner
     private static SourceReplacementPlan Resolve(
         IReadOnlyDictionary<string, VectorEntity[]> sourceGroups,
         IReadOnlyCollection<string> invalidSourceIds,
+        IReadOnlyCollection<string> evidenceOnlySourceIds,
         IReadOnlyList<CandidateDescriptor> candidates,
         IReadOnlyList<ReplacementResidual> pageResiduals,
         IReadOnlyList<ReplacementConflict> initialConflicts)
@@ -237,8 +242,29 @@ public sealed class SourceReplacementPlanner
 
         foreach (var sourceId in sourceGroups.Keys)
         {
-            if (string.IsNullOrWhiteSpace(sourceId) || invalidSourceIds.Contains(sourceId))
+            if (string.IsNullOrWhiteSpace(sourceId)
+                || invalidSourceIds.Contains(sourceId)
+                || evidenceOnlySourceIds.Contains(sourceId))
                 preserved.Add(sourceId);
+        }
+
+        foreach (var evidenceSourceId in evidenceOnlySourceIds.OrderBy(id => id, StringComparer.Ordinal))
+        {
+            if (sourceGroups.ContainsKey(evidenceSourceId))
+                continue;
+
+            conflicts.Add(new ReplacementConflict(
+                evidenceSourceId,
+                ReplacementConflictReason.SourceMissingFromPage,
+                "Warning evidence references a SourceId absent from page.Entities.",
+                []));
+            AddResidual(
+                residuals,
+                evidenceSourceId,
+                null,
+                ReplacementResidualKind.SourceMissingFromPage,
+                ReplacementResidualSeverity.Critical,
+                "Warning provenance references a source object absent from the page.");
         }
 
         var candidateGroups = candidates
@@ -325,6 +351,30 @@ public sealed class SourceReplacementPlanner
                     ReplacementResidualKind.DeferredUnresolvedClaims,
                     ReplacementResidualSeverity.High,
                     "Declared candidate source set does not equal the union of explicit recognizer claims.");
+                continue;
+            }
+
+            var evidenceOverlap = candidate.DeclaredSourceIds
+                .Where(evidenceOnlySourceIds.Contains)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToArray();
+            if (evidenceOverlap.Length > 0)
+            {
+                deferred.Add(candidate.CandidateId);
+                foreach (var sourceId in candidate.DeclaredSourceIds)
+                    preserved.Add(sourceId);
+                conflicts.Add(new ReplacementConflict(
+                    evidenceOverlap[0],
+                    ReplacementConflictReason.UnresolvedClaim,
+                    "Unresolved warning evidence overlaps this candidate; whole-source suppression is blocked.",
+                    [candidate.CandidateId]));
+                AddResidual(
+                    residuals,
+                    evidenceOverlap[0],
+                    candidate.CandidateId,
+                    ReplacementResidualKind.DeferredUnresolvedClaims,
+                    ReplacementResidualSeverity.High,
+                    "EvidenceOnly warning provenance prevents native replacement eligibility.");
                 continue;
             }
 
@@ -595,6 +645,18 @@ public sealed class SourceReplacementPlanner
                     .ThenBy(claim => claim.Role)
                     .ThenBy(claim => claim.State)
                     .ThenBy(claim => claim.IsPartial));
+
+    private static void AddWarningEvidence(
+        ISet<string> evidenceOnlySourceIds,
+        IEnumerable<SemanticWarning> warnings)
+    {
+        foreach (var sourceId in warnings
+                     .SelectMany(warning => warning.ProvenanceIds)
+                     .SelectMany(sourceId => NormalizeDeclaredSourceIds([sourceId])))
+        {
+            evidenceOnlySourceIds.Add(sourceId);
+        }
+    }
 
     private static void AddWarningResiduals(
         ICollection<ReplacementResidual> residuals,
