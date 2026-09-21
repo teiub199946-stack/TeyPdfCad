@@ -66,6 +66,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
                 DetectedDimensions = 0,
                 ConfidenceClass = ConfidenceClass.None,
                 SuppressionEvidenceEligible = false,
+                SuppressionBlockers = ["NoRecognizedDimension"],
                 Diagnostics = diagnostics
             };
 
