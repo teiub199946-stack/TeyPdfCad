@@ -47,6 +47,12 @@ public sealed class ConversionPipeline
             var semanticRecognition = document.Pages.ToDictionary(
                 page => page.Number,
                 AnalyzeSemantics);
+            var replacementPlans = document.Pages.ToDictionary(
+                page => page.Number,
+                page => new SourceReplacementPlanner().BuildPlan(
+                    page.Entities,
+                    semanticRecognition[page.Number].Result,
+                    hatchRecognition[page.Number]));
             var templateLibrary = LoadTemplateLibrary(templateManifestPath);
             var templateSelections = templateLibrary is null
                 ? null
@@ -54,7 +60,7 @@ public sealed class ConversionPipeline
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
-                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition, templateSelections), null, cancellationToken);
+                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), null, cancellationToken);
                 return new ConversionResult(ConversionOutcome.UnsupportedVectorContent, reportPath, null);
             }
 
@@ -68,7 +74,8 @@ public sealed class ConversionPipeline
                 hatchRecognition,
                 semanticResults,
                 templateLibrary,
-                templateSelections);
+                templateSelections,
+                replacementPlans);
             var readBack = DwgReader.Read(new MemoryStream(bytes));
             var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
             if (layoutsReadBack != 0)
@@ -83,8 +90,20 @@ public sealed class ConversionPipeline
                 warnings.Add("One or more PDF pages contained no usable vector entities; DWG is partial.");
             warnings.AddRange(document.Pages
                 .SelectMany(page => page.Diagnostics.Select(diagnostic => $"Page {page.Number}: {diagnostic.Message}")));
-            var complete = warnings.Count == 0;
-            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, templateSelections), readBackSummary, cancellationToken);
+            warnings.AddRange(document.Pages.SelectMany(page =>
+                semanticRecognition[page.Number].Warnings.Select(code =>
+                    $"Page {page.Number}: semantic audit requires review ({code}).")));
+            warnings.AddRange(document.Pages.SelectMany(page =>
+                hatchRecognition[page.Number].Warnings.Select(warning =>
+                    $"Page {page.Number}: hatch audit requires review ({warning.Code}).")));
+            warnings.AddRange(document.Pages.SelectMany(page =>
+                replacementPlans[page.Number].Conflicts.Select(conflict =>
+                    $"Page {page.Number}: source replacement conflict {conflict.Reason} on {conflict.SourceId}.")));
+            warnings = warnings.Distinct(StringComparer.Ordinal).ToList();
+
+            var complete = warnings.Count == 0
+                && replacementPlans.Values.All(planResult => planResult.IsFullPassEligible);
+            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), readBackSummary, cancellationToken);
             return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
         }
         catch (OperationCanceledException) { throw; }
@@ -191,6 +210,7 @@ public sealed class ConversionPipeline
         TeyPdfCad.Core.Documents.VectorPdfDocument document,
         IReadOnlyDictionary<int, HatchRecognitionResult> hatchRecognition,
         IReadOnlyDictionary<int, PageSemanticSummary> semanticRecognition,
+        IReadOnlyDictionary<int, SourceReplacementPlan> replacementPlans,
         IReadOnlyDictionary<int, TemplateSelection>? templateSelections = null)
         => document.Pages.Select(page => new PageReport(
             page.Number,
@@ -219,7 +239,35 @@ public sealed class ConversionPipeline
                 ? reasonSelection.Reason
                 : "template-manifest-not-supplied",
             page.Diagnostics,
-            page.Entities.Count > 0 && page.Diagnostics.Count == 0)).ToArray();
+            replacementPlans[page.Number].SuppressedSourceIds.Count,
+            replacementPlans[page.Number].PreservedSourceIds.Count,
+            replacementPlans[page.Number].Conflicts.Count,
+            replacementPlans[page.Number].ResidualClaims.Count,
+            ResolvePageAuditStatus(
+                page,
+                hatchRecognition[page.Number],
+                semanticRecognition[page.Number],
+                replacementPlans[page.Number]),
+            page.Entities.Count > 0
+                && page.Diagnostics.Count == 0
+                && hatchRecognition[page.Number].Warnings.Count == 0
+                && semanticRecognition[page.Number].Warnings.Count == 0
+                && replacementPlans[page.Number].IsFullPassEligible)).ToArray();
+
+    private static string ResolvePageAuditStatus(
+        VectorPdfPage page,
+        HatchRecognitionResult hatchRecognition,
+        PageSemanticSummary semanticRecognition,
+        SourceReplacementPlan replacementPlan)
+    {
+        if (page.Entities.Count == 0 || page.Diagnostics.Count > 0)
+            return "PARTIAL";
+        if (hatchRecognition.Warnings.Count > 0
+            || semanticRecognition.Warnings.Count > 0
+            || !replacementPlan.IsFullPassEligible)
+            return "PASS_WITH_RESIDUALS";
+        return "FULL_PASS";
+    }
 
     private static PageSemanticSummary AnalyzeSemantics(VectorPdfPage page)
     {
@@ -375,6 +423,11 @@ public sealed class ConversionPipeline
         string? TemplateName,
         string TemplateReason,
         IReadOnlyList<TeyPdfCad.Core.Documents.VectorPageDiagnostic> Diagnostics,
+        int SuppressedSourceCount,
+        int PreservedSourceCount,
+        int ReplacementConflictCount,
+        int ResidualClaimCount,
+        string SemanticAuditStatus,
         bool Complete);
 
     private sealed record PageSemanticSummary(
