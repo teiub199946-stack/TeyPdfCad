@@ -83,6 +83,7 @@ public sealed class AcadSharpDwgWriter
 
         var document = new CadDocument();
         var manifestBuilders = new Dictionary<string, CandidateManifestBuilder>(StringComparer.Ordinal);
+        var equivalenceAssessments = new Dictionary<string, SourceEquivalenceAssessment>(StringComparer.Ordinal);
         var sourceEmissionCounts = new Dictionary<PageSourceRef, Dictionary<string, int>>();
         var diagnosticCreatedCandidateKeyCount = 0;
         var styles = new AcadSharpStyleCatalog(document);
@@ -127,6 +128,18 @@ public sealed class AcadSharpDwgWriter
                 && sourceReplacementPlansByPage.TryGetValue(page.Number, out var suppliedReplacementPlan)
                     ? suppliedReplacementPlan
                     : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition, page.Number);
+            var pageEquivalence = SourceEquivalenceAssessor.Build(
+                page,
+                semantics,
+                hatchRecognition);
+            foreach (var pair in pageEquivalence.Candidates)
+            {
+                if (!equivalenceAssessments.TryAdd(pair.Key, pair.Value))
+                {
+                    throw new InvalidOperationException(
+                        $"Duplicate source-equivalence assessment for candidate {pair.Key} across document pages.");
+                }
+            }
             var authorizedForPage = authorizedSuppressedSources is null
                 ? new HashSet<string>(StringComparer.Ordinal)
                 : authorizedSuppressedSources
@@ -497,10 +510,23 @@ public sealed class AcadSharpDwgWriter
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(
                     pair => pair.Key,
-                    pair => new ExpectedCandidate(
-                        pair.Key,
-                        pair.Value.SemanticType,
-                        pair.Value.Entities.ToArray()),
+                    pair =>
+                    {
+                        if (!equivalenceAssessments.TryGetValue(pair.Key, out var assessment))
+                        {
+                            throw new InvalidOperationException(
+                                $"No pre-write source-equivalence assessment exists for emitted candidate {pair.Key}.");
+                        }
+
+                        return new ExpectedCandidate(
+                            pair.Key,
+                            pair.Value.SemanticType,
+                            pair.Value.Entities.ToArray())
+                        {
+                            SourceEquivalenceComplete = assessment.IsComplete,
+                            SourceEquivalenceReason = assessment.Reason
+                        };
+                    },
                     StringComparer.Ordinal));
         var sourceSummary = new SourceEmissionSummary(
             sourceEmissionCounts
