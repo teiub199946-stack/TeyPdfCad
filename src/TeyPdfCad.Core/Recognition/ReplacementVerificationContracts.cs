@@ -51,6 +51,7 @@ public enum ReplacementResidualKind
     SourceSuppressionViolation,
     CandidateIdentityViolation,
     DestructiveSuppressionDisabled,
+    SourceEquivalenceIncomplete,
 
     // Legacy/reporting kinds kept while the remaining P0 stages are migrated.
     Unrecognized,
@@ -156,7 +157,12 @@ public sealed record ExpectedNativeEntity(
 public sealed record ExpectedCandidate(
     string CandidateId,
     string SemanticType,
-    IReadOnlyList<ExpectedNativeEntity> Entities);
+    IReadOnlyList<ExpectedNativeEntity> Entities)
+{
+    public bool SourceEquivalenceComplete { get; init; }
+
+    public string? SourceEquivalenceReason { get; init; }
+}
 
 public sealed record NativeWriteManifest(
     IReadOnlyDictionary<string, ExpectedCandidate> Candidates);
@@ -166,7 +172,10 @@ public sealed record CandidateVerification(
     bool IsVerified,
     IReadOnlyList<string> MissingRoles,
     IReadOnlyList<string> DuplicateRoles,
-    IReadOnlyList<string> InvalidEntities);
+    IReadOnlyList<string> InvalidEntities)
+{
+    public bool SourceEquivalenceComplete { get; init; }
+}
 
 public sealed record NativeReadBackVerification(
     IReadOnlyDictionary<string, CandidateVerification> Candidates);
@@ -206,11 +215,26 @@ public sealed class SuppressionGate
             }
 
             var candidateId = candidateIds[0];
-            if (verification.Candidates.TryGetValue(candidateId, out var candidate)
-                && candidate.IsVerified)
+            if (verification.Candidates.TryGetValue(candidateId, out var candidate))
             {
-                suppressed.Add(sourceId);
-                continue;
+                if (!candidate.SourceEquivalenceComplete)
+                {
+                    preserved.Add(sourceId);
+                    AddResidual(
+                        residuals,
+                        sourceId,
+                        candidateId,
+                        ReplacementResidualKind.SourceEquivalenceIncomplete,
+                        ReplacementResidualSeverity.Critical,
+                        "Native candidate round-tripped, but independent source-to-native equivalence evidence is incomplete; source is preserved.");
+                    continue;
+                }
+
+                if (candidate.IsVerified)
+                {
+                    suppressed.Add(sourceId);
+                    continue;
+                }
             }
 
             preserved.Add(sourceId);
