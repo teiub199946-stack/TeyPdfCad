@@ -63,12 +63,33 @@ jobs:
           --configuration Release --no-restore --
           diagnose-core --count 10000 --seed 12345
           --output artifacts/p0-test-003-current
+      - name: Evaluate P0 semantic quality gate
+        id: p0_quality_gate
+        continue-on-error: true
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          p0-quality-gate
+          --core-report artifacts/p0-test-002-current/report.json
+          --diagnostic-report artifacts/p0-test-003-current/report.json
+          --expected-count 10000
+          --output artifacts/p0-quality-gate.json
       - name: Upload P0 semantic quality evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: p0-semantic-quality-current-branch
           path: |
             artifacts/p0-test-002-current
             artifacts/p0-test-003-current
+            artifacts/p0-quality-gate.json
           if-no-files-found: error
           retention-days: 14
+      - name: Enforce P0 semantic quality gate result
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.p0_quality_gate.outcome }}" != "success" ]; then
+            echo "P0 semantic quality gate failed. See uploaded p0-semantic-quality-current-branch artifact."
+            exit 2
+          fi
