@@ -319,6 +319,40 @@ public sealed class DwgReadBackVerifier
         error = string.Empty;
         switch (key)
         {
+            case "expectedDimensionText":
+                if (entity is Dimension expectedTextDimension)
+                {
+                    var actualText = expectedTextDimension.Text ?? string.Empty;
+                    if (string.Equals(actualText, expectedValue, StringComparison.Ordinal))
+                        return true;
+                    error = $"dimension text '{actualText}' != '{expectedValue}'";
+                    return false;
+                }
+                error = "expectedDimensionText requires Dimension";
+                return false;
+
+            case "expectedText":
+                if (entity is TextEntity expectedTextEntity)
+                {
+                    if (string.Equals(expectedTextEntity.Value ?? string.Empty, expectedValue, StringComparison.Ordinal))
+                        return true;
+                    error = $"text value '{expectedTextEntity.Value}' != '{expectedValue}'";
+                    return false;
+                }
+                error = "expectedText requires TextEntity";
+                return false;
+
+            case "expectedAttributeValue":
+                if (entity is AttributeEntity expectedAttribute)
+                {
+                    if (string.Equals(expectedAttribute.Value ?? string.Empty, expectedValue, StringComparison.Ordinal))
+                        return true;
+                    error = $"attribute value '{expectedAttribute.Value}' != '{expectedValue}'";
+                    return false;
+                }
+                error = "expectedAttributeValue requires AttributeEntity";
+                return false;
+
             case "minimumVertices":
                 if (entity is not Leader leader || !int.TryParse(expectedValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minimumVertices))
                 {
