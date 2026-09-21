@@ -164,7 +164,7 @@ public sealed class TextLayoutFixtureGenerationTests
 SPIKE B — ручная проверка AutoCAD 2022
 
 Файлы fixture-{0,45,90}-{arial,simplex}.dwg содержат шесть изолированных ячеек:
-ABCED и ТЕСТ-45 × PLAIN LEFT, WIDTH FACTOR 0.80, FIT.
+ABCDE и ТЕСТ-45 × PLAIN LEFT, WIDTH FACTOR 0.80, FIT.
 Тонкий отрезок с поперечными рисками — контрольная baseline длиной 52 drawing units.
 
 Для каждого файла:
