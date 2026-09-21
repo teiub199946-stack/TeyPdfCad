@@ -316,6 +316,118 @@ public sealed class DwgReadBackVerifierTests
         Assert.Equal(3, inventory.OutputFingerprintCounts.Values.Sum());
     }
 
+
+    [Fact]
+    public void Unexpected_candidate_id_in_dwg_rejects_expected_manifest_candidate()
+    {
+        const string expectedId = "v1:1:LINE:expected";
+        const string unexpectedId = "v1:1:LINE:unexpected";
+        var drawing = new CadDocument();
+
+        var expectedLine = new Line(new XYZ(0, 0, 0), new XYZ(10, 0, 0));
+        CandidateMetadataCodec.Write(expectedLine, new(expectedId, "primary"));
+        drawing.Entities.Add(expectedLine);
+
+        var unexpectedLine = new Line(new XYZ(0, 1, 0), new XYZ(10, 1, 0));
+        CandidateMetadataCodec.Write(unexpectedLine, new(unexpectedId, "primary"));
+        drawing.Entities.Add(unexpectedLine);
+
+        var manifest = Manifest(
+            expectedId,
+            "LINE",
+            Expected(expectedId, "primary", "Line", expectedLine));
+
+        using var file = WriteDrawing(drawing);
+        var candidate = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[expectedId];
+
+        Assert.False(candidate.IsVerified);
+        Assert.Contains(candidate.InvalidEntities,
+            value => value.Contains("Unexpected CandidateId", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Duplicate_role_declared_by_manifest_is_rejected()
+    {
+        const string candidateId = "v1:1:LINE:dup-role";
+        var drawing = new CadDocument();
+        var line = new Line(new XYZ(0, 0, 0), new XYZ(10, 0, 0));
+        CandidateMetadataCodec.Write(line, new(candidateId, "primary"));
+        drawing.Entities.Add(line);
+
+        var expectedEntity = Expected(candidateId, "primary", "Line", line);
+        var manifest = Manifest(
+            candidateId,
+            "LINE",
+            expectedEntity,
+            expectedEntity);
+
+        using var file = WriteDrawing(drawing);
+        var candidate = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.False(candidate.IsVerified);
+        Assert.Contains("primary", candidate.DuplicateRoles);
+    }
+
+    [Fact]
+    public void Correct_line_candidate_verifies_from_closed_file()
+    {
+        const string candidateId = "v1:1:LINE:ok";
+        var drawing = new CadDocument();
+        var line = new Line(new XYZ(0, 0, 0), new XYZ(10, 0, 0));
+        CandidateMetadataCodec.Write(line, new(candidateId, "primary"));
+        drawing.Entities.Add(line);
+
+        var manifest = Manifest(
+            candidateId,
+            "LINE",
+            Expected(candidateId, "primary", "Line", line));
+
+        using var file = WriteDrawing(drawing);
+        var candidate = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.True(candidate.IsVerified);
+        Assert.Empty(candidate.MissingRoles);
+        Assert.Empty(candidate.DuplicateRoles);
+        Assert.Empty(candidate.InvalidEntities);
+    }
+
+    [Fact]
+    public void Dimension_measurement_uses_manifest_tolerance()
+    {
+        const string candidateId = "v1:1:DIMENSION:tolerance";
+        var drawing = new CadDocument();
+        var dimension = new DimensionAligned(
+            new XYZ(0, 0, 0),
+            new XYZ(10, 0, 0))
+        {
+            DefinitionPoint = new XYZ(0, 5, 0)
+        };
+        CandidateMetadataCodec.Write(dimension, new(candidateId, "primary"));
+        drawing.Entities.Add(dimension);
+
+        var expected = Expected(
+            candidateId,
+            "primary",
+            "Dimension",
+            dimension,
+            ("expectedMeasurement", "10.0005"),
+            ("measurementTolerance", "0.001"));
+        var manifest = Manifest(candidateId, "DIMENSION", expected);
+
+        using var file = WriteDrawing(drawing);
+        var candidate = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.True(candidate.IsVerified);
+    }
+
     private static ExpectedNativeEntity Expected(
         string candidateId,
         string role,
