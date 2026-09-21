@@ -282,6 +282,13 @@ public sealed class ConversionPipeline
             warnings.AddRange(document.Pages.SelectMany(page =>
                 executionReports[page.Number].CandidateNotVerifiedSourceIds.Select(sourceId =>
                     $"Page {page.Number}: native candidate is not read-back verified for source {sourceId}; source is preserved.")));
+            warnings.AddRange(document.Pages.SelectMany(page =>
+                suppressionDecisions[page.Number].Residuals
+                    .Where(residual =>
+                        residual.Kind is ReplacementResidualKind.SourceEquivalenceIncomplete
+                            or ReplacementResidualKind.DestructiveSuppressionDisabled)
+                    .Select(residual =>
+                        $"Page {page.Number}: {residual.Kind} on {residual.SourceId}; source is preserved.")));
             if (!_destructiveSuppressionEnabled
                 && suppressionDecisions.Values.Any(decision =>
                     decision.Residuals.Any(residual =>
@@ -293,6 +300,7 @@ public sealed class ConversionPipeline
 
             var complete = warnings.Count == 0
                 && replacementPlans.Values.All(planResult => planResult.IsFullPassEligible)
+                && suppressionDecisions.Values.All(decision => decision.Residuals.Count == 0)
                 && executionReports.Values.All(report =>
                     report.ReadBackConfirmed
                     && report.CandidateNotVerifiedSourceIds.Count == 0
@@ -548,6 +556,9 @@ public sealed class ConversionPipeline
                 templateSelections is not null && templateSelections.TryGetValue(page.Number, out var auditTemplateSelection)
                     ? auditTemplateSelection
                     : null,
+                suppressionDecisions is not null && suppressionDecisions.TryGetValue(page.Number, out var auditSuppressionDecision)
+                    ? auditSuppressionDecision
+                    : null,
                 executionReports is not null && executionReports.TryGetValue(page.Number, out var executionReport)
                     ? executionReport
                     : null),
@@ -680,6 +691,7 @@ public sealed class ConversionPipeline
         PageSemanticSummary semanticRecognition,
         SourceReplacementPlan replacementPlan,
         TemplateSelection? templateSelection,
+        SuppressionDecision? suppressionDecision,
         ReplacementExecutionReport? executionReport)
     {
         if (page.Entities.Count == 0 || page.Diagnostics.Count > 0)
@@ -687,6 +699,8 @@ public sealed class ConversionPipeline
         if (executionReport is { AnyGeometryLost: true })
             return "PARTIAL";
         if (executionReport is not null && executionReport.CandidateNotVerifiedSourceIds.Count > 0)
+            return "PASS_WITH_RESIDUALS";
+        if (suppressionDecision is not null && suppressionDecision.Residuals.Count > 0)
             return "PASS_WITH_RESIDUALS";
         if (string.Equals(
                 templateSelection?.Reason,
