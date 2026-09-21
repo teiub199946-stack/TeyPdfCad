@@ -1,0 +1,83 @@
+namespace TeyPdfCad.Dwg;
+
+public static class DwgStructuralSanity
+{
+    public static IReadOnlyDictionary<string, int> BuildExpectedFinalFingerprintMultiset(
+        DwgStructuralInventory probe,
+        SourceEmissionSummary sourceEmissions,
+        IEnumerable<PageSourceRef> authorizedSuppressedSources)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        ArgumentNullException.ThrowIfNull(sourceEmissions);
+        ArgumentNullException.ThrowIfNull(authorizedSuppressedSources);
+
+        var expected = new Dictionary<string, int>(
+            probe.OutputFingerprintCounts,
+            StringComparer.Ordinal);
+        var removed = sourceEmissions.GetExpectedSuppressionFingerprintMultiset(
+            authorizedSuppressedSources);
+
+        foreach (var pair in removed)
+        {
+            if (!expected.TryGetValue(pair.Key, out var available)
+                || available < pair.Value)
+            {
+                throw new InvalidDataException(
+                    $"Authorized source-emission fingerprint is not a sub-multiset of the on-disk probe inventory: requested {pair.Value}, available {available}.");
+            }
+
+            var remaining = available - pair.Value;
+            if (remaining == 0)
+                expected.Remove(pair.Key);
+            else
+                expected[pair.Key] = remaining;
+        }
+
+        return expected;
+    }
+
+    public static void ValidateFinal(
+        DwgStructuralInventory probe,
+        DwgStructuralInventory final,
+        SourceEmissionSummary sourceEmissions,
+        IEnumerable<PageSourceRef> authorizedSuppressedSources)
+    {
+        ArgumentNullException.ThrowIfNull(final);
+
+        var expected = BuildExpectedFinalFingerprintMultiset(
+            probe,
+            sourceEmissions,
+            authorizedSuppressedSources);
+
+        if (final.CandidateMetadataEntityCount != probe.CandidateMetadataEntityCount)
+        {
+            throw new InvalidDataException(
+                $"Final candidate metadata entity count {final.CandidateMetadataEntityCount} != verified probe count {probe.CandidateMetadataEntityCount}.");
+        }
+
+        if (!MultisetsEqual(expected, final.OutputFingerprintCounts))
+        {
+            throw new InvalidDataException(
+                "Final DWG structural fingerprint multiset does not equal probe inventory minus authorized source-emission fingerprints.");
+        }
+    }
+
+    private static bool MultisetsEqual(
+        IReadOnlyDictionary<string, int> first,
+        IReadOnlyDictionary<string, int> second)
+    {
+        if (first.Count != second.Count)
+            return false;
+
+        foreach (var pair in first)
+        {
+            if (!second.TryGetValue(pair.Key, out var count)
+                || count != pair.Value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
