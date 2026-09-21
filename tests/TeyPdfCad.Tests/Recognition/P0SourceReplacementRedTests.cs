@@ -21,6 +21,47 @@ public sealed class P0SourceReplacementRedTests
     }
 
     [Fact]
+    public void Control_character_source_id_is_not_suppressible()
+    {
+        const string invalidSourceId = "source\nline";
+        var sources = new VectorEntity[]
+        {
+            new VectorLine(
+                invalidSourceId,
+                new(0, 0),
+                new(10, 0),
+                new VectorStyle())
+        };
+        var axis = new AxisCandidate(
+            new(0, 0),
+            new(10, 0),
+            0.95,
+            [invalidSourceId])
+        {
+            SourceClaims =
+            [
+                new(
+                    invalidSourceId,
+                    SourceUsageRole.AxisGeometry,
+                    SourceClaimState.Valid,
+                    false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [axis] },
+            pageNumber: 1);
+
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains(invalidSourceId, plan.PreservedSourceIds);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.SourceId == invalidSourceId
+            && residual.Kind == ReplacementResidualKind.SourceIdentityViolation
+            && residual.Severity == ReplacementResidualSeverity.Critical);
+    }
+
+    [Fact]
     public void Duplicate_source_id_is_never_collapsed()
     {
         var sources = new VectorEntity[]
