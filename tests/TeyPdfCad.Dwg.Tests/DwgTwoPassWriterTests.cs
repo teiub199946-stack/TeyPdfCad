@@ -539,6 +539,37 @@ public sealed class DwgTwoPassWriterTests
         }
     }
 
+
+    [Fact]
+    public void Writer_preserves_empty_source_id_without_source_metadata()
+    {
+        var document = new VectorPdfDocument(
+        [
+            new VectorPdfPage(1, 72, 72, 0,
+            [
+                new VectorLine(
+                    string.Empty,
+                    new(0, 0),
+                    new(10, 0),
+                    new VectorStyle())
+            ])
+        ]);
+
+        using var stream = new MemoryStream();
+        var result = new AcadSharpDwgWriter().Write(
+            stream,
+            document,
+            new DocumentLayoutPlanner().Create(document));
+
+        stream.Position = 0;
+        var drawing = DwgReader.Read(stream);
+        var line = Assert.Single(drawing.Entities.OfType<Line>());
+        Assert.False(SourceMetadataCodec.TryRead(line, out _));
+        Assert.Contains(
+            new PageSourceRef(1, string.Empty),
+            result.SourceEmissionSummary.OutputFingerprintCountsBySource.Keys);
+    }
+
     [Fact]
     public void Source_emission_summary_rejects_unknown_page_source()
     {
