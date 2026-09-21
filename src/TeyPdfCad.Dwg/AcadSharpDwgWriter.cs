@@ -51,16 +51,17 @@ public sealed class AcadSharpDwgWriter
             }
             var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
                 ? suppliedRecognition
-                : new HatchRecognizer().Recognize(page.Entities);
+                : new HatchRecognizer().Recognize(page.Entities, page.Number);
             var semantics = semanticRecognitionByPage is not null && semanticRecognitionByPage.TryGetValue(page.Number, out var suppliedSemantics)
                 ? suppliedSemantics
                 : null;
             var replacementPlan = sourceReplacementPlansByPage is not null
                 && sourceReplacementPlansByPage.TryGetValue(page.Number, out var suppliedReplacementPlan)
                     ? suppliedReplacementPlan
-                    : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition);
-            var suppressedSourceIds = replacementPlan.SuppressedSourceIds
-                .ToHashSet(StringComparer.Ordinal);
+                    : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition, page.Number);
+            // Task 1 produces eligibility only. Until probe read-back + SuppressionGate
+            // are wired in later P0 tasks, destructive source suppression is forbidden.
+            var suppressedSourceIds = new HashSet<string>(StringComparer.Ordinal);
             var deferredCandidateKeys = replacementPlan.DeferredCandidateKeys
                 .ToHashSet(StringComparer.Ordinal);
             ISet<string>? createdCandidateKeys = null;
@@ -84,7 +85,7 @@ public sealed class AcadSharpDwgWriter
                     .ToDictionary(group => group.Key, group => group.First().Layer, StringComparer.Ordinal);
             var patternHatches = hatchRecognition.NativeHatches
                 .Where(candidate => !candidate.IsSolid)
-                .Where(candidate => !deferredCandidateKeys.Contains(SourceReplacementPlanner.GetCandidateKey(candidate)))
+                .Where(candidate => !deferredCandidateKeys.Contains(SourceReplacementPlanner.GetCandidateKey(candidate, page.Number)))
                 .ToArray();
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
             foreach (var sourceLine in page.Entities.OfType<VectorLine>())
@@ -185,7 +186,7 @@ public sealed class AcadSharpDwgWriter
                 hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 styles.Apply(hatch, candidate.Style);
                 document.Entities.Add(hatch);
-                createdCandidateKeys?.Add(SourceReplacementPlanner.GetCandidateKey(candidate));
+                createdCandidateKeys?.Add(SourceReplacementPlanner.GetCandidateKey(candidate, page.Number));
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
@@ -209,35 +210,35 @@ public sealed class AcadSharpDwgWriter
             {
                 foreach (var candidate in semantics.Dimensions)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     WriteDimension(document, styles, sheet, candidate);
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Leaders)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     WriteLeader(document, styles, sheet, candidate);
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Axes)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     WriteAxis(document, styles, sheet, candidate);
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Levels)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     WriteLevel(document, styles, sheet, candidate);
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.ArcDimensions)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
                     WriteArcDimension(document, styles, sheet, candidate);
                     createdCandidateKeys?.Add(key);
