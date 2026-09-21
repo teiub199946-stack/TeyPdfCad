@@ -274,7 +274,7 @@ public sealed class DwgTwoPassWriterTests
 
 
     [Fact]
-    public void Verified_probe_candidate_is_the_only_path_to_destructive_source_suppression()
+    public void Verified_probe_candidate_still_preserves_source_when_equivalence_is_incomplete()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
@@ -324,28 +324,11 @@ public sealed class DwgTwoPassWriterTests
 
             var verification = new DwgReadBackVerifier().Verify(probePath, probe.Manifest);
             var decision = new SuppressionGate().Evaluate(plan, verification);
-            Assert.Equal(new[] { "axis-source" }, decision.SuppressSourceIds.OrderBy(x => x));
-
-            var authorization = decision.SuppressSourceIds
-                .Select(sourceId => new PageSourceRef(1, sourceId))
-                .ToHashSet();
-
-            using (var stream = File.Create(finalPath))
-            {
-                _ = new AcadSharpDwgWriter().Write(
-                    stream,
-                    document,
-                    layout,
-                    hatchRecognitionByPage: new Dictionary<int, HatchRecognitionResult> { [1] = hatch },
-                    semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
-                    sourceReplacementPlansByPage: new Dictionary<int, SourceReplacementPlan> { [1] = plan },
-                    authorizedSuppressedSources: authorization);
-            }
-
-            var final = DwgReader.Read(finalPath);
-            Assert.Empty(final.Entities.OfType<Line>());
-            Assert.Single(final.Entities.OfType<Insert>(),
-                insert => string.Equals(insert.Block.Name, "TEY_AXIS", StringComparison.Ordinal));
+            Assert.Empty(decision.SuppressSourceIds);
+            Assert.Contains("axis-source", decision.PreserveSourceIds);
+            Assert.Contains(decision.Residuals, residual =>
+                residual.Kind == ReplacementResidualKind.SourceEquivalenceIncomplete
+                && residual.Severity == ReplacementResidualSeverity.Critical);
         }
         finally
         {
@@ -413,7 +396,7 @@ public sealed class DwgTwoPassWriterTests
 
 
     [Fact]
-    public void Confident_hatch_final_preserves_boundary_and_suppresses_only_pattern_sources()
+    public void Confident_hatch_round_trip_still_preserves_pattern_sources_when_equivalence_is_incomplete()
     {
         var boundary = new VectorPolyline(
             "boundary",
@@ -477,60 +460,14 @@ public sealed class DwgTwoPassWriterTests
             Assert.True(verification.Candidates[candidateId].IsVerified);
 
             var decision = new SuppressionGate().Evaluate(plan, verification);
-            Assert.Equal(
-                new[] { "h1", "h2", "h3" },
-                decision.SuppressSourceIds.OrderBy(value => value));
+            Assert.Empty(decision.SuppressSourceIds);
             Assert.Contains("boundary", decision.PreserveSourceIds);
-
-            var authorization = decision.SuppressSourceIds
-                .Select(sourceId => new PageSourceRef(1, sourceId))
-                .ToHashSet();
-
-            using (var finalStream = File.Create(finalPath))
-            {
-                _ = new AcadSharpDwgWriter().Write(
-                    finalStream,
-                    document,
-                    layout,
-                    hatchRecognitionByPage: new Dictionary<int, HatchRecognitionResult>
-                    {
-                        [1] = hatchRecognition
-                    },
-                    semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult>
-                    {
-                        [1] = semantics
-                    },
-                    sourceReplacementPlansByPage: new Dictionary<int, SourceReplacementPlan>
-                    {
-                        [1] = plan
-                    },
-                    authorizedSuppressedSources: authorization);
-            }
-
-            var finalVerification = verifier.Verify(finalPath, probe.Manifest);
-            Assert.True(finalVerification.Candidates[candidateId].IsVerified);
-
-            var final = DwgReader.Read(finalPath);
-            Assert.Empty(final.Entities.OfType<Line>());
-            Assert.Single(final.Entities.OfType<LwPolyline>());
-            var hatch = Assert.Single(
-                final.Entities.OfType<Hatch>(),
-                candidate => !candidate.IsSolid);
-            Assert.True(CandidateMetadataCodec.TryRead(hatch, out var metadata));
-            Assert.Equal(candidateId, metadata.CandidateId);
-            Assert.Equal("primary", metadata.Role);
-
-            var expectedCandidate = probe.Manifest.Candidates[candidateId];
-            var expectedHatch = Assert.Single(expectedCandidate.Entities);
-            Assert.Equal(
-                expectedHatch.RequiredProperties["boundaryFingerprint"],
-                DwgEntityFingerprint.ComputeHatchBoundary(hatch));
-
-            DwgStructuralSanity.ValidateFinal(
-                verifier.ReadStructuralInventory(probePath),
-                verifier.ReadStructuralInventory(finalPath),
-                probe.SourceEmissionSummary,
-                authorization);
+            Assert.Contains("h1", decision.PreserveSourceIds);
+            Assert.Contains("h2", decision.PreserveSourceIds);
+            Assert.Contains("h3", decision.PreserveSourceIds);
+            Assert.Contains(decision.Residuals, residual =>
+                residual.Kind == ReplacementResidualKind.SourceEquivalenceIncomplete
+                && residual.Severity == ReplacementResidualSeverity.Critical);
         }
         finally
         {
