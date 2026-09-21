@@ -376,6 +376,83 @@ public sealed class P0SourceReplacementRedTests
             && residual.Detail.Contains("2 source object", StringComparison.Ordinal));
     }
 
+
+    [Fact]
+    public void WarningEvidence_OverlappingCandidate_BlocksEligibility()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("line", new(0, 0), new(10, 0), new VectorStyle())
+        };
+        var candidate = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["line"])
+        {
+            SourceClaims =
+            [
+                new("line", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = EmptySemantics() with
+        {
+            Axes = [candidate],
+            Warnings = [new SemanticWarning("review", "ambiguous", ["line"])]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, pageNumber: 1);
+
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains("line", plan.PreservedSourceIds);
+        Assert.Contains(plan.Conflicts, conflict =>
+            conflict.Reason == ReplacementConflictReason.UnresolvedClaim);
+    }
+
+    [Fact]
+    public void OrphanEvidenceOnlyClaim_SourcePreserved_NoCandidateImpact()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("evidence", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorLine("axis", new(0, 1), new(10, 1), new VectorStyle())
+        };
+        var candidate = new AxisCandidate(new(0, 1), new(10, 1), 0.95, ["axis"])
+        {
+            SourceClaims =
+            [
+                new("axis", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = EmptySemantics() with
+        {
+            Axes = [candidate],
+            Warnings = [new SemanticWarning("review", "orphan evidence", ["evidence"])]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, pageNumber: 1);
+
+        Assert.Contains("evidence", plan.PreservedSourceIds);
+        Assert.Contains("axis", plan.EligibleSourceIds);
+        Assert.DoesNotContain(plan.DeferredCandidateKeys,
+            candidateId => candidateId == SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+    }
+
+    [Fact]
+    public void WarningEvidence_UnknownSource_IsCriticalAndNeverEligible()
+    {
+        var semantics = EmptySemantics() with
+        {
+            Warnings = [new SemanticWarning("bad-provenance", "missing", ["missing"])]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan([], semantics, pageNumber: 1);
+
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains(plan.Conflicts, conflict =>
+            conflict.SourceId == "missing"
+            && conflict.Reason == ReplacementConflictReason.SourceMissingFromPage);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.SourceId == "missing"
+            && residual.Severity == ReplacementResidualSeverity.Critical);
+    }
+
     private static SemanticReconstructionResult EmptySemantics()
         => new([], [], null, 0d);
 }
