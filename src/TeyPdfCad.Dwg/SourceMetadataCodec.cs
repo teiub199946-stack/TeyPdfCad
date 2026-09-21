@@ -66,6 +66,9 @@ public static class SourceMetadataCodec
         return entity.ExtendedData.TryGet(AppId, out _);
     }
 
+    internal static bool CanEncode(PageSourceRef source)
+        => source.PageNumber > 0 && IsValidSourceId(source.SourceId);
+
     private static void Validate(PageSourceRef source)
     {
         if (source.PageNumber <= 0)
