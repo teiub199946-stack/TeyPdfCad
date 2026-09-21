@@ -409,6 +409,8 @@ For final failure, inject an internal IDwgDocumentWriter seam whose final pass o
 
 Add two-page fixture: one page contains uncertain HATCH or failed candidate, the other ordinary source geometry. Assert output exists, unsafe page PASS_WITH_RESIDUALS, other page independently reported, whole document Partial.
 
+Add a Confident-HATCH final-file test: native HATCH exists with primary metadata; every BoundarySourceId remains in the final fingerprint inventory; only PatternSourceIds are absent; the preserved boundary fingerprint equals the manifest boundary fingerprint. A wrong boundary binding must make the candidate CandidateNotVerified and preserve all its pattern sources.
+
 - [ ] **Step 2: Run focused CLI tests and verify they fail**
 
 Run: dotnet test tests/TeyPdfCad.Cli.Tests/TeyPdfCad.Cli.Tests.csproj --filter "FullyQualifiedName~Pipeline_keeps_sources|FullyQualifiedName~Pipeline_publishes_final|FullyQualifiedName~Pipeline_does_not_publish"
