@@ -19,11 +19,13 @@ public class ProjectedDimensionTests
             new VectorLine("dim", new(0, -5), new(30, -5), new VectorStyle()),
             new VectorLine("ext-a", new(0, -5), new(0, 20), new VectorStyle()),
             new VectorLine("ext-b", new(30, -5), new(30, 0), new VectorStyle()),
+            new VectorLine("arrow-a", new(0, -5), new(2, -3), new VectorStyle()),
+            new VectorLine("arrow-b", new(30, -5), new(28, -3), new VectorStyle()),
             new VectorText("text", "30", new(15, -5), 2.5, new VectorStyle())
         ])]);
         var candidate = new DimensionCandidate(DimensionKind.Rotated,
             new(0, 20), new(30, 0), new(15, -5), 30, 30, 1, 1, "30", 1,
-            ["dim", "ext-a", "ext-b", "text"])
+            ["dim", "ext-a", "ext-b", "arrow-a", "arrow-b", "text"])
         {
             RotationRadians = 0,
             SourceClaims =
@@ -31,6 +33,8 @@ public class ProjectedDimensionTests
                 new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
                 new("ext-a", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
                 new("ext-b", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("arrow-a", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("arrow-b", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
                 new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
             ]
         };
