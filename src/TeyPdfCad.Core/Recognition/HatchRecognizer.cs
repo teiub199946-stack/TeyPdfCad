@@ -68,14 +68,16 @@ public sealed class HatchRecognizer
             }
         }
 
-        if (!patternRecognitionSkipped
-            && HasPlausibleParallelGroup(lineEntities)
+        var unresolvedPatternGroup = patternRecognitionSkipped
+            ? Array.Empty<VectorLine>()
+            : FindPlausibleParallelGroup(lineEntities);
+        if (unresolvedPatternGroup.Length > 0
             && !hatches.Any(candidate => !candidate.IsSolid))
         {
             warnings.Add(new SemanticWarning(
                 "hatch-low-confidence",
                 "Parallel source lines remain editable geometry because no closed filled boundary proves a hatch.",
-                lineEntities.Select(line => line.SourceId).ToArray()));
+                unresolvedPatternGroup.Select(line => line.SourceId).ToArray()));
         }
 
         return new HatchRecognitionResult(hatches, warnings);
@@ -194,17 +196,19 @@ public sealed class HatchRecognizer
         return false;
     }
 
-    private static bool HasPlausibleParallelGroup(IReadOnlyList<VectorLine> lines)
+    private static VectorLine[] FindPlausibleParallelGroup(IReadOnlyList<VectorLine> lines)
     {
         foreach (var line in lines)
         {
             var unit = GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start));
-            if (GeometryMath.Length(unit) > 1e-12 && lines.Count(candidate => IsParallel(candidate, unit)) >= 3)
-            {
-                return true;
-            }
+            if (GeometryMath.Length(unit) <= 1e-12)
+                continue;
+
+            var group = lines.Where(candidate => IsParallel(candidate, unit)).ToArray();
+            if (group.Length >= 3)
+                return group;
         }
-        return false;
+        return [];
     }
 
     private static bool IsOnBoundary(IReadOnlyList<Point2> polygon, Point2 point)

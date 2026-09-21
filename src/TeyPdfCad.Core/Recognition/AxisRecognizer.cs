@@ -42,9 +42,14 @@ public sealed class AxisRecognizer
                      !consumed.Contains(line)
                      && GeometryMath.Distance(line.Start, line.End) >= MinimumAxisLength))
         {
+            var layerEvidence = line.Layer?.IndexOf("ОС", StringComparison.OrdinalIgnoreCase) >= 0 ? 0.55d : 0d;
+            var dashEvidence = line.StrokeDashPattern.Count >= 3 ? 0.45d : 0d;
+            if (layerEvidence + dashEvidence <= 0d)
+                continue;
+
             warnings.Add(new SemanticWarning(
                 "axis-low-confidence",
-                "Line remains editable geometry because it lacks both axis layer and dash-dot evidence.",
+                "Axis-like line remains editable geometry because the available axis evidence is incomplete.",
                 line.ProvenanceIds));
         }
 

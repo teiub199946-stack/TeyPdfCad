@@ -166,6 +166,27 @@ public sealed class PdfPigVectorDocumentReaderTests
     }
 
     [Fact]
+    public async Task Reader_records_rotation_aware_advance_width_along_the_baseline()
+    {
+        // A word drawn with a text matrix that rotates it 90 degrees has zero X-axis
+        // baseline advance but a nonzero baseline length; AdvanceWidthPoints must be
+        // that baseline length so the writer can reproduce the true occupied width.
+        const string horizontal = "BT /F1 12 Tf 72 700 Td (A3) Tj ET";
+        await using var horizontalInput = CreateMinimalPdf(horizontal);
+        var horizontalText = Assert.Single(Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(horizontalInput, default)).Pages)
+            .Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+
+        const string vertical = "BT /F1 12 Tf 0 1 -1 0 72 700 Tm (A3) Tj ET";
+        await using var verticalInput = CreateMinimalPdf(vertical);
+        var verticalText = Assert.Single(Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(verticalInput, default)).Pages)
+            .Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+
+        Assert.True(horizontalText.AdvanceWidthPoints > 0d, "horizontal word must report a positive advance width");
+        Assert.True(verticalText.AdvanceWidthPoints > 0d, "rotated word must report a positive advance width (baseline length), not zero");
+        Assert.Equal(Math.Abs(Math.PI / 2d), Math.Abs(verticalText.RotationRadians), 3);
+    }
+
+    [Fact]
     public async Task Reader_preserves_gray_color_and_scales_stroke_style_with_the_graphics_transform()
     {
         const string contents = "q 2 0 0 2 0 0 cm 0.1 G 1 w [2 1] 0 d 0 0 m 10 0 l S Q";

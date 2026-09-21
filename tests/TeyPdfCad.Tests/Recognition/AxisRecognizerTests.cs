@@ -43,10 +43,26 @@ public sealed class AxisRecognizerTests
     }
 
     [Fact]
-    public void Solid_line_on_an_unrelated_layer_stays_geometry()
+    public void Solid_line_on_an_unrelated_layer_stays_geometry_without_false_axis_warning()
     {
         var scene = new PrimitiveScene();
         scene.Lines.Add(new LinePrimitive(new Point2(0, 20), new Point2(120, 20), SourceIds: ["line-1"]));
+
+        var result = new AxisRecognizer().Recognize(scene);
+
+        Assert.Empty(result.NativeAxes);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void Partial_axis_style_evidence_stays_geometry_and_requires_review()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 20),
+            new Point2(120, 20),
+            Layer: "ОСИ",
+            SourceIds: ["axis-like"]));
 
         var result = new AxisRecognizer().Recognize(scene);
 
