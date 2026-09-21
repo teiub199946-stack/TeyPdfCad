@@ -18,12 +18,30 @@ public sealed class DwgDocumentWriterTests
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
             new VectorLine("level", new Point2(10, 10), new Point2(17, 10), new VectorStyle()),
-            new VectorLine("level2", new Point2(30, 20), new Point2(37, 20), new VectorStyle())
+            new VectorText("level-text", "±0.000", new Point2(17, 10), 2.5, new VectorStyle()),
+            new VectorLine("level2", new Point2(30, 20), new Point2(37, 20), new VectorStyle()),
+            new VectorText("level2-text", "+3.600", new Point2(37, 20), 2.5, new VectorStyle())
         ]);
         var document = new VectorPdfDocument([page]);
+        var firstLevel = new LevelCandidate(new(10, 10), new(17, 10), "±0.000", 0.95d, ["level", "level-text"])
+        {
+            SourceClaims =
+            [
+                new("level", SourceUsageRole.LevelMarker, SourceClaimState.Valid, false),
+                new("level-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var secondLevel = new LevelCandidate(new(30, 20), new(37, 20), "+3.600", 0.95d, ["level2", "level2-text"])
+        {
+            SourceClaims =
+            [
+                new("level2", SourceUsageRole.LevelMarker, SourceClaimState.Valid, false),
+                new("level2-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            Levels = [new LevelCandidate(new(10, 10), new(17, 10), "±0.000", 0.95d, ["level"]), new LevelCandidate(new(30, 20), new(37, 20), "+3.600", 0.95d, ["level2"])]
+            Levels = [firstLevel, secondLevel]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -38,7 +56,7 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal("+3.600", Assert.Single(inserts[1].Attributes).Value);
     }
     [Fact]
-    public void Writer_removes_exact_source_objects_replaced_by_native_level()
+    public void Writer_preserves_source_objects_until_read_back_authorizes_level_replacement()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
@@ -48,7 +66,17 @@ public sealed class DwgDocumentWriterTests
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            Levels = [new LevelCandidate(new(10, 10), new(17, 10), "+3.600", 0.95d, ["level-line", "level-text"])]
+            Levels =
+            [
+                new LevelCandidate(new(10, 10), new(17, 10), "+3.600", 0.95d, ["level-line", "level-text"])
+                {
+                    SourceClaims =
+                    [
+                        new("level-line", SourceUsageRole.LevelMarker, SourceClaimState.Valid, false),
+                        new("level-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+                    ]
+                }
+            ]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -56,8 +84,8 @@ public sealed class DwgDocumentWriterTests
             new DocumentLayoutPlanner().Create(document),
             semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
 
-        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
-        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>());
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>());
         var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
         Assert.Equal("TEY_LEVEL", insert.Block.Name);
         Assert.Equal("+3.600", Assert.Single(insert.Attributes).Value);
@@ -68,13 +96,28 @@ public sealed class DwgDocumentWriterTests
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
-            new VectorLine("shared", new Point2(0, 0), new Point2(20, 0), new VectorStyle())
+            new VectorLine("shared", new Point2(0, 0), new Point2(20, 0), new VectorStyle()),
+            new VectorLine("leader-arrow", new Point2(0, 0), new Point2(2, 1), new VectorStyle()),
+            new VectorText("leader-text", "K-1", new Point2(20, 0), 2.5, new VectorStyle())
         ]);
         var document = new VectorPdfDocument([page]);
+        var axis = new AxisCandidate(new(0, 0), new(20, 0), 0.95d, ["shared"])
+        {
+            SourceClaims = [new("shared", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
+        };
+        var leader = new LeaderCandidate(new(0, 0), new(20, 0), "K-1", 0.95d, ["shared", "leader-arrow", "leader-text"])
+        {
+            SourceClaims =
+            [
+                new("shared", SourceUsageRole.LeaderShaft, SourceClaimState.Valid, false),
+                new("leader-arrow", SourceUsageRole.LeaderArrow, SourceClaimState.Valid, false),
+                new("leader-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            Axes = [new AxisCandidate(new(0, 0), new(20, 0), 0.95d, ["shared"])],
-            Leaders = [new LeaderCandidate(new(0, 0), new(20, 0), "K-1", 0.95d, ["shared"])]
+            Axes = [axis],
+            Leaders = [leader]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -82,7 +125,8 @@ public sealed class DwgDocumentWriterTests
             new DocumentLayoutPlanner().Create(document),
             semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
 
-        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Equal(2, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>());
         Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Leader>());
         Assert.DoesNotContain(drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
             insert => string.Equals(insert.Block.Name, "TEY_AXIS", StringComparison.Ordinal));
@@ -118,7 +162,14 @@ public sealed class DwgDocumentWriterTests
             new VectorText("level-text", "+3.600", new Point2(17, 10), 2.5, new VectorStyle())
         ]);
         var document = new VectorPdfDocument([page]);
-        var level = new LevelCandidate(new(10, 10), new(17, 10), "+3.600", 0.95d, ["level-line", "level-text"]);
+        var level = new LevelCandidate(new(10, 10), new(17, 10), "+3.600", 0.95d, ["level-line", "level-text"])
+        {
+            SourceClaims =
+            [
+                new("level-line", SourceUsageRole.LevelMarker, SourceClaimState.Valid, false),
+                new("level-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
         var semantics = new SemanticReconstructionResult([], [], null, 0d) { Levels = [level] };
         var created = new Dictionary<int, ISet<string>>();
 
@@ -128,7 +179,7 @@ public sealed class DwgDocumentWriterTests
             semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
             createdCandidateKeysByPage: created);
 
-        Assert.Contains(SourceReplacementPlanner.GetCandidateKey(level), created[1]);
+        Assert.Contains(SourceReplacementPlanner.GetCandidateKey(level, 1), created[1]);
     }
 
     [Fact]
@@ -142,7 +193,17 @@ public sealed class DwgDocumentWriterTests
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            ArcDimensions = [new ArcDimensionCandidate(new(50, 50), 20, 0, Math.PI / 2, new(65, 65), "L=31,42", 0.95d, ["arc", "label"])]
+            ArcDimensions =
+            [
+                new ArcDimensionCandidate(new(50, 50), 20, 0, Math.PI / 2, new(65, 65), "L=31,42", 0.95d, ["arc", "label"])
+                {
+                    SourceClaims =
+                    [
+                        new("arc", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                        new("label", SourceUsageRole.Text, SourceClaimState.Valid, false)
+                    ]
+                }
+            ]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
