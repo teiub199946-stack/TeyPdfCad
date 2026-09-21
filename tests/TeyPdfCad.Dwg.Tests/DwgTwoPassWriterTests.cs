@@ -271,6 +271,64 @@ public sealed class DwgTwoPassWriterTests
         Assert.Equal(firstOrder, secondOrder);
     }
 
+
+    [Fact]
+    public void Source_emission_fingerprints_are_present_in_on_disk_probe_inventory()
+    {
+        var fill = new VectorFilledPath(
+            "fill",
+            [new(0, 0), new(12, 0), new(12, 8), new(0, 8)],
+            VectorFillRule.NonZero,
+            new VectorStyle("FILL", 0x336699));
+        var line = new VectorLine(
+            "line",
+            new(20, 0),
+            new(35, 0),
+            new VectorStyle("GEOM", StrokeWidthPoints: 0.5));
+        var document = new VectorPdfDocument(
+        [
+            new VectorPdfPage(1, 72, 72, 0, [fill, line])
+        ]);
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Dwg.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "probe.dwg");
+
+        try
+        {
+            DwgWriteResult result;
+            using (var stream = File.Create(path))
+            {
+                result = new AcadSharpDwgWriter().Write(
+                    stream,
+                    document,
+                    new DocumentLayoutPlanner().Create(document));
+            }
+
+            var inventory = new DwgReadBackVerifier().ReadStructuralInventory(path);
+            foreach (var source in result.SourceEmissionSummary.OutputFingerprintCountsBySource)
+            {
+                foreach (var expected in source.Value)
+                {
+                    Assert.True(
+                        inventory.OutputFingerprintCounts.TryGetValue(expected.Key, out var actualCount),
+                        $"On-disk probe is missing source fingerprint for {source.Key}: {expected.Key}");
+                    Assert.True(
+                        actualCount >= expected.Value,
+                        $"On-disk probe count {actualCount} is below source emission count {expected.Value} for {source.Key}.");
+                }
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void Source_emission_summary_rejects_unknown_page_source()
     {
