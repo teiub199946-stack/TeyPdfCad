@@ -396,9 +396,13 @@ public sealed class DwgDocumentWriterTests
         var page = new VectorPdfPage(1, 72, 72, 0,
             [new VectorLine("axis", new Point2(0, 0), new Point2(25.4, 0), new VectorStyle())]);
         var document = new VectorPdfDocument([page]);
+        var axis = new AxisCandidate(new Point2(0, 0), new Point2(25.4, 0), 1d, ["axis"])
+        {
+            SourceClaims = [new("axis", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
+        };
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            Axes = [new AxisCandidate(new Point2(0, 0), new Point2(25.4, 0), 1d, ["axis"])]
+            Axes = [axis]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -414,11 +418,29 @@ public sealed class DwgDocumentWriterTests
     public void Writer_emits_recognized_leader_with_service_lineweight()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
-            [new VectorLine("leader", new Point2(0, 0), new Point2(20, 10), new VectorStyle())]);
+        [
+            new VectorLine("leader", new Point2(0, 0), new Point2(20, 10), new VectorStyle()),
+            new VectorLine("leader-arrow", new Point2(0, 0), new Point2(2, 1), new VectorStyle()),
+            new VectorText("leader-text", "Текст", new Point2(20, 10), 2.5, new VectorStyle())
+        ]);
         var document = new VectorPdfDocument([page]);
+        var candidate = new LeaderCandidate(
+            new Point2(0, 0),
+            new Point2(20, 10),
+            "Текст",
+            1d,
+            ["leader", "leader-arrow", "leader-text"])
+        {
+            SourceClaims =
+            [
+                new("leader", SourceUsageRole.LeaderShaft, SourceClaimState.Valid, false),
+                new("leader-arrow", SourceUsageRole.LeaderArrow, SourceClaimState.Valid, false),
+                new("leader-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
-            Leaders = [new LeaderCandidate(new Point2(0, 0), new Point2(20, 10), "Текст", 1d, ["leader"])]
+            Leaders = [candidate]
         };
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
@@ -428,7 +450,8 @@ public sealed class DwgDocumentWriterTests
 
         var leader = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Leader>());
         Assert.Equal(ACadSharp.LineWeightType.W9, leader.LineWeight);
-        Assert.Equal("Текст", Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>()).Value);
+        Assert.Equal(2, drawing.Entities.OfType<ACadSharp.Entities.TextEntity>()
+            .Count(text => text.Value == "Текст"));
     }
 
     [Fact]
