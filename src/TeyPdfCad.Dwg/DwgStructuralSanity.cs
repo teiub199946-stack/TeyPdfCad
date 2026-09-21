@@ -2,6 +2,51 @@ namespace TeyPdfCad.Dwg;
 
 public static class DwgStructuralSanity
 {
+    public static SourceEmissionSummary GetClosedProbeSourceEmissions(
+        DwgStructuralInventory probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        return new SourceEmissionSummary(
+            probe.SourceFingerprintCountsBySource);
+    }
+
+    public static void ValidateDeclaredSourceEmissionParity(
+        DwgStructuralInventory probe,
+        SourceEmissionSummary declared)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        ArgumentNullException.ThrowIfNull(declared);
+
+        var actual = probe.SourceFingerprintCountsBySource;
+        var declaredEncodable = declared.OutputFingerprintCountsBySource
+            .Where(pair => SourceMetadataCodec.CanEncode(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+
+        if (actual.Count != declaredEncodable.Count)
+        {
+            throw new InvalidDataException(
+                $"Closed-probe source inventory count {actual.Count} != writer declaration count {declaredEncodable.Count}.");
+        }
+
+        foreach (var pair in declaredEncodable)
+        {
+            if (!actual.TryGetValue(pair.Key, out var actualFingerprints)
+                || !FingerprintMultisetsEqual(pair.Value, actualFingerprints))
+            {
+                throw new InvalidDataException(
+                    $"Closed-probe source inventory differs from writer declaration for {pair.Key}.");
+            }
+        }
+    }
+
+    public static IReadOnlyDictionary<string, int> BuildExpectedFinalFingerprintMultiset(
+        DwgStructuralInventory probe,
+        IEnumerable<PageSourceRef> authorizedSuppressedSources)
+        => BuildExpectedFinalFingerprintMultiset(
+            probe,
+            GetClosedProbeSourceEmissions(probe),
+            authorizedSuppressedSources);
+
     public static IReadOnlyDictionary<string, int> BuildExpectedFinalFingerprintMultiset(
         DwgStructuralInventory probe,
         SourceEmissionSummary sourceEmissions,
@@ -60,6 +105,22 @@ public static class DwgStructuralSanity
             throw new InvalidDataException(
                 "Final DWG structural fingerprint multiset does not equal probe inventory minus authorized source-emission fingerprints.");
         }
+    }
+
+    private static bool FingerprintMultisetsEqual(
+        IReadOnlyDictionary<string, int> first,
+        IReadOnlyDictionary<string, int> second)
+    {
+        if (first.Count != second.Count)
+            return false;
+
+        foreach (var pair in first)
+        {
+            if (!second.TryGetValue(pair.Key, out var count) || count != pair.Value)
+                return false;
+        }
+
+        return true;
     }
 
     private static bool MultisetsEqual(
