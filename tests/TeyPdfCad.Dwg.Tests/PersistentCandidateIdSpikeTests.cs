@@ -80,10 +80,15 @@ public sealed class PersistentCandidateIdSpikeTests
         Add(expected, secondInsert, "v1:1:LEVEL:006", "primary");
         Add(expected, secondInsert.Attributes.Single(), "v1:1:LEVEL:006", "attribute");
 
-        foreach (var entry in expected)
-        {
-            drawing.Entities.Add(entry.Entity);
-        }
+        // Attributes already belong to their Insert. Adding them to ModelSpace again is
+        // invalid and would hide the persistence result behind an ownership error.
+        drawing.Entities.Add(expected[0].Entity); // Line
+        drawing.Entities.Add(expected[1].Entity); // Dimension
+        drawing.Entities.Add(expected[2].Entity); // Leader
+        drawing.Entities.Add(expected[3].Entity); // Leader annotation text
+        drawing.Entities.Add(expected[4].Entity); // Hatch
+        drawing.Entities.Add(expected[5].Entity); // First insert (owns its attribute)
+        drawing.Entities.Add(expected[7].Entity); // Second insert (owns its attribute)
 
         var reopened = DwgReader.Read(new MemoryStream(Write(drawing)));
         var actual = reopened.Entities
