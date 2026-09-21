@@ -40,3 +40,35 @@ jobs:
           path: tests/TeyPdfCad.Dwg.Tests/bin/Release/net8.0/spike-d-fixtures
           if-no-files-found: error
           retention-days: 14
+
+
+  p0-semantic-quality-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore semantic test generator
+        run: dotnet restore tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+      - name: TEST-002 current-branch 10k core run
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          core-run --count 10000 --seed 12345
+          --output artifacts/p0-test-002-current
+      - name: TEST-003 current-branch 10k diagnostics
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          diagnose-core --count 10000 --seed 12345
+          --output artifacts/p0-test-003-current
+      - name: Upload P0 semantic quality evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-semantic-quality-current-branch
+          path: |
+            artifacts/p0-test-002-current
+            artifacts/p0-test-003-current
+          if-no-files-found: error
+          retention-days: 14
