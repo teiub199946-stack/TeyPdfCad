@@ -37,7 +37,7 @@ public sealed class PersistentCandidateIdFixtureGenerationTests
         var line = new Line(new XYZ(0, 0, 0), new XYZ(40, 0, 0));
         AddMetadata(line, "v1:1:LINE:001", "primary");
         drawing.Entities.Add(line);
-        AddLabel(drawing, "LINE  v1:1:LINE:001  primary", new XYZ(0, -8, 0));
+        AddLabel(drawing, "LINE #001", new XYZ(0, -8, 0));
 
         var dimension = new DimensionAligned(new XYZ(0, 25, 0), new XYZ(40, 25, 0))
         {
@@ -45,7 +45,7 @@ public sealed class PersistentCandidateIdFixtureGenerationTests
         };
         AddMetadata(dimension, "v1:1:DIMENSION:002", "primary");
         drawing.Entities.Add(dimension);
-        AddLabel(drawing, "DIMENSION  v1:1:DIMENSION:002  primary", new XYZ(0, 42, 0));
+        AddLabel(drawing, "DIMENSION #002", new XYZ(0, 42, 0));
 
         var leader = new Leader
         {
@@ -61,13 +61,13 @@ public sealed class PersistentCandidateIdFixtureGenerationTests
 
         var leaderText = new TextEntity
         {
-            Value = "Leader annotation",
+            Value = "Leader",
             InsertPoint = new XYZ(86, 16, 0),
             Height = 3d
         };
         AddMetadata(leaderText, "v1:1:LEADER:003", "annotation");
         drawing.Entities.Add(leaderText);
-        AddLabel(drawing, "LEADER + TEXT  v1:1:LEADER:003", new XYZ(70, -8, 0));
+        AddLabel(drawing, "LEADER + TEXT #003", new XYZ(70, -8, 0));
 
         var boundary = new LwPolyline([new XY(110, 0), new XY(145, 0), new XY(145, 25), new XY(110, 25)])
         {
@@ -83,7 +83,7 @@ public sealed class PersistentCandidateIdFixtureGenerationTests
         hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
         AddMetadata(hatch, "v1:1:HATCH:004", "primary");
         drawing.Entities.Add(hatch);
-        AddLabel(drawing, "HATCH  v1:1:HATCH:004  primary", new XYZ(110, -8, 0));
+        AddLabel(drawing, "HATCH #004", new XYZ(110, -8, 0));
 
         var block = new BlockRecord("SPIKE_LEVEL");
         block.Entities.Add(new AttributeDefinition
@@ -97,7 +97,6 @@ public sealed class PersistentCandidateIdFixtureGenerationTests
 
         AddInsert(drawing, block, new XYZ(165, 0, 0), "+0.000", "v1:1:LEVEL:005");
         AddInsert(drawing, block, new XYZ(165, 25, 0), "+3.600", "v1:1:LEVEL:006");
-        AddLabel(drawing, "Two INSERT instances of one BlockRecord; IDs must remain distinct.", new XYZ(155, -8, 0));
 
         using var output = File.Create(path);
         using var writer = new DwgWriter(output, drawing);
@@ -111,6 +110,7 @@ public sealed class PersistentCandidateIdFixtureGenerationTests
         AddMetadata(insert, candidateId, "primary");
         AddMetadata(insert.Attributes.Single(), candidateId, "attribute");
         drawing.Entities.Add(insert);
+        AddLabel(drawing, $"INSERT #{candidateId[^3..]}", new XYZ(point.X, point.Y - 8d, 0d));
     }
 
     private static void AddMetadata(Entity entity, string candidateId, string role)
