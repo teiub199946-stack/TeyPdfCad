@@ -1,0 +1,39 @@
+name: Web Platform CI
+
+on:
+  push:
+    branches:
+      - integration/codex-20260918-web-platform
+  pull_request:
+    paths:
+      - 'src/TeyPdfCad.Web/**'
+      - 'src/TeyPdfCad.Web.Api/**'
+      - 'src/TeyPdfCad.AutoCAD.Bridge/**'
+      - 'src/TeyPdfCad.Core/Bridge/**'
+      - 'tests/TeyPdfCad.Web.Tests/**'
+      - 'tests/TeyPdfCad.AutoCAD.Bridge.Tests/**'
+      - '.github/workflows/web-platform-ci.yml'
+
+jobs:
+  test-web-platform:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore web tests
+        run: dotnet restore tests/TeyPdfCad.Web.Tests/TeyPdfCad.Web.Tests.csproj
+
+      - name: Test web platform
+        run: dotnet test tests/TeyPdfCad.Web.Tests/TeyPdfCad.Web.Tests.csproj --configuration Release --no-restore
+
+      - name: Restore bridge tests
+        run: dotnet restore tests/TeyPdfCad.AutoCAD.Bridge.Tests/TeyPdfCad.AutoCAD.Bridge.Tests.csproj
+
+      - name: Test process bridge
+        run: dotnet test tests/TeyPdfCad.AutoCAD.Bridge.Tests/TeyPdfCad.AutoCAD.Bridge.Tests.csproj --configuration Release --no-restore
+
+      - name: Build Web API
+        run: dotnet build src/TeyPdfCad.Web.Api/TeyPdfCad.Web.Api.csproj --configuration Release
