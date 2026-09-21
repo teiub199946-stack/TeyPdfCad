@@ -270,11 +270,27 @@ public sealed class AcadSharpDwgWriter
                     continue;
                 }
 
+                var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                 var boundary = candidate.ProvenanceIds
                     .Select(sourceId => writtenBoundaries.GetValueOrDefault(sourceId))
                     .FirstOrDefault(polyline => polyline is not null)
                     ?? CreateBoundary(candidate.Boundary, sheet.ModelOriginX, sheet.ModelOriginY, candidate.Style, styles, document);
                 preservedBoundaryEntities.Add(boundary);
+                if (paintKeys.TryGetValue(boundary, out var existingBoundaryKey))
+                {
+                    paintKeys[boundary] = existingBoundaryKey with { Priority = PaintPriority.PreservedBoundary };
+                }
+                else
+                {
+                    RegisterPaintKey(
+                        paintKeys,
+                        boundary,
+                        page.Number,
+                        key,
+                        "preserved-boundary",
+                        0,
+                        preservedBoundaryEntities);
+                }
                 var pattern = new HatchPattern("TEYPDFCAD_LINEAR");
                 pattern.Lines.Add(new HatchPattern.Line
                 {
@@ -292,7 +308,6 @@ public sealed class AcadSharpDwgWriter
                 };
                 hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 styles.Apply(hatch, candidate.Style);
-                var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                 AddExpectedNative(
                     manifestBuilders,
                     key,
@@ -304,6 +319,8 @@ public sealed class AcadSharpDwgWriter
                         ("minimumArea", "0.000001"),
                         ("boundaryFingerprint", DwgEntityFingerprint.ComputeHatchBoundary(hatch))));
                 document.Entities.Add(hatch);
+                RegisterPaintKey(
+                    paintKeys, hatch, page.Number, key, "primary", 0, preservedBoundaryEntities);
                 diagnosticCreatedCandidateKeyCount++;
                 createdCandidateKeys?.Add(key);
             }
@@ -345,6 +362,8 @@ public sealed class AcadSharpDwgWriter
                         Properties(
                             ("expectedMeasurement", Number(dimension.Measurement)),
                             ("measurementTolerance", "0.000001")));
+                    RegisterPaintKey(
+                        paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
@@ -371,6 +390,10 @@ public sealed class AcadSharpDwgWriter
                         Properties(
                             ("minimumHeight", Number(emitted.Annotation.Height)),
                             ("nonEmpty", "true")));
+                    RegisterPaintKey(
+                        paintKeys, emitted.Leader, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                    RegisterPaintKey(
+                        paintKeys, emitted.Annotation, page.Number, key, "annotation", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
@@ -390,6 +413,8 @@ public sealed class AcadSharpDwgWriter
                             ("blockName", "TEY_AXIS"),
                             ("minimumScale", "0.000001"),
                             ("minimumLength", "0.000001")));
+                    RegisterPaintKey(
+                        paintKeys, axis, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
@@ -418,6 +443,8 @@ public sealed class AcadSharpDwgWriter
                         Properties(
                             ("attributeTag", "LEVEL"),
                             ("nonEmptyValue", "true")));
+                    RegisterPaintKey(
+                        paintKeys, emitted.Insert, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
@@ -436,6 +463,8 @@ public sealed class AcadSharpDwgWriter
                         Properties(
                             ("expectedMeasurement", Number(dimension.Measurement)),
                             ("measurementTolerance", "0.000001")));
+                    RegisterPaintKey(
+                        paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
@@ -642,7 +671,7 @@ public sealed class AcadSharpDwgWriter
         return "TEY_REVIEW_SEMANTIC";
     }
 
-    private static void WriteTemplateInsert(
+    private static Insert WriteTemplateInsert(
         CadDocument document,
         AcadSharpStyleCatalog styles,
         SheetPlan sheet,
@@ -708,10 +737,12 @@ public sealed class AcadSharpDwgWriter
             document.BlockRecords.Add(block);
         }
 
-        document.Entities.Add(new Insert(block)
+        var insert = new Insert(block)
         {
             InsertPoint = new XYZ(sheet.ModelOriginX, sheet.ModelOriginY, 0d)
-        });
+        };
+        document.Entities.Add(insert);
+        return insert;
     }
 
     private static (Leader Leader, TextEntity Annotation) WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)
