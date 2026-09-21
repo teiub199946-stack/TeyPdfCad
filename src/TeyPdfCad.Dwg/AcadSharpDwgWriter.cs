@@ -414,6 +414,7 @@ public sealed class AcadSharpDwgWriter
                         axis,
                         Properties(
                             ("blockName", "TEY_AXIS"),
+                            ("blockDefinitionFingerprint", DwgEntityFingerprint.ComputeBlockDefinition(axis)),
                             ("minimumScale", "0.000001"),
                             ("minimumLength", "0.000001")));
                     RegisterPaintKey(
@@ -435,6 +436,7 @@ public sealed class AcadSharpDwgWriter
                         emitted.Insert,
                         Properties(
                             ("blockName", "TEY_LEVEL"),
+                            ("blockDefinitionFingerprint", DwgEntityFingerprint.ComputeBlockDefinition(emitted.Insert)),
                             ("minimumScale", "0.000001")));
                     AddExpectedNative(
                         manifestBuilders,
