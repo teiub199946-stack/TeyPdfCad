@@ -164,31 +164,31 @@ public sealed class SourceReplacementPlanner
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "DIMENSION",
-                candidate.SourceClaims,
+                NormalizeClaims(candidate.SourceClaims),
                 NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.Leaders)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "LEADER",
-                candidate.SourceClaims,
+                NormalizeClaims(candidate.SourceClaims),
                 NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.Axes)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "AXIS",
-                candidate.SourceClaims,
+                NormalizeClaims(candidate.SourceClaims),
                 NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.Levels)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "LEVEL",
-                candidate.SourceClaims,
+                NormalizeClaims(candidate.SourceClaims),
                 NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.ArcDimensions)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "ARC_DIMENSION",
-                candidate.SourceClaims,
+                NormalizeClaims(candidate.SourceClaims),
                 NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
     }
 
@@ -214,7 +214,7 @@ public sealed class SourceReplacementPlanner
             output.Add(new CandidateDescriptor(
                 hatch.CandidateId,
                 "HATCH",
-                claims,
+                NormalizeClaims(claims),
                 hatch.BoundarySourceIds
                     .Concat(hatch.PatternSourceIds)
                     .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -401,8 +401,7 @@ public sealed class SourceReplacementPlanner
                 continue;
             }
 
-            var requiredRoles = RequiredRoles(candidate.SemanticType);
-            if (requiredRoles.Any(required => candidate.Claims.All(claim => claim.Role != required)))
+            if (!TryGetRoleContract(candidate.SemanticType, out var roleContract))
             {
                 deferred.Add(candidate.CandidateId);
                 foreach (var sourceId in candidate.DeclaredSourceIds)
@@ -413,7 +412,25 @@ public sealed class SourceReplacementPlanner
                     candidate.CandidateId,
                     ReplacementResidualKind.DeferredUnresolvedClaims,
                     ReplacementResidualSeverity.High,
-                    "Candidate is missing one or more minimum required source roles for its semantic type.");
+                    "Unknown semantic type has no P0 role contract and is fail-closed.");
+                continue;
+            }
+
+            if (roleContract.Required.Any(required =>
+                    candidate.Claims.All(claim => claim.Role != required))
+                || candidate.Claims.Any(claim =>
+                    !roleContract.Allowed.Contains(claim.Role)))
+            {
+                deferred.Add(candidate.CandidateId);
+                foreach (var sourceId in candidate.DeclaredSourceIds)
+                    preserved.Add(sourceId);
+                AddResidual(
+                    residuals,
+                    candidate.DeclaredSourceIds.First(),
+                    candidate.CandidateId,
+                    ReplacementResidualKind.DeferredUnresolvedClaims,
+                    ReplacementResidualSeverity.High,
+                    "Candidate is missing a required role or contains a role not allowed for its semantic type.");
                 continue;
             }
 
@@ -448,6 +465,7 @@ public sealed class SourceReplacementPlanner
             var unresolved = candidate.Claims.Any(claim =>
                 claim.State == SourceClaimState.Unresolved
                 || claim.IsPartial
+                || claim.SourceId.Contains('#', StringComparison.Ordinal)
                 || claim.Role is SourceUsageRole.Unknown
                     or SourceUsageRole.EvidenceOnly
                     or SourceUsageRole.PrimaryGeometry);
@@ -619,17 +637,45 @@ public sealed class SourceReplacementPlanner
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
 
-    private static IReadOnlyList<SourceUsageRole> RequiredRoles(string semanticType)
-        => semanticType switch
+    private static IReadOnlyList<RecognizerSourceClaim> NormalizeClaims(
+        IEnumerable<RecognizerSourceClaim> claims)
+        => claims
+            .Distinct()
+            .OrderBy(claim => claim.SourceId, StringComparer.Ordinal)
+            .ThenBy(claim => claim.Role)
+            .ThenBy(claim => claim.State)
+            .ThenBy(claim => claim.IsPartial)
+            .ToArray();
+
+    private static bool TryGetRoleContract(
+        string semanticType,
+        out SemanticRoleContract contract)
+    {
+        contract = semanticType switch
         {
-            "DIMENSION" => [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.Text],
-            "LEADER" => [SourceUsageRole.LeaderShaft, SourceUsageRole.LeaderArrow, SourceUsageRole.Text],
-            "AXIS" => [SourceUsageRole.AxisGeometry],
-            "LEVEL" => [SourceUsageRole.LevelMarker, SourceUsageRole.Text],
-            "ARC_DIMENSION" => [SourceUsageRole.DimensionLine, SourceUsageRole.Text],
-            "HATCH" => [SourceUsageRole.HatchBoundary, SourceUsageRole.HatchPattern],
-            _ => []
+            "DIMENSION" => new(
+                [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.Text],
+                [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.ArrowGeometry, SourceUsageRole.Text]),
+            "LEADER" => new(
+                [SourceUsageRole.LeaderShaft, SourceUsageRole.LeaderArrow, SourceUsageRole.Text],
+                [SourceUsageRole.LeaderShaft, SourceUsageRole.LeaderArrow, SourceUsageRole.LeaderLanding, SourceUsageRole.Text]),
+            "AXIS" => new(
+                [SourceUsageRole.AxisGeometry],
+                [SourceUsageRole.AxisGeometry]),
+            "LEVEL" => new(
+                [SourceUsageRole.LevelMarker, SourceUsageRole.Text],
+                [SourceUsageRole.LevelMarker, SourceUsageRole.Text]),
+            "ARC_DIMENSION" => new(
+                [SourceUsageRole.DimensionLine, SourceUsageRole.Text],
+                [SourceUsageRole.DimensionLine, SourceUsageRole.ArrowGeometry, SourceUsageRole.Text]),
+            "HATCH" => new(
+                [SourceUsageRole.HatchBoundary, SourceUsageRole.HatchPattern],
+                [SourceUsageRole.HatchBoundary, SourceUsageRole.HatchPattern]),
+            _ => null!
         };
+
+        return contract is not null;
+    }
 
     private static bool EquivalentCandidateDescriptor(CandidateDescriptor first, CandidateDescriptor second)
         => string.Equals(first.SemanticType, second.SemanticType, StringComparison.Ordinal)
@@ -730,6 +776,10 @@ public sealed class SourceReplacementPlanner
 
     private static string Number(double value)
         => value.ToString("R", CultureInfo.InvariantCulture);
+
+    private sealed record SemanticRoleContract(
+        IReadOnlySet<SourceUsageRole> Required,
+        IReadOnlySet<SourceUsageRole> Allowed);
 
     private sealed record CandidateDescriptor(
         string CandidateId,
