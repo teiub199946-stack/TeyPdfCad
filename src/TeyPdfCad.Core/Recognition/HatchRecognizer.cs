@@ -234,7 +234,28 @@ public sealed class HatchRecognizer
                 continue;
 
             var group = lines.Where(candidate => IsParallel(candidate, unit)).ToArray();
-            if (group.Length >= 3)
+            if (group.Length < 3)
+                continue;
+
+            var normal = new Point2(-unit.Y, unit.X);
+            var distinctPositions = group
+                .Select(candidate => GeometryMath.Dot(
+                    GeometryMath.Midpoint(candidate.Start, candidate.End),
+                    normal))
+                .OrderBy(position => position)
+                .Aggregate(
+                    new List<double>(),
+                    (positions, position) =>
+                    {
+                        if (positions.Count == 0
+                            || Math.Abs(position - positions[^1]) > 1e-6)
+                        {
+                            positions.Add(position);
+                        }
+                        return positions;
+                    });
+
+            if (distinctPositions.Count >= 3)
                 return group;
         }
         return [];
