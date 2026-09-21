@@ -31,6 +31,7 @@ public sealed class AcadSharpDwgWriter
         var document = new CadDocument();
         var styles = new AcadSharpStyleCatalog(document);
         var sheetsByPage = plan.Sheets.ToDictionary(sheet => sheet.PageNumber);
+        var preservedBoundaryEntities = new HashSet<Entity>();
         foreach (var page in source.Pages)
         {
             var sheet = sheetsByPage[page.Number];
@@ -165,6 +166,7 @@ public sealed class AcadSharpDwgWriter
                     .Select(sourceId => writtenBoundaries.GetValueOrDefault(sourceId))
                     .FirstOrDefault(polyline => polyline is not null)
                     ?? CreateBoundary(candidate.Boundary, sheet.ModelOriginX, sheet.ModelOriginY, candidate.Style, styles, document);
+                preservedBoundaryEntities.Add(boundary);
                 var pattern = new HatchPattern("TEYPDFCAD_LINEAR");
                 pattern.Lines.Add(new HatchPattern.Line
                 {
@@ -242,19 +244,21 @@ public sealed class AcadSharpDwgWriter
                 }
             }
         }
-        ApplyExplicitPaintOrder(document);
+        ApplyExplicitPaintOrder(document, preservedBoundaryEntities);
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
         writer.Write();
         return output.ToArray();
     }
 
-    private static void ApplyExplicitPaintOrder(CadDocument document)
+    private static void ApplyExplicitPaintOrder(
+        CadDocument document,
+        IReadOnlySet<Entity> preservedBoundaryEntities)
     {
         var ordered = PaintOrderEngine.OrderBottomToTop(document.Entities
             .Select((entity, index) => new PaintOrderItem<Entity>(
                 entity,
-                ResolvePaintPriority(entity),
+                ResolvePaintPriority(entity, preservedBoundaryEntities),
                 index,
                 (entity.Layer?.Name ?? string.Empty) + "|" + entity.GetType().Name)));
 
@@ -263,9 +267,13 @@ public sealed class AcadSharpDwgWriter
             sortTable.MoveToTop(entry.Item);
     }
 
-    private static PaintPriority ResolvePaintPriority(Entity entity)
+    private static PaintPriority ResolvePaintPriority(
+        Entity entity,
+        IReadOnlySet<Entity> preservedBoundaryEntities)
     {
         var layerName = entity.Layer?.Name ?? string.Empty;
+        if (preservedBoundaryEntities.Contains(entity))
+            return PaintPriority.PreservedBoundary;
         if (layerName.StartsWith("TEY_REVIEW", StringComparison.OrdinalIgnoreCase))
             return PaintPriority.ReviewOverlay;
         if (entity is TextEntity)
