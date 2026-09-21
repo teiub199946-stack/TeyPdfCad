@@ -539,6 +539,91 @@ public sealed class P0SourceReplacementRedTests
             && residual.Severity == ReplacementResidualSeverity.Critical);
     }
 
+    [Fact]
+    public void Adding_safety_blockers_never_restores_dimension_eligibility()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("dim", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorLine("ext", new(0, 0), new(0, 5), new VectorStyle()),
+            new VectorLine("arrow", new(-1, -1), new(1, 1), new VectorStyle()),
+            new VectorText("text", "10", new(5, 2), 2.5, new VectorStyle())
+        };
+
+        DimensionCandidate Candidate(IReadOnlyList<RecognizerSourceClaim> claims)
+            => new(
+                DimensionKind.Rotated,
+                new(0, 0),
+                new(10, 0),
+                new(5, 2),
+                10,
+                10,
+                1,
+                0.95,
+                "10",
+                1,
+                ["dim", "ext", "arrow", "text"])
+            {
+                SourceClaims = claims
+            };
+
+        var cleanClaims = new RecognizerSourceClaim[]
+        {
+            new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+            new("ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+            new("arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+            new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+        };
+        var clean = Candidate(cleanClaims);
+        var cleanPlan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Dimensions = [clean] },
+            pageNumber: 1);
+
+        Assert.NotEmpty(cleanPlan.EligibleSourceIds);
+
+        var partial = Candidate(
+        [
+            ..cleanClaims.Where(claim => claim.SourceId != "arrow"),
+            new("arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, true)
+        ]);
+        var partialPlan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Dimensions = [partial] },
+            pageNumber: 1);
+        Assert.Empty(partialPlan.EligibleSourceIds);
+
+        var partialPlusRoleConflict = Candidate(
+        [
+            ..partial.SourceClaims,
+            new("arrow", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false)
+        ]);
+        var conflictPlan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Dimensions = [partialPlusRoleConflict] },
+            pageNumber: 1);
+        Assert.Empty(conflictPlan.EligibleSourceIds);
+
+        var warnedSemantics = EmptySemantics() with
+        {
+            Dimensions = [partialPlusRoleConflict],
+            Warnings =
+            [
+                new SemanticWarning(
+                    "dimension-ambiguous",
+                    "Competing native interpretation remains unresolved.",
+                    ["dim"])
+            ]
+        };
+        var warnedPlan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            warnedSemantics,
+            pageNumber: 1);
+
+        Assert.Empty(warnedPlan.EligibleSourceIds);
+        Assert.Contains("dim", warnedPlan.PreservedSourceIds);
+    }
+
     private static SemanticReconstructionResult EmptySemantics()
         => new([], [], null, 0d);
 }
