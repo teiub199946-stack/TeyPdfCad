@@ -7,6 +7,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>TeyPdfCad.Cli.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
     <ProjectReference Include="../TeyPdfCad.Pdf/TeyPdfCad.Pdf.csproj" />
     <ProjectReference Include="../TeyPdfCad.Dwg/TeyPdfCad.Dwg.csproj" />
