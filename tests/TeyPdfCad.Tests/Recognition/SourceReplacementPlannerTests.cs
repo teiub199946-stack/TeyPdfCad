@@ -328,6 +328,9 @@ public sealed class SourceReplacementPlannerTests
                 new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)
                 {
                     [candidateId] = new(candidateId, true, [], [], [])
+                    {
+                        SourceEquivalenceComplete = true
+                    }
                 }));
         Assert.Equal(new[] { "line" }, accepted.SuppressSourceIds.OrderBy(x => x));
     }
