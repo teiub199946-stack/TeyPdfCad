@@ -131,7 +131,8 @@ public sealed record SourceReplacementPlan(
 {
     // Transitional compatibility for downstream code that is migrated in later
     // P0 tasks. New P0 code must use EligibleSourceIds + SuppressionGate.
-    [Obsolete("P0 replacement planning produces eligibility, not authorization. Use EligibleSourceIds and SuppressionGate.")]
+    // Temporary compatibility surface for downstream stages that are migrated
+    // in later P0 tasks. It means eligibility only, never authorization.
     public IReadOnlyCollection<string> SuppressedSourceIds => EligibleSourceIds;
 
     public bool HasCompleteCoveragePlan =>
