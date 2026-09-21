@@ -145,7 +145,7 @@ public void Canonical_candidate_id_is_stable_when_provenance_order_changes()
 public void Gate_preserves_every_claim_of_an_unverified_multi_source_candidate()
 {
     var plan = PlanWithEligibleSources("candidate-1", ["s-1", "s-2"]);
-    var result = new DwgReadBackVerification(new Dictionary<string, CandidateVerification>
+    var result = new NativeReadBackVerification(new Dictionary<string, CandidateVerification>
     {
         ["candidate-1"] = new("candidate-1", false, ["annotation"], [], ["missing Text"])
     });
