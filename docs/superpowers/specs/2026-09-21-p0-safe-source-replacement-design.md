@@ -236,3 +236,19 @@ P0 is complete only when CI proves source suppression comes from on-disk read-ba
 ## Template replacement safety
 
 A confirmed template selection is not itself proof that replacing source geometry survived DWG serialization. Until template INSERT replacement is represented by the same persistent manifest/read-back mechanism, any TemplateSelection with non-empty SourceIdsToReplace is deferred: the template INSERT is not emitted, every source entity remains, and the page is PASS_WITH_RESIDUALS with reason template-source-replacement-deferred-p0. Additive template insertion with an empty replacement set remains allowed. No template path may bypass PageSourceRef authorization.
+
+
+## Persistent source identity for final structural proof
+
+Final structural sanity must distinguish source identity, not only entity geometry/style. Two different sources may legitimately emit byte-equivalent geometry and visual properties, so a geometry-only multiset can miss a wrong-source swap.
+
+Every emitted source entity with a valid page-local SourceId carries a second flat XData record:
+- AppId: `TEYCONVERT_SOURCE_V1`
+- record 1: positive PageNumber as invariant decimal text
+- record 2: exact SourceId
+
+`DwgEntityFingerprint.ComputeOutput` includes this page-scoped source identity in addition to entity kind, geometry, layer, linetype, lineweight, linetype scale, color, visibility, and candidate metadata. Therefore two geometrically identical source entities with different `PageSourceRef` values have different structural fingerprints.
+
+Malformed source metadata makes structural inventory read-back fail closed. Empty/invalid SourceId entities remain preserved and are emitted without source XData because they can never enter suppression authorization. Duplicate valid SourceIds may share the same source metadata, but duplicate identity already blocks all suppression and the final multiset must still preserve the full entity count.
+
+This source metadata is structural audit evidence only. It does not grant eligibility or suppression; `SuppressionGate` remains the sole authorization path.
