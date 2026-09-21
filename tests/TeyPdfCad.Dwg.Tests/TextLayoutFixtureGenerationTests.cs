@@ -18,6 +18,7 @@ public sealed class TextLayoutFixtureGenerationTests
     {
         var output = Path.Combine(AppContext.BaseDirectory, "spike-b-fixtures");
         Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(output, "README.txt"), ManualInstructions);
 
         foreach (var font in new[]
                  {
@@ -158,6 +159,29 @@ public sealed class TextLayoutFixtureGenerationTests
         => (int)Math.Round(radians * 180d / Math.PI);
 
     private sealed record FontFixture(string Id, string Filename);
+
+    private const string ManualInstructions = """
+SPIKE B — ручная проверка AutoCAD 2022
+
+Файлы fixture-{0,45,90}-{arial,simplex}.dwg содержат шесть изолированных ячеек:
+ABCED и ТЕСТ-45 × PLAIN LEFT, WIDTH FACTOR 0.80, FIT.
+Тонкий отрезок с поперечными рисками — контрольная baseline длиной 52 drawing units.
+
+Для каждого файла:
+1. Откройте его в AutoCAD 2022 и выполните ZOOM EXTENTS.
+2. Для FIT проверьте: строка визуально начинается и заканчивается на рисках baseline,
+   остаётся читаемой и не меняет видимую высоту.
+3. Для PLAIN/WIDTH FACTOR сравните длину и читаемость с FIT.
+4. В simplex-файлах отдельно отметьте, отображается ли кириллица без подстановки символов.
+5. Сохраните копию как *_acad2022.dwg (оригиналы не перезаписывать).
+
+fixture-fit-rotation-conflict.dwg — диагностический случай:
+baseline горизонтальна, но Rotation намеренно равен 90°. Запишите, какой ориентацией
+AutoCAD реально показал FIT-текст; сохраните копию *_acad2022.dwg.
+
+Верните сохранённые копии и/или скриншоты с ZOOM EXTENTS. Это позволит выбрать
+FIT/WidthFactor policy, не подменяя визуальную проверку структурным тестом.
+""";
 
     private enum TextLayoutMode
     {
