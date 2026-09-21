@@ -269,12 +269,19 @@ public sealed class LinearDimensionRecognizer
         if (projectedDistance <= 1e-9) return null;
 
         var textScore = 1.0 - NumericCompat.Clamp(textDistance / textTolerance, 0.0, 1.0);
-        var arrows = DimensionGeometryAnalysis.ArrowEvidence(scene.Lines, dimensionLine, text.Height, unitDim);
+        LinePrimitive[] extensionLines = [ext1, ext2];
+        var arrows = DimensionGeometryAnalysis.ArrowEvidence(
+            scene.Lines,
+            dimensionLine,
+            text.Height,
+            unitDim,
+            extensionLines);
         var arrowLines = DimensionGeometryAnalysis.FindArrowGeometryLines(
             scene.Lines,
             dimensionLine,
             text.Height,
-            unitDim);
+            unitDim,
+            extensionLines);
         var provenanceIds = MergeProvenance(
             text.ProvenanceIds,
             dimensionLine.ProvenanceIds,
