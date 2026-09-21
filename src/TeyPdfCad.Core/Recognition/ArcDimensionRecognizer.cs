@@ -32,7 +32,17 @@ public sealed class ArcDimensionRecognizer
                 text.Position,
                 text.Value,
                 0.94d,
-                arc.ProvenanceIds.Concat(text.ProvenanceIds).Distinct().ToArray()));
+                arc.ProvenanceIds.Concat(text.ProvenanceIds).Distinct(StringComparer.Ordinal).ToArray())
+            {
+                SourceClaims = RecognizerSourceClaimBuilder.FromProvenance(
+                        SourceUsageRole.DimensionLine,
+                        arc.ProvenanceIds)
+                    .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                        SourceUsageRole.Text,
+                        text.ProvenanceIds))
+                    .Distinct()
+                    .ToArray()
+            });
         }
 
         return new ArcDimensionRecognitionResult(candidates, warnings);
