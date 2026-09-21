@@ -76,10 +76,16 @@ public sealed record SourceReplacementPlan(
     IReadOnlyList<ReplacementConflict> Conflicts,
     IReadOnlyList<ReplacementResidual> Residuals)
 {
+    public bool HasCompleteCoveragePlan =>
+        SuppressedSourceIds.All(sourceId =>
+            SourceCoverageMap.TryGetValue(sourceId, out var candidates)
+            && candidates.Count > 0);
+
     public bool IsFullPassEligible =>
         DeferredCandidateKeys.Count == 0
         && Conflicts.Count == 0
-        && Residuals.Count == 0;
+        && Residuals.Count == 0
+        && HasCompleteCoveragePlan;
 }
 
 public sealed class SourceReplacementPlanner
