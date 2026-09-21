@@ -1,35 +1,45 @@
 namespace TeyPdfCad.Core.Recognition;
 
 public sealed record ReplacementExecutionReport(
-    IReadOnlyCollection<string> CreatedCandidateKeys,
-    IReadOnlyList<string> GeometryLostSourceIds,
+    IReadOnlyList<string> CandidateNotVerifiedSourceIds,
     bool ReadBackConfirmed)
 {
-    public bool AnyGeometryLost => GeometryLostSourceIds.Count > 0;
+    // Compatibility aliases for the legacy report surface. Under P0 an
+    // unverified candidate preserves its source, so this is not GeometryLost.
+    public IReadOnlyList<string> GeometryLostSourceIds => [];
+    public bool AnyGeometryLost => false;
 }
 
 public static class ReplacementExecutionAuditor
 {
     public static ReplacementExecutionReport Build(
         SourceReplacementPlan plan,
-        IReadOnlyCollection<string> createdCandidateKeys,
-        bool readBackConfirmed)
+        NativeReadBackVerification verification,
+        bool readBackConfirmed = true)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(createdCandidateKeys);
+        ArgumentNullException.ThrowIfNull(verification);
 
-        var created = createdCandidateKeys.ToHashSet(StringComparer.Ordinal);
-        var lost = plan.SuppressedSourceIds
+        var notVerified = plan.EligibleSourceIds
             .Where(sourceId =>
                 !plan.SourceCoverageMap.TryGetValue(sourceId, out var coveringCandidates)
-                || coveringCandidates.Count == 0
-                || !coveringCandidates.Any(created.Contains))
+                || coveringCandidates.Count != 1
+                || !verification.Candidates.TryGetValue(coveringCandidates[0], out var candidate)
+                || !candidate.IsVerified)
             .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
             .ToArray();
 
-        return new ReplacementExecutionReport(
-            created.OrderBy(key => key, StringComparer.Ordinal).ToArray(),
-            lost,
-            readBackConfirmed);
+        return new ReplacementExecutionReport(notVerified, readBackConfirmed);
     }
+
+    [Obsolete("Writer-created candidate keys are diagnostics only and cannot be used as P0 verification evidence.")]
+    public static ReplacementExecutionReport Build(
+        SourceReplacementPlan plan,
+        IReadOnlyCollection<string> createdCandidateKeys,
+        bool readBackConfirmed)
+        => new(
+            plan.EligibleSourceIds
+                .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
+                .ToArray(),
+            readBackConfirmed);
 }
