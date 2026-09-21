@@ -86,6 +86,7 @@ public static class Program
         var output = cli.Get("--output") ?? "artifacts/generated/core-run";
         var baselinePath = cli.Get("--baseline");
         var baseline = await LoadBaselineAsync(baselinePath);
+        var enforceGate = cli.Has("--enforce-gate");
 
         var corpus = new DimensionCaseGenerator().Generate(count, seed);
         await ArtifactWriter.WriteCorpusAsync(corpus, output, cli.Has("--split"));
@@ -105,10 +106,11 @@ public static class Program
         Console.WriteLine($"Semantic type ambiguity: {report.SemanticTypeAmbiguity}");
         Console.WriteLine($"Report: {Path.GetFullPath(Path.Combine(output, "report.json"))}");
 
-        // An initial measurement is allowed to be poor: without an accepted baseline this
-        // command records the truth and exits successfully so CI can upload the artifacts.
-        // Once --baseline is supplied, the existing release gate becomes enforceable.
-        if (string.IsNullOrWhiteSpace(baselinePath))
+        // Historical exploratory runs may record truth without failing CI.
+        // P0 production-branch evidence uses --enforce-gate so the absolute
+        // release thresholds in testconfig.json are mandatory even without
+        // an accepted historical baseline.
+        if (!enforceGate && string.IsNullOrWhiteSpace(baselinePath))
         {
             return 0;
         }
@@ -261,7 +263,7 @@ public static class Program
             Commands:
               generate      --count N --seed N --output DIR [--split]
               self-check    --count N --seed N --output DIR [--baseline FILE]
-              core-run      --count N --seed N --output DIR [--baseline FILE] [--split]
+              core-run      --count N --seed N --output DIR [--baseline FILE] [--split] [--enforce-gate]
               diagnose-core --count N --seed N --output DIR
               compare       --cases FILE --actual FILE --output DIR [--baseline FILE]
               baseline      --report FILE --output FILE
