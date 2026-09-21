@@ -370,6 +370,18 @@ public sealed class DwgReadBackVerifier
                 error = "blockName requires Insert";
                 return false;
 
+            case "blockDefinitionFingerprint":
+                if (entity is Insert blockInsert)
+                {
+                    var actual = DwgEntityFingerprint.ComputeBlockDefinition(blockInsert);
+                    if (string.Equals(actual, expectedValue, StringComparison.Ordinal))
+                        return true;
+                    error = "block definition fingerprint mismatch";
+                    return false;
+                }
+                error = "blockDefinitionFingerprint requires Insert";
+                return false;
+
             case "minimumScale":
                 if (entity is Insert scaleInsert && TryDouble(expectedValue, out var minimumScale))
                 {
