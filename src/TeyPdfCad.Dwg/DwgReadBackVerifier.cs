@@ -138,6 +138,15 @@ public sealed class DwgReadBackVerifier
                 counted.AddRange(insert.Attributes);
         }
 
+        var malformedSource = counted.FirstOrDefault(entity =>
+            SourceMetadataCodec.HasSourceApp(entity)
+            && !SourceMetadataCodec.TryRead(entity, out _));
+        if (malformedSource is not null)
+        {
+            throw new InvalidDataException(
+                $"Malformed {SourceMetadataCodec.AppId} metadata exists on {malformedSource.GetType().Name}.");
+        }
+
         var fingerprints = counted
             .Select(DwgEntityFingerprint.ComputeOutput)
             .GroupBy(value => value, StringComparer.Ordinal)
