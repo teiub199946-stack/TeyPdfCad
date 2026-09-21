@@ -176,6 +176,71 @@ public sealed class DwgTwoPassWriterTests
         Assert.Equal(2, drawing.Entities.OfType<Line>().Count());
     }
 
+
+    [Fact]
+    public void Probe_manifest_verifies_only_after_closed_on_disk_round_trip()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("axis", new(0, 0), new(25, 0), new VectorStyle())
+        ]);
+        var axis = new AxisCandidate(new(0, 0), new(25, 0), 0.95, ["axis"])
+        {
+            SourceClaims =
+            [
+                new("axis", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Axes = [axis]
+        };
+        var hatch = new HatchRecognizer().Recognize(page.Entities, page.Number);
+        var replacement = new SourceReplacementPlanner().BuildPlan(
+            page.Entities,
+            semantics,
+            hatch,
+            page.Number);
+        var document = new VectorPdfDocument([page]);
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Dwg.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "probe.dwg");
+
+        try
+        {
+            DwgWriteResult result;
+            using (var stream = File.Create(path))
+            {
+                result = new AcadSharpDwgWriter().Write(
+                    stream,
+                    document,
+                    new DocumentLayoutPlanner().Create(document),
+                    hatchRecognitionByPage: new Dictionary<int, HatchRecognitionResult> { [1] = hatch },
+                    semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
+                    sourceReplacementPlansByPage: new Dictionary<int, SourceReplacementPlan> { [1] = replacement });
+                Assert.True(stream.CanWrite);
+            }
+
+            var verification = new DwgReadBackVerifier().Verify(path, result.Manifest);
+            var candidateId = SourceReplacementPlanner.GetCandidateKey(axis, 1);
+            var candidate = verification.Candidates[candidateId];
+
+            Assert.True(candidate.IsVerified);
+            Assert.Empty(candidate.MissingRoles);
+            Assert.Empty(candidate.DuplicateRoles);
+            Assert.Empty(candidate.InvalidEntities);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void Source_emission_summary_rejects_unknown_page_source()
     {
