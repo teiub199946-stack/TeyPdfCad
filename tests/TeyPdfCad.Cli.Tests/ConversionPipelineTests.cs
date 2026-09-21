@@ -495,7 +495,9 @@ public sealed class ConversionPipelineTests
         var drawing = DwgReader.Read(output);
         Assert.NotEmpty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
         Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
-        Assert.DoesNotContain(drawing.Entities, CandidateMetadataCodec.HasCandidateApp);
+        Assert.DoesNotContain(
+            drawing.Entities,
+            entity => CandidateMetadataCodec.TryRead(entity, out _));
 
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
         Assert.Contains(
