@@ -1,3 +1,4 @@
+using System.Globalization;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
@@ -350,6 +351,86 @@ public sealed class AcadSharpDwgWriter
             manifest,
             sourceSummary,
             diagnosticCreatedCandidateKeyCount);
+    }
+
+    private static void RecordSourceEmission(
+        int pageNumber,
+        string sourceId,
+        Entity entity,
+        IDictionary<PageSourceRef, Dictionary<string, int>> sourceEmissionCounts)
+    {
+        var sourceRef = new PageSourceRef(pageNumber, sourceId);
+        if (!sourceEmissionCounts.TryGetValue(sourceRef, out var counts))
+        {
+            counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            sourceEmissionCounts[sourceRef] = counts;
+        }
+
+        var fingerprint = DwgEntityFingerprint.ComputeOutput(entity);
+        counts[fingerprint] = counts.TryGetValue(fingerprint, out var count)
+            ? checked(count + 1)
+            : 1;
+    }
+
+    private static void AddExpectedNative(
+        IDictionary<string, CandidateManifestBuilder> manifestBuilders,
+        string candidateId,
+        string semanticType,
+        string role,
+        string entityKind,
+        Entity entity,
+        IReadOnlyDictionary<string, string>? requiredProperties = null)
+    {
+        if (!manifestBuilders.TryGetValue(candidateId, out var candidate))
+        {
+            candidate = new CandidateManifestBuilder(semanticType);
+            manifestBuilders[candidateId] = candidate;
+        }
+        else if (!string.Equals(candidate.SemanticType, semanticType, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"CandidateId {candidateId} was emitted with conflicting semantic types.");
+        }
+
+        if (candidate.Entities.Any(expected =>
+                string.Equals(expected.Role, role, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"CandidateId {candidateId} emitted duplicate role '{role}'.");
+        }
+
+        CandidateMetadataCodec.Write(
+            entity,
+            new CandidateEntityMetadata(candidateId, role));
+
+        candidate.Entities.Add(new ExpectedNativeEntity(
+            candidateId,
+            role,
+            entityKind,
+            DwgEntityFingerprint.ComputeGeometry(entity),
+            requiredProperties
+                ?? new Dictionary<string, string>(StringComparer.Ordinal)));
+    }
+
+    private static IReadOnlyDictionary<string, string> Properties(
+        params (string Key, string Value)[] values)
+        => values.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.Ordinal);
+
+    private static string Number(double value)
+        => value.ToString("R", CultureInfo.InvariantCulture);
+
+    private sealed class CandidateManifestBuilder
+    {
+        public string SemanticType { get; }
+        public List<ExpectedNativeEntity> Entities { get; } = [];
+
+        public CandidateManifestBuilder(string semanticType)
+        {
+            SemanticType = semanticType;
+        }
     }
 
     private static void ApplyExplicitPaintOrder(
