@@ -59,6 +59,8 @@ public sealed class DwgTwoPassWriterTests
         var candidateId = SourceReplacementPlanner.GetCandidateKey(level, 1);
         var expected = Assert.Single(result.Manifest.Candidates, pair => pair.Key == candidateId).Value;
         Assert.Equal("LEVEL", expected.SemanticType);
+        Assert.False(expected.SourceEquivalenceComplete);
+        Assert.Contains("marker", expected.SourceEquivalenceReason!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(new[] { "attribute", "primary" }, expected.Entities.Select(entity => entity.Role).OrderBy(x => x));
 
         stream.Position = 0;
@@ -230,6 +232,7 @@ public sealed class DwgTwoPassWriterTests
             var candidate = verification.Candidates[candidateId];
 
             Assert.True(candidate.IsVerified);
+            Assert.False(candidate.SourceEquivalenceComplete);
             Assert.Empty(candidate.MissingRoles);
             Assert.Empty(candidate.DuplicateRoles);
             Assert.Empty(candidate.InvalidEntities);
