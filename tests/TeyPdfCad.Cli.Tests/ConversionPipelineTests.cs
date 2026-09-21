@@ -243,7 +243,8 @@ public sealed class ConversionPipelineTests
         Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
         Assert.Contains(
             page.GetProperty("replacementResiduals").EnumerateArray(),
-            residual => residual.GetProperty("kind").GetString() == "CandidateNotVerified");
+            residual => residual.GetProperty("kind").GetInt32()
+                == (int)ReplacementResidualKind.CandidateNotVerified);
     }
 
     [Fact]
