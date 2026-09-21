@@ -137,11 +137,14 @@ public sealed class PersistentCandidateIdSpikeTests
     {
         Assert.True(entity.ExtendedData.TryGet(AppName, out var data));
 
-        var values = data.Records.OfType<ExtendedDataString>()
+        var records = data.Records.ToArray();
+        Assert.Equal(2, records.Length);
+        Assert.All(records, record => Assert.IsType<ExtendedDataString>(record));
+
+        var values = records.Cast<ExtendedDataString>()
             .Select(record => record.Value)
             .ToArray();
 
-        Assert.Equal(2, values.Length);
         Assert.All(values, value => Assert.False(string.IsNullOrWhiteSpace(value)));
         Assert.Equal(expectedCandidateId, values[0]);
         Assert.Equal(expectedRole, values[1]);
