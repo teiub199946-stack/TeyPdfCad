@@ -21,7 +21,8 @@ public sealed class AcadSharpDwgWriter
         IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
         IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
         TemplateLibrary? templateLibrary = null,
-        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null)
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
@@ -52,12 +53,12 @@ public sealed class AcadSharpDwgWriter
             var semantics = semanticRecognitionByPage is not null && semanticRecognitionByPage.TryGetValue(page.Number, out var suppliedSemantics)
                 ? suppliedSemantics
                 : null;
-            var consumedSemanticIds = semantics is null
-                ? new HashSet<string>(StringComparer.Ordinal)
-                : semantics.Dimensions.SelectMany(candidate => candidate.ProvenanceIds)
-                    .Concat(semantics.Leaders.SelectMany(candidate => candidate.ProvenanceIds))
-                    .Concat(semantics.Axes.SelectMany(candidate => candidate.ProvenanceIds))
-                    .ToHashSet(StringComparer.Ordinal);
+            var replacementPlan = sourceReplacementPlansByPage is not null
+                && sourceReplacementPlansByPage.TryGetValue(page.Number, out var suppliedReplacementPlan)
+                    ? suppliedReplacementPlan
+                    : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition);
+            var suppressedSourceIds = replacementPlan.SuppressedSourceIds
+                .ToHashSet(StringComparer.Ordinal);
             var reviewLayersBySourceId = semantics is null
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
                 : semantics.Warnings
@@ -69,16 +70,11 @@ public sealed class AcadSharpDwgWriter
                     .GroupBy(entry => entry.SourceId, StringComparer.Ordinal)
                     .ToDictionary(group => group.Key, group => group.First().Layer, StringComparer.Ordinal);
             var patternHatches = hatchRecognition.NativeHatches.Where(candidate => !candidate.IsSolid).ToArray();
-            var consumedPatternLineIds = patternHatches.SelectMany(candidate => candidate.ProvenanceIds).ToHashSet(StringComparer.Ordinal);
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
             foreach (var sourceLine in page.Entities.OfType<VectorLine>())
             {
-                if (consumedPatternLineIds.Contains(sourceLine.SourceId))
-                {
-                    continue;
-                }
                 if (templateSourceIds.Contains(sourceLine.SourceId)) continue;
-                if (consumedSemanticIds.Contains(sourceLine.SourceId)) continue;
+                if (suppressedSourceIds.Contains(sourceLine.SourceId)) continue;
                 var line = new Line(
                     new XYZ(sheet.ModelOriginX + sourceLine.Start.X, sheet.ModelOriginY + sourceLine.Start.Y, 0),
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
@@ -87,6 +83,8 @@ public sealed class AcadSharpDwgWriter
             }
             foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
             {
+                if (templateSourceIds.Contains(sourcePolyline.SourceId)) continue;
+                if (suppressedSourceIds.Contains(sourcePolyline.SourceId)) continue;
                 if (TryGetCircle(sourcePolyline, out var center, out var radius))
                 {
                     var circle = new Circle(
@@ -174,7 +172,7 @@ public sealed class AcadSharpDwgWriter
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
                 if (templateSourceIds.Contains(sourceText.SourceId)) continue;
-                if (consumedSemanticIds.Contains(sourceText.SourceId)) continue;
+                if (suppressedSourceIds.Contains(sourceText.SourceId)) continue;
                 var text = new TextEntity
                 {
                     Value = sourceText.Value,
