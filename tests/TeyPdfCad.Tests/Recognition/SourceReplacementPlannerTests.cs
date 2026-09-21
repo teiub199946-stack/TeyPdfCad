@@ -234,7 +234,7 @@ public sealed class SourceReplacementPlannerTests
     }
 
     [Fact]
-    public void Empty_provenance_warning_does_not_invent_a_source_claim()
+    public void Empty_provenance_warning_becomes_page_level_unrecognized_residual()
     {
         var sources = new VectorEntity[]
         {
@@ -248,8 +248,12 @@ public sealed class SourceReplacementPlannerTests
         var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
 
         Assert.Empty(plan.Conflicts);
-        Assert.Empty(plan.Residuals);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.SourceId == "(page)"
+            && residual.Kind == ReplacementResidualKind.Unrecognized
+            && residual.Severity == ReplacementResidualSeverity.Medium);
         Assert.Contains("line", plan.PreservedSourceIds);
+        Assert.False(plan.IsFullPassEligible);
     }
 
     [Fact]
