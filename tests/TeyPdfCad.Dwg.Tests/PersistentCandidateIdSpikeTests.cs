@@ -91,22 +91,31 @@ public sealed class PersistentCandidateIdSpikeTests
         drawing.Entities.Add(expected[7].Entity); // Second insert (owns its attribute)
 
         var reopened = DwgReader.Read(new MemoryStream(Write(drawing)));
-        var actual = reopened.Entities
-            .Concat(reopened.Entities.OfType<Insert>().SelectMany(insert => insert.Attributes))
-            .Select(entity => (Entity: entity, Metadata: ReadMetadata(entity)))
-            .Where(entry => entry.Metadata is not null)
-            .Select(entry => (entry.Metadata!.Value.CandidateId, entry.Metadata!.Value.Role))
-            .OrderBy(entry => entry.CandidateId, StringComparer.Ordinal)
-            .ThenBy(entry => entry.Role, StringComparer.Ordinal)
-            .ToArray();
 
-        var expectedMetadata = expected
-            .Select(entry => (entry.CandidateId, entry.Role))
-            .OrderBy(entry => entry.CandidateId, StringComparer.Ordinal)
-            .ThenBy(entry => entry.Role, StringComparer.Ordinal)
-            .ToArray();
+        // ModelSpace contains seven metadata-bearing entities plus the visible
+        // HATCH boundary. Attributes must remain children of their Insert.
+        Assert.Equal(8, reopened.Entities.Count);
+        Assert.DoesNotContain(reopened.Entities, entity => entity is AttributeEntity);
 
-        Assert.Equal(expectedMetadata, actual);
+        AssertMetadata(reopened.Entities.OfType<Line>().Single(), "v1:1:LINE:001", "primary");
+        AssertMetadata(reopened.Entities.OfType<DimensionAligned>().Single(), "v1:1:DIMENSION:002", "primary");
+        AssertMetadata(reopened.Entities.OfType<Leader>().Single(), "v1:1:LEADER:003", "primary");
+        AssertMetadata(reopened.Entities.OfType<TextEntity>().Single(), "v1:1:LEADER:003", "annotation");
+        AssertMetadata(reopened.Entities.OfType<Hatch>().Single(), "v1:1:HATCH:004", "primary");
+
+        var inserts = reopened.Entities.OfType<Insert>()
+            .OrderBy(insert => insert.InsertPoint.X)
+            .ToArray();
+        Assert.Equal(2, inserts.Length);
+
+        AssertMetadata(inserts[0], "v1:1:LEVEL:005", "primary");
+        Assert.Single(inserts[0].Attributes);
+        AssertMetadata(inserts[0].Attributes.Single(), "v1:1:LEVEL:005", "attribute");
+
+        AssertMetadata(inserts[1], "v1:1:LEVEL:006", "primary");
+        Assert.Single(inserts[1].Attributes);
+        AssertMetadata(inserts[1].Attributes.Single(), "v1:1:LEVEL:006", "attribute");
+
         Assert.True(reopened.AppIds.TryGetValue(AppName, out _));
     }
 
@@ -122,6 +131,20 @@ public sealed class PersistentCandidateIdSpikeTests
             new ExtendedDataString(role)
         ]));
         expected.Add((entity, candidateId, role));
+    }
+
+    private static void AssertMetadata(Entity entity, string expectedCandidateId, string expectedRole)
+    {
+        Assert.True(entity.ExtendedData.TryGet(AppName, out var data));
+
+        var values = data.Records.OfType<ExtendedDataString>()
+            .Select(record => record.Value)
+            .ToArray();
+
+        Assert.Equal(2, values.Length);
+        Assert.All(values, value => Assert.False(string.IsNullOrWhiteSpace(value)));
+        Assert.Equal(expectedCandidateId, values[0]);
+        Assert.Equal(expectedRole, values[1]);
     }
 
     private static (string CandidateId, string Role)? ReadMetadata(Entity entity)
