@@ -100,7 +100,8 @@ public sealed class AcadSharpDwgWriter
             {
                 var template = templateLibrary.Blocks.SingleOrDefault(block =>
                     string.Equals(block.Name, templateSelection.TemplateName, StringComparison.Ordinal));
-                if (template is not null)
+                if (template is not null
+                    && templateSelection.SourceIdsToReplace.Count == 0)
                 {
                     var templateInsert = WriteTemplateInsert(document, styles, sheet, template);
                     RegisterPaintKey(
@@ -111,8 +112,10 @@ public sealed class AcadSharpDwgWriter
                         "template",
                         0,
                         preservedBoundaryEntities);
-                    templateSourceIds.UnionWith(templateSelection.SourceIdsToReplace);
                 }
+                // A template that intends to replace source geometry is fail-closed
+                // until it has its own persistent manifest + on-disk verification path.
+                // Do not emit the template and do not suppress its source IDs here.
             }
             var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
                 ? suppliedRecognition
