@@ -266,8 +266,20 @@ public sealed class AcadSharpDwgWriter
                 };
                 hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 styles.Apply(hatch, candidate.Style);
+                var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
+                AddExpectedNative(
+                    manifestBuilders,
+                    key,
+                    "HATCH",
+                    "primary",
+                    "Hatch",
+                    hatch,
+                    Properties(
+                        ("minimumArea", "0.000001"),
+                        ("boundaryFingerprint", DwgEntityFingerprint.ComputeHatchBoundary(hatch))));
                 document.Entities.Add(hatch);
-                createdCandidateKeys?.Add(SourceReplacementPlanner.GetCandidateKey(candidate, page.Number));
+                diagnosticCreatedCandidateKeyCount++;
+                createdCandidateKeys?.Add(key);
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
@@ -294,35 +306,109 @@ public sealed class AcadSharpDwgWriter
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteDimension(document, styles, sheet, candidate);
+                    var dimension = WriteDimension(document, styles, sheet, candidate);
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "DIMENSION",
+                        "primary",
+                        "Dimension",
+                        dimension,
+                        Properties(
+                            ("expectedMeasurement", Number(dimension.Measurement)),
+                            ("measurementTolerance", "0.000001")));
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Leaders)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteLeader(document, styles, sheet, candidate);
+                    var emitted = WriteLeader(document, styles, sheet, candidate);
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "LEADER",
+                        "primary",
+                        "Leader",
+                        emitted.Leader,
+                        Properties(("minimumVertices", "2")));
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "LEADER",
+                        "annotation",
+                        "Text",
+                        emitted.Annotation,
+                        Properties(
+                            ("minimumHeight", Number(emitted.Annotation.Height)),
+                            ("nonEmpty", "true")));
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Axes)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteAxis(document, styles, sheet, candidate);
+                    var axis = WriteAxis(document, styles, sheet, candidate);
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "AXIS",
+                        "primary",
+                        "Insert",
+                        axis,
+                        Properties(
+                            ("blockName", "TEY_AXIS"),
+                            ("minimumScale", "0.000001"),
+                            ("minimumLength", "0.000001")));
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Levels)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteLevel(document, styles, sheet, candidate);
+                    var emitted = WriteLevel(document, styles, sheet, candidate);
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "LEVEL",
+                        "primary",
+                        "Insert",
+                        emitted.Insert,
+                        Properties(
+                            ("blockName", "TEY_LEVEL"),
+                            ("minimumScale", "0.000001")));
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "LEVEL",
+                        "attribute",
+                        "AttributeEntity",
+                        emitted.Attribute,
+                        Properties(
+                            ("attributeTag", "LEVEL"),
+                            ("nonEmptyValue", "true")));
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.ArcDimensions)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                     if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteArcDimension(document, styles, sheet, candidate);
+                    var dimension = WriteArcDimension(document, styles, sheet, candidate);
+                    AddExpectedNative(
+                        manifestBuilders,
+                        key,
+                        "ARC_DIMENSION",
+                        "primary",
+                        "Dimension",
+                        dimension,
+                        Properties(
+                            ("expectedMeasurement", Number(dimension.Measurement)),
+                            ("measurementTolerance", "0.000001")));
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
             }
