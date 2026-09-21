@@ -57,6 +57,35 @@ public sealed class DwgStructuralSanityTests
     }
 
     [Fact]
+    public void Writer_source_declaration_mismatch_is_rejected_against_closed_probe()
+    {
+        var source = new PageSourceRef(1, "s1");
+        var probe = Inventory(
+            candidateMetadata: 0,
+            ("closed-probe-fingerprint", 1)) with
+        {
+            SourceFingerprintCountsBySource =
+                new Dictionary<PageSourceRef, IReadOnlyDictionary<string, int>>
+                {
+                    [source] = new Dictionary<string, int>(StringComparer.Ordinal)
+                    {
+                        ["closed-probe-fingerprint"] = 1
+                    }
+                }
+        };
+        var declared = Summary(
+            (source, new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["writer-only-fingerprint"] = 1
+            }));
+
+        Assert.Throws<InvalidDataException>(() =>
+            DwgStructuralSanity.ValidateDeclaredSourceEmissionParity(
+                probe,
+                declared));
+    }
+
+    [Fact]
     public void Requested_suppression_multiset_must_exist_in_probe()
     {
         var source = new PageSourceRef(1, "s1");
