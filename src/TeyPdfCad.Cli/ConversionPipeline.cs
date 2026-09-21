@@ -359,11 +359,37 @@ public sealed class ConversionPipeline
             selection.SourceIdsToReplace);
     }
 
-    private static async Task TryWriteFailureReportAsync(string reportPath, string message, CancellationToken cancellationToken)
+    private static async Task TryWriteFailureReportAsync(
+        string reportPath,
+        string message,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await WriteReportAsync(reportPath, complete: false, 0, 0, 0, [message], [], null, cancellationToken);
+            IReadOnlyList<ReplacementResidual> fatalResiduals =
+                message.Contains("SourceSuppressionViolation", StringComparison.Ordinal)
+                    ?
+                    [
+                        new ReplacementResidual(
+                            "(document)",
+                            null,
+                            ReplacementResidualKind.SourceSuppressionViolation,
+                            ReplacementResidualSeverity.Critical,
+                            message)
+                    ]
+                    : [];
+
+            await WriteReportAsync(
+                reportPath,
+                complete: false,
+                0,
+                0,
+                0,
+                [message],
+                [],
+                null,
+                cancellationToken,
+                fatalResiduals);
         }
         catch (OperationCanceledException) { throw; }
         catch
@@ -707,7 +733,17 @@ public sealed class ConversionPipeline
             drawing.Layers.Count(),
             drawing.LineTypes.Count());
 
-    private static Task WriteReportAsync(string path, bool complete, int pagesRead, int pagesProcessed, int layoutsReadBack, IReadOnlyList<string> warnings, IReadOnlyList<PageReport> pages, ReadBackSummary? readBack, CancellationToken cancellationToken)
+    private static Task WriteReportAsync(
+        string path,
+        bool complete,
+        int pagesRead,
+        int pagesProcessed,
+        int layoutsReadBack,
+        IReadOnlyList<string> warnings,
+        IReadOnlyList<PageReport> pages,
+        ReadBackSummary? readBack,
+        CancellationToken cancellationToken,
+        IReadOnlyList<ReplacementResidual>? fatalResiduals = null)
         => WriteAtomicallyAsync(path, JsonSerializer.SerializeToUtf8Bytes(new
         {
             complete,
@@ -715,6 +751,7 @@ public sealed class ConversionPipeline
             pagesProcessed,
             layoutsReadBack,
             warnings,
+            fatalResiduals = fatalResiduals ?? [],
             pages,
             readBack
         }, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), cancellationToken);
