@@ -102,6 +102,11 @@ public static class DwgEntityFingerprint
             entity.GetType().Name,
             ComputeGeometry(entity),
             entity.Layer?.Name ?? string.Empty,
+            entity.LineType?.Name ?? string.Empty,
+            entity.LineWeight.ToString(),
+            Number(entity.LineTypeScale),
+            entity.Color.ToString(),
+            entity.IsInvisible ? "1" : "0",
             metadata);
     }
 
