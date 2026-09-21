@@ -57,6 +57,73 @@ public sealed class SemanticTextReadBackVerifierTests
                 StringComparison.Ordinal));
     }
 
+
+    [Fact]
+    public void Dimension_style_change_rejects_candidate_before_source_geometry_can_be_suppressed()
+    {
+        const string candidateId = "v1:1:DIMENSION:style";
+        var drawing = new CadDocument();
+        var style = new ACadSharp.Tables.DimensionStyle("TEY_DIM_STYLE")
+        {
+            LinearScaleFactor = 100d,
+            TextHeight = 2.5d,
+            ArrowSize = 2.5d,
+            ExtensionLineOffset = 0.75d,
+            ExtensionLineExtension = 1.25d,
+            ScaleFactor = 1d,
+            SuppressFirstDimensionLine = false,
+            SuppressSecondDimensionLine = false,
+            SuppressFirstExtensionLine = false,
+            SuppressSecondExtensionLine = false,
+            SuppressOutsideExtensions = false
+        };
+        drawing.DimensionStyles.Add(style);
+
+        var dimension = new DimensionAligned(
+            new XYZ(0, 0, 0),
+            new XYZ(100, 0, 0))
+        {
+            DefinitionPoint = new XYZ(0, 10, 0),
+            Style = style
+        };
+        CandidateMetadataCodec.Write(
+            dimension,
+            new(candidateId, "primary"));
+        drawing.Entities.Add(dimension);
+
+        var expectedStyleFingerprint =
+            DwgEntityFingerprint.ComputeDimensionStyle(dimension);
+        var manifest = Manifest(
+            candidateId,
+            "DIMENSION",
+            dimension,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["expectedMeasurement"] = dimension.Measurement.ToString(
+                    "R",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                ["measurementTolerance"] = "0.000001",
+                ["expectedDimensionText"] = string.Empty,
+                ["dimensionStyleFingerprint"] = expectedStyleFingerprint
+            });
+
+        // Keep the dimension itself intact but make one required source
+        // replacement component disappear visually.
+        style.SuppressFirstExtensionLine = true;
+
+        using var file = WriteDrawing(drawing);
+        var verification = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.False(verification.IsVerified);
+        Assert.Contains(
+            verification.InvalidEntities,
+            value => value.Contains(
+                "dimensionStyleFingerprint",
+                StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Leader_annotation_must_match_expected_text_exactly()
     {
