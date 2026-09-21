@@ -214,6 +214,26 @@ public static class Program
                 $"TEST-003 forced recognition occurred in {forcedAmbiguousRecognition} ambiguous case(s); P0 requires abstention.");
         }
 
+        var suppressionEligibleFalsePositive = diagnostic.Cases.Count(record =>
+            record.Expected.ExpectedResult == ExpectedResult.Rejected
+            && record.Actual.Result == ExpectedResult.Recognized
+            && record.Actual.SuppressionEvidenceEligible);
+        if (suppressionEligibleFalsePositive > 0)
+        {
+            reasons.Add(
+                $"P0 suppression evidence was complete for {suppressionEligibleFalsePositive} false-positive recognition(s).");
+        }
+
+        var suppressionEligibleAmbiguous = diagnostic.Cases.Count(record =>
+            record.Expected.ExpectedResult == ExpectedResult.Ambiguous
+            && record.Actual.Result == ExpectedResult.Recognized
+            && record.Actual.SuppressionEvidenceEligible);
+        if (suppressionEligibleAmbiguous > 0)
+        {
+            reasons.Add(
+                $"P0 suppression evidence was complete for {suppressionEligibleAmbiguous} forced ambiguous recognition(s).");
+        }
+
         var gate = new
         {
             schemaVersion = "1.0",
@@ -226,6 +246,8 @@ public static class Program
             diagnosticFalsePositiveRate,
             maxFalsePositiveRate = config.MaxFalsePositiveRate,
             forcedAmbiguousRecognition,
+            suppressionEligibleFalsePositive,
+            suppressionEligibleAmbiguous,
             reasons
         };
 
@@ -248,6 +270,8 @@ public static class Program
             $"TEST-002/003 cases: {core.Total}/{diagnostic.Total}; seed: {core.Seed}");
         Console.WriteLine(
             $"Diagnostic FPR: {diagnosticFalsePositiveRate:P3}; forced ambiguous recognition: {forcedAmbiguousRecognition}");
+        Console.WriteLine(
+            $"Suppression-evidence FP: {suppressionEligibleFalsePositive}; suppression-evidence ambiguous: {suppressionEligibleAmbiguous}");
         foreach (var reason in reasons)
             Console.WriteLine("FAIL: " + reason);
         Console.WriteLine($"Gate report: {Path.GetFullPath(outputPath)}");
