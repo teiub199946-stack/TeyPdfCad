@@ -26,7 +26,12 @@ public sealed class AxisRecognizer
             var confidence = layerEvidence + dashEvidence;
             if (confidence >= NativeAxisThreshold)
             {
-                axes.Add(new AxisCandidate(line.Start, line.End, confidence, line.ProvenanceIds));
+                axes.Add(new AxisCandidate(line.Start, line.End, confidence, line.ProvenanceIds)
+                {
+                    SourceClaims = RecognizerSourceClaimBuilder.FromProvenance(
+                        SourceUsageRole.AxisGeometry,
+                        line.ProvenanceIds)
+                });
                 consumed.Add(line);
             }
         }
@@ -100,7 +105,12 @@ public sealed class AxisRecognizer
                         start,
                         end,
                         0.90d,
-                        members.SelectMany(line => line.ProvenanceIds).Distinct().ToArray()),
+                        members.SelectMany(line => line.ProvenanceIds).Distinct().ToArray())
+                    {
+                        SourceClaims = RecognizerSourceClaimBuilder.FromProvenance(
+                            SourceUsageRole.AxisGeometry,
+                            members.SelectMany(line => line.ProvenanceIds).ToArray())
+                    },
                     members));
                 foreach (var member in members)
                     used.Add(member);
