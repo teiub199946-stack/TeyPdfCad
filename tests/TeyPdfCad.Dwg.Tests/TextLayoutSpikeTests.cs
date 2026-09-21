@@ -61,8 +61,8 @@ public sealed class TextLayoutSpikeTests
             writer.Write();
         }
 
-        bytes.Position = 0;
-        var reopened = DwgReader.Read(bytes);
+        var payload = bytes.ToArray();
+        var reopened = DwgReader.Read(new MemoryStream(payload));
         var text = Assert.Single(reopened.Entities.OfType<TextEntity>());
 
         Assert.Equal(insertPoint.X, text.InsertPoint.X, 6);
