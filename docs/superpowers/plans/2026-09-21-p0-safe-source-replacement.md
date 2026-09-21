@@ -49,6 +49,29 @@
 | tests/TeyPdfCad.Dwg.Tests/DwgTwoPassWriterTests.cs | Manifest, metadata roles, source count, paint-order tests. |
 | tests/TeyPdfCad.Cli.Tests/ConversionPipelineTests.cs | Publish/fail-closed and page-status tests. |
 
+## Required implementation sequencing
+
+The task sections describe ownership; execute their deliverables in this safety order, with a focused test run and commit after every line.
+
+1. Implement only Task 1 contracts and deterministic CandidateId. Do not change shared-claim or HATCH behavior yet.
+2. Implement the Task 2 metadata codec and its smoke tests.
+3. Implement the Task 3 writer manifest and metadata emission in probe-only mode; authorization is always empty and all sources remain.
+4. Implement Task 2 read-back verification against closed files, including required-property failures.
+5. Implement Task 4 probe/final orchestration with empty authorization and final fingerprint-multiset sanity. This proves two writes cannot publish an altered output before destructive suppression exists.
+6. Implement Task 1 SuppressionGate. Its first end-to-end behavior is one verified candidate authorizing one whole source.
+7. Implement Task 1 shared-claim deferral, then explicit HATCH Confident/Uncertain behavior. Both are now tested against verification-driven authorization, never a writer counter.
+8. Implement Task 3 immutable paint order as an independent commit after verifier/gate tests are green.
+9. Complete Task 4/5 report reconciliation and repository-wide regression.
+
+The orchestrator lives in TeyPdfCad.Cli/ConversionPipeline. Its allowed dependencies are TeyPdfCad.Core contracts and TeyPdfCad.Dwg writer/verifier. TeyPdfCad.Core must not reference DWG or the file system. TeyPdfCad.Dwg may reference Core contracts but must not reference CLI. This is the required project dependency direction:
+
+~~~mermaid
+flowchart LR
+  CLI[TeyPdfCad.Cli] --> DWG[TeyPdfCad.Dwg]
+  CLI --> Core[TeyPdfCad.Core]
+  DWG --> Core
+~~~
+
 ---
 
 ### Task 1: Establish Core contracts, deterministic IDs, and explicit claims
