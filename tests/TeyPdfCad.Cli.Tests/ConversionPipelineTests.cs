@@ -128,7 +128,7 @@ public sealed class ConversionPipelineTests
     }
 
     [Fact]
-    public async Task Pipeline_reports_and_writes_a_confirmed_pattern_hatch()
+    public async Task Pipeline_preserves_uncertain_pattern_geometry_without_native_hatch()
     {
         var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -140,13 +140,16 @@ public sealed class ConversionPipelineTests
 
         var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
 
-        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
         var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
-        Assert.Equal(1, page.GetProperty("patternHatchCount").GetInt32());
+        Assert.Equal(0, page.GetProperty("patternHatchCount").GetInt32());
+        Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
+        Assert.Contains("hatch-uncertain", page.GetProperty("hatchWarnings").EnumerateArray()
+            .Select(value => value.GetString()));
         var drawing = ACadSharp.IO.DwgReader.Read(output);
-        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>(), hatch => !hatch.IsSolid);
-        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.DoesNotContain(drawing.Entities.OfType<ACadSharp.Entities.Hatch>(), hatch => !hatch.IsSolid);
+        Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
     }
 
     [Fact]
