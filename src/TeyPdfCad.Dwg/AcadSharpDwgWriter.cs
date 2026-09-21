@@ -168,6 +168,7 @@ public sealed class AcadSharpDwgWriter
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
                 styles.Apply(line, GetReviewStyle(sourceLine.Style, sourceLine.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(line);
+                RecordSourceEmission(page.Number, sourceLine.SourceId, line, sourceEmissionCounts);
             }
             foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
             {
@@ -180,6 +181,7 @@ public sealed class AcadSharpDwgWriter
                         radius);
                     styles.Apply(circle, sourcePolyline.Style);
                     document.Entities.Add(circle);
+                    RecordSourceEmission(page.Number, sourcePolyline.SourceId, circle, sourceEmissionCounts);
                     continue;
                 }
                 var polyline = new LwPolyline(sourcePolyline.Vertices.Select(vertex => new XY(
@@ -190,6 +192,7 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(polyline, GetReviewStyle(sourcePolyline.Style, sourcePolyline.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(polyline);
+                RecordSourceEmission(page.Number, sourcePolyline.SourceId, polyline, sourceEmissionCounts);
                 if (sourcePolyline.IsClosed)
                 {
                     writtenBoundaries[sourcePolyline.SourceId] = polyline;
@@ -197,13 +200,19 @@ public sealed class AcadSharpDwgWriter
             }
             foreach (var sourceFill in page.Entities.OfType<VectorFilledPath>())
             {
+                if (templateSourceIds.Contains(sourceFill.SourceId)) continue;
+                if (suppressedSourceIds.Contains(sourceFill.SourceId)) continue;
                 var boundaries = sourceFill.Loops
                     .Where(IsValidBoundary)
                     .Select(loop => CreateBoundary(loop, sheet.ModelOriginX, sheet.ModelOriginY, sourceFill.Style, styles, document))
                     .ToArray();
                 // Fill support contours are not PDF strokes. Retain them for
                 // editing, but do not draw edges that were absent in the source.
-                foreach (var boundary in boundaries) boundary.IsInvisible = true;
+                foreach (var boundary in boundaries)
+                {
+                    boundary.IsInvisible = true;
+                    RecordSourceEmission(page.Number, sourceFill.SourceId, boundary, sourceEmissionCounts);
+                }
                 if (boundaries.Length == 0 || !TryFindInteriorSeed(sourceFill, out var seed))
                 {
                     continue;
@@ -223,6 +232,7 @@ public sealed class AcadSharpDwgWriter
                 }
                 styles.Apply(hatch, GetReviewStyle(sourceFill.Style, sourceFill.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(hatch);
+                RecordSourceEmission(page.Number, sourceFill.SourceId, hatch, sourceEmissionCounts);
             }
             foreach (var candidate in patternHatches)
             {
@@ -276,6 +286,7 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(text, GetReviewStyle(sourceText.Style, sourceText.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(text);
+                RecordSourceEmission(page.Number, sourceText.SourceId, text, sourceEmissionCounts);
             }
             if (semantics is not null)
             {
