@@ -63,6 +63,24 @@ public sealed class HatchRecognizerTests
         Assert.Equal(0x336699, hatch.Style.RgbColor);
     }
 
+
+    [Fact]
+    public void Collinear_segmented_axis_does_not_trigger_hatch_low_confidence()
+    {
+        var lines = new VectorEntity[]
+        {
+            new VectorLine("axis-1", new Point2(0, 0), new Point2(25, 0), new VectorStyle()),
+            new VectorLine("axis-2", new Point2(30, 0), new Point2(55, 0), new VectorStyle()),
+            new VectorLine("axis-3", new Point2(60, 0), new Point2(64, 0), new VectorStyle())
+        };
+
+        var result = new HatchRecognizer().Recognize(lines);
+
+        Assert.Empty(result.NativeHatches);
+        Assert.DoesNotContain(result.Warnings, warning =>
+            warning.Code is "hatch-low-confidence" or "hatch-uncertain");
+    }
+
     [Fact]
     public void Parallel_lines_without_a_closed_boundary_stay_geometry()
     {
