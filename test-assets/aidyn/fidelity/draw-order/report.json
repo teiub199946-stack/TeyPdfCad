@@ -1,0 +1,106 @@
+{
+  "status": "insertion-order-stable",
+  "statusScope": "structural-only",
+  "structuralFinding": "insertion-order-stable",
+  "structuralOnly": true,
+  "provisionalUntilAutoCadRenderPass": true,
+  "visualStatus": "pending",
+  "visualProof": "not-claimed",
+  "acadSharpPackage": "3.7.1",
+  "mode": "Both",
+  "artifactRoot": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final",
+  "insertionOrderStable": true,
+  "explicitSortEntitiesTableObserved": true,
+  "variants": [
+    {
+      "Variant": "InsertionOrder",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\insertion-order.dwg",
+      "SourceOrder": [
+        "red-line",
+        "white-solid-hatch",
+        "black-text"
+      ],
+      "ReopenedInsertionOrder": [
+        "red-line",
+        "white-solid-hatch",
+        "black-text"
+      ],
+      "ReopenedSortOrder": [],
+      "InsertionOrderSurvived": true,
+      "SortEntitiesTablePresent": false,
+      "DwgSha256": "39dc2aa8f23732958dd3fe32cb1e80b189e4974cfb1422bc676a1c603892c288"
+    },
+    {
+      "Variant": "ExplicitOrder",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\explicit-order.dwg",
+      "SourceOrder": [
+        "black-text",
+        "white-solid-hatch",
+        "red-line"
+      ],
+      "ReopenedInsertionOrder": [
+        "black-text",
+        "white-solid-hatch",
+        "red-line"
+      ],
+      "ReopenedSortOrder": [
+        "black-text",
+        "white-solid-hatch",
+        "red-line"
+      ],
+      "InsertionOrderSurvived": true,
+      "SortEntitiesTablePresent": true,
+      "DwgSha256": "be6b37e32082eb51617d06ece6afb7678fd1afdd34d2b70ec883509c992474b0"
+    }
+  ],
+  "autoCad": {
+    "status": "completed",
+    "rendererVersion": "24.1.51.0.0",
+    "visualStatus": "pending",
+    "visualProof": "not-claimed",
+    "blocker": null,
+    "runs": [
+      {
+        "status": "completed",
+        "blocker": null,
+        "executable": "C:\\Program Files\\Autodesk\\AutoCAD 2022\\accoreconsole.exe",
+        "rendererVersion": "24.1.51.0.0",
+        "exitCode": 0,
+        "inputDwg": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\insertion-order.dwg",
+        "inputDwgSha256": "39dc2aa8f23732958dd3fe32cb1e80b189e4974cfb1422bc676a1c603892c288",
+        "workingDwg": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\roundtrip.dwg",
+        "workingDwgSha256": "631ff246f901e38170dca6585f37b23c560df89637a08620ae2c0ebba73bc7aa",
+        "saveScript": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\save-and-exit.scr",
+        "renderScript": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\reopen-and-render.scr",
+        "png": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\render.png",
+        "saveStdout": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\save.stdout.log",
+        "saveStderr": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\save.stderr.log",
+        "renderStdout": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\render.stdout.log",
+        "renderStderr": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\insertion-order\\render.stderr.log",
+        "saveReopenObserved": true,
+        "renderArtifactProduced": true
+      },
+      {
+        "status": "completed",
+        "blocker": null,
+        "executable": "C:\\Program Files\\Autodesk\\AutoCAD 2022\\accoreconsole.exe",
+        "rendererVersion": "24.1.51.0.0",
+        "exitCode": 0,
+        "inputDwg": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\explicit-order.dwg",
+        "inputDwgSha256": "be6b37e32082eb51617d06ece6afb7678fd1afdd34d2b70ec883509c992474b0",
+        "workingDwg": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\roundtrip.dwg",
+        "workingDwgSha256": "ebf885bdfdf2fbe939d56429c05fe0a68934f47eadbab4e97bb11213c973c738",
+        "saveScript": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\save-and-exit.scr",
+        "renderScript": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\reopen-and-render.scr",
+        "png": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\render.png",
+        "saveStdout": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\save.stdout.log",
+        "saveStderr": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\save.stderr.log",
+        "renderStdout": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\render.stdout.log",
+        "renderStderr": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\autocad\\explicit-order\\render.stderr.log",
+        "saveReopenObserved": true,
+        "renderArtifactProduced": true
+      }
+    ]
+  },
+  "readBackSummary": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\read-back-summary.json"
+}

@@ -1,0 +1,42 @@
+{
+  "complete": true,
+  "pagesRead": 1,
+  "pagesProcessed": 1,
+  "layoutsReadBack": 0,
+  "warnings": [],
+  "pages": [
+    {
+      "pageNumber": 1,
+      "widthMillimetres": 594.0777777777777,
+      "heightMillimetres": 420.1583333333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 115748,
+      "solidHatchCount": 247,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": true,
+      "templateName": "A2-landscape",
+      "templateReason": "format-and-title-block-confirmed",
+      "diagnostics": [],
+      "complete": true
+    }
+  ],
+  "readBack": {
+    "modelEntityCount": 115710,
+    "lineCount": 114470,
+    "polylineCount": 490,
+    "textCount": 470,
+    "hatchCount": 247,
+    "viewportCount": 0,
+    "layerCount": 1,
+    "lineTypeCount": 3
+  }
+}

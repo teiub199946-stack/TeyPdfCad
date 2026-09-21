@@ -1,0 +1,43 @@
+{
+  "complete": true,
+  "pagesRead": 1,
+  "pagesProcessed": 1,
+  "layoutsReadBack": 0,
+  "warnings": [],
+  "pages": [
+    {
+      "pageNumber": 1,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2726,
+      "solidHatchCount": 133,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 30,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 18,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    }
+  ],
+  "readBack": {
+    "modelEntityCount": 2601,
+    "lineCount": 1796,
+    "polylineCount": 391,
+    "textCount": 170,
+    "hatchCount": 133,
+    "viewportCount": 0,
+    "layerCount": 5,
+    "lineTypeCount": 3
+  }
+}

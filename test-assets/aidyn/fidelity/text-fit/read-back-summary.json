@@ -1,0 +1,258 @@
+{
+  "AcadSharpPackage": "ACadSharp 3.7.1",
+  "ArtifactRoot": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report",
+  "FixtureMetadataPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\fixture-metadata.json",
+  "Fixture": {
+    "Value": "NATIVE FIT",
+    "Height": 5,
+    "Orientations": [
+      {
+        "Name": "horizontal",
+        "Start": {
+          "Dimension": 3,
+          "X": 10,
+          "Y": 20,
+          "Z": 0
+        },
+        "End": {
+          "Dimension": 3,
+          "X": 45,
+          "Y": 20,
+          "Z": 0
+        },
+        "AngleRadians": 0,
+        "BaselineLength": 35
+      },
+      {
+        "Name": "rotated-90",
+        "Start": {
+          "Dimension": 3,
+          "X": 60,
+          "Y": 20,
+          "Z": 0
+        },
+        "End": {
+          "Dimension": 3,
+          "X": 60,
+          "Y": 55,
+          "Z": 0
+        },
+        "AngleRadians": 1.5707963267948966,
+        "BaselineLength": 35
+      }
+    ]
+  },
+  "NaturalWidthReference": {
+    "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\natural-width-reference.dwg",
+    "DwgSha256": "d6ccaf00e4b00e5a1f16a4f8cded4e7530d31c808e2bcc8c695f7b696a13e189",
+    "NaturalWidth": 0,
+    "PersistedWidthFactor": 1,
+    "MeasurementMethod": "ACadSharp TextEntity.GetBoundingBox().LengthX unavailable; persisted reference WidthFactor used and visual calibration is pending"
+  },
+  "Candidates": [
+    {
+      "Orientation": "horizontal",
+      "Candidate": "Default",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\horizontal-default.dwg",
+      "DwgSha256": "bfa2f846fb817bc6d981405ccb145d1e4cf3cfb3a9ddbfaa89956f141c010044",
+      "Metrics": {
+        "BaselineStartError": 0,
+        "BaselineEndError": null,
+        "HeightError": 0,
+        "AngleErrorRadians": 0,
+        "WordMaskIoU": null,
+        "CharacterOrder": null
+      },
+      "ReadBack": {
+        "Value": "NATIVE FIT",
+        "Height": 5,
+        "RotationRadians": 0,
+        "InsertPoint": {
+          "Dimension": 3,
+          "X": 10,
+          "Y": 20,
+          "Z": 0
+        },
+        "HorizontalAlignment": "Left",
+        "AlignmentPoint": {
+          "Dimension": 3,
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "WidthFactor": 1
+      },
+      "VisualStatus": "structural-only; rendered extents pending"
+    },
+    {
+      "Orientation": "horizontal",
+      "Candidate": "Fit",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\horizontal-fit.dwg",
+      "DwgSha256": "0ba281fbe36fe6490b4dbc17762b70400d0e1e27bde1431fd15ca5d585197a31",
+      "Metrics": {
+        "BaselineStartError": 0,
+        "BaselineEndError": 0,
+        "HeightError": 0,
+        "AngleErrorRadians": 0,
+        "WordMaskIoU": null,
+        "CharacterOrder": null
+      },
+      "ReadBack": {
+        "Value": "NATIVE FIT",
+        "Height": 5,
+        "RotationRadians": 0,
+        "InsertPoint": {
+          "Dimension": 3,
+          "X": 10,
+          "Y": 20,
+          "Z": 0
+        },
+        "HorizontalAlignment": "Fit",
+        "AlignmentPoint": {
+          "Dimension": 3,
+          "X": 45,
+          "Y": 20,
+          "Z": 0
+        },
+        "WidthFactor": 1
+      },
+      "VisualStatus": "structural-only; rendered extents pending"
+    },
+    {
+      "Orientation": "horizontal",
+      "Candidate": "CalibratedWidthFactor",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\horizontal-calibratedwidthfactor.dwg",
+      "DwgSha256": "4263d9ad5463caf8bf3a804713dc945e7911c6d17178ec26b89a1a8d0584d1c7",
+      "Metrics": {
+        "BaselineStartError": 0,
+        "BaselineEndError": null,
+        "HeightError": 0,
+        "AngleErrorRadians": 0,
+        "WordMaskIoU": null,
+        "CharacterOrder": null
+      },
+      "ReadBack": {
+        "Value": "NATIVE FIT",
+        "Height": 5,
+        "RotationRadians": 0,
+        "InsertPoint": {
+          "Dimension": 3,
+          "X": 10,
+          "Y": 20,
+          "Z": 0
+        },
+        "HorizontalAlignment": "Left",
+        "AlignmentPoint": {
+          "Dimension": 3,
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "WidthFactor": 1
+      },
+      "VisualStatus": "configured-from-acadsharp-natural-width-reference; rendered calibration pending"
+    },
+    {
+      "Orientation": "rotated-90",
+      "Candidate": "Default",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\rotated-90-default.dwg",
+      "DwgSha256": "d1632b5b6e01816fb73706879400c13a8566067fc128781560f9d22fe358d1f6",
+      "Metrics": {
+        "BaselineStartError": 0,
+        "BaselineEndError": null,
+        "HeightError": 0,
+        "AngleErrorRadians": 0,
+        "WordMaskIoU": null,
+        "CharacterOrder": null
+      },
+      "ReadBack": {
+        "Value": "NATIVE FIT",
+        "Height": 5,
+        "RotationRadians": 1.5707963267948966,
+        "InsertPoint": {
+          "Dimension": 3,
+          "X": 60,
+          "Y": 20,
+          "Z": 0
+        },
+        "HorizontalAlignment": "Left",
+        "AlignmentPoint": {
+          "Dimension": 3,
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "WidthFactor": 1
+      },
+      "VisualStatus": "structural-only; rendered extents pending"
+    },
+    {
+      "Orientation": "rotated-90",
+      "Candidate": "Fit",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\rotated-90-fit.dwg",
+      "DwgSha256": "78f9ba95fe81f75047c91a8521dcf39d1db4f53167d568c5956b5a09765ffb76",
+      "Metrics": {
+        "BaselineStartError": 0,
+        "BaselineEndError": 0,
+        "HeightError": 0,
+        "AngleErrorRadians": 0,
+        "WordMaskIoU": null,
+        "CharacterOrder": null
+      },
+      "ReadBack": {
+        "Value": "NATIVE FIT",
+        "Height": 5,
+        "RotationRadians": 1.5707963267948966,
+        "InsertPoint": {
+          "Dimension": 3,
+          "X": 60,
+          "Y": 20,
+          "Z": 0
+        },
+        "HorizontalAlignment": "Fit",
+        "AlignmentPoint": {
+          "Dimension": 3,
+          "X": 60,
+          "Y": 55,
+          "Z": 0
+        },
+        "WidthFactor": 1
+      },
+      "VisualStatus": "structural-only; rendered extents pending"
+    },
+    {
+      "Orientation": "rotated-90",
+      "Candidate": "CalibratedWidthFactor",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-text-fit-report\\rotated-90-calibratedwidthfactor.dwg",
+      "DwgSha256": "3b05c1952e82aaa5852deeb85509b7f51f5e37fa60109492568ed3c704210dc0",
+      "Metrics": {
+        "BaselineStartError": 0,
+        "BaselineEndError": null,
+        "HeightError": 0,
+        "AngleErrorRadians": 0,
+        "WordMaskIoU": null,
+        "CharacterOrder": null
+      },
+      "ReadBack": {
+        "Value": "NATIVE FIT",
+        "Height": 5,
+        "RotationRadians": 1.5707963267948966,
+        "InsertPoint": {
+          "Dimension": 3,
+          "X": 60,
+          "Y": 20,
+          "Z": 0
+        },
+        "HorizontalAlignment": "Left",
+        "AlignmentPoint": {
+          "Dimension": 3,
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "WidthFactor": 1
+      },
+      "VisualStatus": "configured-from-acadsharp-natural-width-reference; rendered calibration pending"
+    }
+  ]
+}

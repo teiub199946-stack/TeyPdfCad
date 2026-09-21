@@ -1,0 +1,40 @@
+{
+  "Value": "NATIVE FIT",
+  "Height": 5,
+  "Orientations": [
+    {
+      "Name": "horizontal",
+      "Start": {
+        "Dimension": 3,
+        "X": 10,
+        "Y": 20,
+        "Z": 0
+      },
+      "End": {
+        "Dimension": 3,
+        "X": 45,
+        "Y": 20,
+        "Z": 0
+      },
+      "AngleRadians": 0,
+      "BaselineLength": 35
+    },
+    {
+      "Name": "rotated-90",
+      "Start": {
+        "Dimension": 3,
+        "X": 60,
+        "Y": 20,
+        "Z": 0
+      },
+      "End": {
+        "Dimension": 3,
+        "X": 60,
+        "Y": 55,
+        "Z": 0
+      },
+      "AngleRadians": 1.5707963267948966,
+      "BaselineLength": 35
+    }
+  ]
+}

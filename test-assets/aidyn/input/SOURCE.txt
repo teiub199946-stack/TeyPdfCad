@@ -1,0 +1,4 @@
+Canonical source:
+C:\Users\Admin\Desktop\Склад Айдын\Айдын.pdf
+SHA-256: FA8100E315A66EC0ADA7EFD6D52DEB3A3968CA214E99014C89FDBB143FBFE48E
+Date fixed: 2026-09-20

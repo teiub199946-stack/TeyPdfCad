@@ -1,0 +1,1293 @@
+{
+  "complete": true,
+  "pagesRead": 51,
+  "pagesProcessed": 51,
+  "layoutsReadBack": 0,
+  "warnings": [],
+  "pages": [
+    {
+      "pageNumber": 1,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 96,
+      "solidHatchCount": 32,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 2,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 104,
+      "solidHatchCount": 32,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 3,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 538,
+      "solidHatchCount": 337,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 4,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 454,
+      "solidHatchCount": 212,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 5,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 474,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 6,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 209,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 7,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 340,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 8,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 146,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 9,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 133,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 10,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 414,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 11,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 327,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 12,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 407,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 13,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 460,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 14,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 506,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 15,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 296,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 16,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 223,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 17,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 283,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 18,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 204,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 19,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 458,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 20,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 134,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 21,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 356,
+      "solidHatchCount": 113,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 22,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 286,
+      "solidHatchCount": 138,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 23,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 315,
+      "solidHatchCount": 138,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 24,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 711,
+      "solidHatchCount": 528,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 25,
+      "widthMillimetres": 210.01566666666668,
+      "heightMillimetres": 297.0106666666666,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 207,
+      "solidHatchCount": 157,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 26,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 733,
+      "solidHatchCount": 4,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-low-confidence"
+      ],
+      "dimensionCandidateCount": 4,
+      "axisCandidateCount": 1,
+      "leaderCandidateCount": 4,
+      "levelCandidateCount": 3,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 27,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 3356,
+      "solidHatchCount": 59,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 28,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 5427,
+      "solidHatchCount": 593,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 29,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2726,
+      "solidHatchCount": 133,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 30,
+      "axisCandidateCount": 7,
+      "leaderCandidateCount": 18,
+      "levelCandidateCount": 3,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 30,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2887,
+      "solidHatchCount": 190,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 42,
+      "axisCandidateCount": 2,
+      "leaderCandidateCount": 26,
+      "levelCandidateCount": 3,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 31,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 1573,
+      "solidHatchCount": 54,
+      "patternHatchCount": 12,
+      "recognitionWarnings": [],
+      "dimensionCandidateCount": 44,
+      "axisCandidateCount": 2,
+      "leaderCandidateCount": 3,
+      "levelCandidateCount": 8,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 32,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 1877,
+      "solidHatchCount": 212,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 52,
+      "axisCandidateCount": 22,
+      "leaderCandidateCount": 11,
+      "levelCandidateCount": 1,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 33,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2586,
+      "solidHatchCount": 439,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 51,
+      "axisCandidateCount": 11,
+      "leaderCandidateCount": 7,
+      "levelCandidateCount": 8,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 34,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 1177,
+      "solidHatchCount": 171,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 9,
+      "axisCandidateCount": 14,
+      "leaderCandidateCount": 15,
+      "levelCandidateCount": 9,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 35,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2078,
+      "solidHatchCount": 357,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 19,
+      "axisCandidateCount": 16,
+      "leaderCandidateCount": 10,
+      "levelCandidateCount": 11,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 36,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 3694,
+      "solidHatchCount": 115,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 37,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2479,
+      "solidHatchCount": 85,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 38,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 3533,
+      "solidHatchCount": 256,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 39,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2112,
+      "solidHatchCount": 181,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 72,
+      "axisCandidateCount": 17,
+      "leaderCandidateCount": 13,
+      "levelCandidateCount": 2,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 40,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 3253,
+      "solidHatchCount": 180,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 41,
+      "widthMillimetres": 594.0777777777777,
+      "heightMillimetres": 420.1583333333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 115748,
+      "solidHatchCount": 247,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 42,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2410,
+      "solidHatchCount": 403,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 65,
+      "axisCandidateCount": 7,
+      "leaderCandidateCount": 29,
+      "levelCandidateCount": 4,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence",
+        "level-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 43,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 1362,
+      "solidHatchCount": 271,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 8,
+      "axisCandidateCount": 8,
+      "leaderCandidateCount": 19,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 44,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 6316,
+      "solidHatchCount": 353,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 45,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 2032,
+      "solidHatchCount": 259,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 18,
+      "axisCandidateCount": 20,
+      "leaderCandidateCount": 10,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "axis-low-confidence",
+        "leader-low-confidence"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 46,
+      "widthMillimetres": 420.1583333333333,
+      "heightMillimetres": 297.03888888888883,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 3230,
+      "solidHatchCount": 170,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 47,
+      "widthMillimetres": 419.9995833333333,
+      "heightMillimetres": 297.0000833333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 11284,
+      "solidHatchCount": 6106,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 48,
+      "widthMillimetres": 419.9995833333333,
+      "heightMillimetres": 297.0000833333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 19914,
+      "solidHatchCount": 8196,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 49,
+      "widthMillimetres": 419.9995833333333,
+      "heightMillimetres": 297.0000833333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 4459,
+      "solidHatchCount": 263,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 50,
+      "widthMillimetres": 419.9995833333333,
+      "heightMillimetres": 297.0000833333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 7272,
+      "solidHatchCount": 334,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    },
+    {
+      "pageNumber": 51,
+      "widthMillimetres": 419.9995833333333,
+      "heightMillimetres": 297.0000833333333,
+      "rotationDegrees": 0,
+      "sourceEntityCount": 4950,
+      "solidHatchCount": 1014,
+      "patternHatchCount": 0,
+      "recognitionWarnings": [
+        "hatch-recognition-skipped-complexity"
+      ],
+      "dimensionCandidateCount": 0,
+      "axisCandidateCount": 0,
+      "leaderCandidateCount": 0,
+      "levelCandidateCount": 0,
+      "arcDimensionCandidateCount": 0,
+      "semanticWarnings": [
+        "semantic-recognition-skipped-complexity"
+      ],
+      "templateSelected": false,
+      "templateName": null,
+      "templateReason": "template-manifest-not-supplied",
+      "diagnostics": [],
+      "complete": true
+    }
+  ],
+  "readBack": {
+    "modelEntityCount": 244080,
+    "lineCount": 177235,
+    "polylineCount": 31357,
+    "textCount": 9768,
+    "hatchCount": 24049,
+    "dimensionCount": 414,
+    "arcDimensionCount": 0,
+    "leaderCount": 165,
+    "insertCount": 179,
+    "viewportCount": 0,
+    "layerCount": 8,
+    "lineTypeCount": 4
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "acadSharpPackage": "3.7.1",
+  "artifactRoot": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final",
+  "variants": [
+    {
+      "Variant": "InsertionOrder",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\insertion-order.dwg",
+      "SourceOrder": [
+        "red-line",
+        "white-solid-hatch",
+        "black-text"
+      ],
+      "ReopenedInsertionOrder": [
+        "red-line",
+        "white-solid-hatch",
+        "black-text"
+      ],
+      "ReopenedSortOrder": [],
+      "InsertionOrderSurvived": true,
+      "SortEntitiesTablePresent": false,
+      "DwgSha256": "39dc2aa8f23732958dd3fe32cb1e80b189e4974cfb1422bc676a1c603892c288"
+    },
+    {
+      "Variant": "ExplicitOrder",
+      "DwgPath": "C:\\Users\\Admin\\Documents\\ChatGPT\\TeyConvert\\output\\text-fidelity-review\\spike-draw-order-report-final\\explicit-order.dwg",
+      "SourceOrder": [
+        "black-text",
+        "white-solid-hatch",
+        "red-line"
+      ],
+      "ReopenedInsertionOrder": [
+        "black-text",
+        "white-solid-hatch",
+        "red-line"
+      ],
+      "ReopenedSortOrder": [
+        "black-text",
+        "white-solid-hatch",
+        "red-line"
+      ],
+      "InsertionOrderSurvived": true,
+      "SortEntitiesTablePresent": true,
+      "DwgSha256": "be6b37e32082eb51617d06ece6afb7678fd1afdd34d2b70ec883509c992474b0"
+    }
+  ]
+}
