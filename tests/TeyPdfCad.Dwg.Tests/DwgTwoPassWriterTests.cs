@@ -153,6 +153,50 @@ public sealed class DwgTwoPassWriterTests
     }
 
     [Fact]
+    public void Final_write_with_empty_authorization_omits_probe_only_axis_candidate()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("axis-source", new(0, 0), new(25, 0), new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var axis = new AxisCandidate(new(0, 0), new(25, 0), 0.95, ["axis-source"])
+        {
+            SourceClaims =
+            [
+                new("axis-source", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Axes = [axis]
+        };
+        var hatch = new HatchRecognitionResult([], []);
+        var replacement = new SourceReplacementPlanner().BuildPlan(
+            page.Entities,
+            semantics,
+            hatch,
+            page.Number);
+
+        using var stream = new MemoryStream();
+        var result = new AcadSharpDwgWriter().Write(
+            stream,
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            hatchRecognitionByPage: new Dictionary<int, HatchRecognitionResult> { [1] = hatch },
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
+            sourceReplacementPlansByPage: new Dictionary<int, SourceReplacementPlan> { [1] = replacement },
+            authorizedSuppressedSources: new HashSet<PageSourceRef>());
+
+        Assert.Empty(result.Manifest.Candidates);
+        stream.Position = 0;
+        var drawing = DwgReader.Read(stream);
+        Assert.Single(drawing.Entities.OfType<Line>());
+        Assert.Empty(drawing.Entities.OfType<Insert>());
+        Assert.DoesNotContain(drawing.Entities, CandidateMetadataCodec.HasCandidateApp);
+    }
+
+    [Fact]
     public void Null_authorization_preserves_same_raw_source_id_on_both_pages()
     {
         var document = new VectorPdfDocument(

@@ -162,6 +162,35 @@ public sealed class DwgStructuralSanityTests
     }
 
     [Fact]
+    public void Final_subset_removes_probe_only_native_candidate_from_expected_inventory()
+    {
+        var probe = Inventory(
+            candidateMetadata: 1,
+            ("source", 1),
+            ("native", 1)) with
+        {
+            CandidateFingerprintCountsByCandidate =
+                new Dictionary<string, IReadOnlyDictionary<string, int>>(StringComparer.Ordinal)
+                {
+                    ["candidate-1"] = new Dictionary<string, int>(StringComparer.Ordinal)
+                    {
+                        ["native"] = 1
+                    }
+                }
+        };
+        var final = Inventory(
+            candidateMetadata: 0,
+            ("source", 1));
+
+        DwgStructuralSanity.ValidateFinal(
+            probe,
+            final,
+            Summary(),
+            [],
+            Array.Empty<string>());
+    }
+
+    [Fact]
     public void Candidate_metadata_count_must_not_change_in_final()
     {
         var probe = Inventory(

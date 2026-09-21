@@ -14,6 +14,10 @@ public sealed record DwgStructuralInventory(
     public IReadOnlyDictionary<PageSourceRef, IReadOnlyDictionary<string, int>>
         SourceFingerprintCountsBySource { get; init; }
         = new Dictionary<PageSourceRef, IReadOnlyDictionary<string, int>>();
+
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>>
+        CandidateFingerprintCountsByCandidate { get; init; }
+        = new Dictionary<string, IReadOnlyDictionary<string, int>>(StringComparer.Ordinal);
 }
 
 public sealed class DwgReadBackVerifier
@@ -155,6 +159,24 @@ public sealed class DwgReadBackVerifier
                 $"Malformed {SourceMetadataCodec.AppId} metadata exists on {malformedSource.GetType().Name}.");
         }
 
+        var malformedCandidate = counted.FirstOrDefault(entity =>
+            CandidateMetadataCodec.HasCandidateApp(entity)
+            && !CandidateMetadataCodec.TryRead(entity, out _));
+        if (malformedCandidate is not null)
+        {
+            throw new InvalidDataException(
+                $"Malformed {CandidateMetadataCodec.AppId} metadata exists on {malformedCandidate.GetType().Name}.");
+        }
+
+        var mixedIdentity = counted.FirstOrDefault(entity =>
+            SourceMetadataCodec.TryRead(entity, out _)
+            && CandidateMetadataCodec.TryRead(entity, out _));
+        if (mixedIdentity is not null)
+        {
+            throw new InvalidDataException(
+                $"Entity {mixedIdentity.GetType().Name} carries both source and candidate identity metadata.");
+        }
+
         var fingerprints = counted
             .Select(DwgEntityFingerprint.ComputeOutput)
             .GroupBy(value => value, StringComparer.Ordinal)
@@ -183,12 +205,38 @@ public sealed class DwgReadBackVerifier
                         fingerprintGroup => fingerprintGroup.Count(),
                         StringComparer.Ordinal));
 
+        var candidateEntities = counted
+            .Select(entity => new
+            {
+                Entity = entity,
+                HasCandidate = CandidateMetadataCodec.TryRead(entity, out var metadata),
+                Metadata = metadata
+            })
+            .Where(item => item.HasCandidate)
+            .ToArray();
+
+        var candidateFingerprints = candidateEntities
+            .GroupBy(item => item.Metadata.CandidateId, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyDictionary<string, int>)group
+                    .Select(item => DwgEntityFingerprint.ComputeOutput(item.Entity))
+                    .GroupBy(value => value, StringComparer.Ordinal)
+                    .OrderBy(fingerprintGroup => fingerprintGroup.Key, StringComparer.Ordinal)
+                    .ToDictionary(
+                        fingerprintGroup => fingerprintGroup.Key,
+                        fingerprintGroup => fingerprintGroup.Count(),
+                        StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
         return new DwgStructuralInventory(
             counted.Count,
             counted.Count(CandidateMetadataCodec.HasCandidateApp),
             fingerprints)
         {
-            SourceFingerprintCountsBySource = sourceFingerprints
+            SourceFingerprintCountsBySource = sourceFingerprints,
+            CandidateFingerprintCountsByCandidate = candidateFingerprints
         };
     }
 

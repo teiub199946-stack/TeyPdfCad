@@ -62,20 +62,52 @@ public static class DwgStructuralSanity
         var removed = sourceEmissions.GetExpectedSuppressionFingerprintMultiset(
             authorizedSuppressedSources);
 
-        foreach (var pair in removed)
-        {
-            if (!expected.TryGetValue(pair.Key, out var available)
-                || available < pair.Value)
-            {
-                throw new InvalidDataException(
-                    $"Authorized source-emission fingerprint is not a sub-multiset of the on-disk probe inventory: requested {pair.Value}, available {available}.");
-            }
+        SubtractFingerprintMultiset(
+            expected,
+            removed,
+            "Authorized source-emission fingerprint is not a sub-multiset of the on-disk probe inventory");
 
-            var remaining = available - pair.Value;
-            if (remaining == 0)
-                expected.Remove(pair.Key);
-            else
-                expected[pair.Key] = remaining;
+        return expected;
+    }
+
+    public static IReadOnlyDictionary<string, int> BuildExpectedFinalFingerprintMultiset(
+        DwgStructuralInventory probe,
+        SourceEmissionSummary sourceEmissions,
+        IEnumerable<PageSourceRef> authorizedSuppressedSources,
+        IEnumerable<string> authorizedNativeCandidateIds)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        ArgumentNullException.ThrowIfNull(sourceEmissions);
+        ArgumentNullException.ThrowIfNull(authorizedSuppressedSources);
+        ArgumentNullException.ThrowIfNull(authorizedNativeCandidateIds);
+
+        var authorizedCandidates = authorizedNativeCandidateIds
+            .ToHashSet(StringComparer.Ordinal);
+        var unknownAuthorizedCandidates = authorizedCandidates
+            .Where(candidateId =>
+                !probe.CandidateFingerprintCountsByCandidate.ContainsKey(candidateId))
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (unknownAuthorizedCandidates.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"Authorized native candidate(s) are absent from the closed probe inventory: {string.Join(", ", unknownAuthorizedCandidates)}.");
+        }
+
+        var expected = BuildExpectedFinalFingerprintMultiset(
+            probe,
+            sourceEmissions,
+            authorizedSuppressedSources)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+
+        foreach (var pair in probe.CandidateFingerprintCountsByCandidate
+                     .Where(pair => !authorizedCandidates.Contains(pair.Key))
+                     .OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            SubtractFingerprintMultiset(
+                expected,
+                pair.Value,
+                $"Probe-only native candidate {pair.Key} fingerprint is not a sub-multiset of the on-disk probe inventory");
         }
 
         return expected;
@@ -104,6 +136,87 @@ public static class DwgStructuralSanity
         {
             throw new InvalidDataException(
                 "Final DWG structural fingerprint multiset does not equal probe inventory minus authorized source-emission fingerprints.");
+        }
+    }
+
+    public static void ValidateFinal(
+        DwgStructuralInventory probe,
+        DwgStructuralInventory final,
+        SourceEmissionSummary sourceEmissions,
+        IEnumerable<PageSourceRef> authorizedSuppressedSources,
+        IEnumerable<string> authorizedNativeCandidateIds)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        ArgumentNullException.ThrowIfNull(final);
+        ArgumentNullException.ThrowIfNull(sourceEmissions);
+        ArgumentNullException.ThrowIfNull(authorizedSuppressedSources);
+        ArgumentNullException.ThrowIfNull(authorizedNativeCandidateIds);
+
+        var authorizedCandidates = authorizedNativeCandidateIds
+            .ToHashSet(StringComparer.Ordinal);
+        var expected = BuildExpectedFinalFingerprintMultiset(
+            probe,
+            sourceEmissions,
+            authorizedSuppressedSources,
+            authorizedCandidates);
+
+        var expectedCandidateMetadataEntityCount = authorizedCandidates.Sum(candidateId =>
+            probe.CandidateFingerprintCountsByCandidate[candidateId].Values.Sum());
+        if (final.CandidateMetadataEntityCount != expectedCandidateMetadataEntityCount)
+        {
+            throw new InvalidDataException(
+                $"Final candidate metadata entity count {final.CandidateMetadataEntityCount} != authorized count {expectedCandidateMetadataEntityCount}.");
+        }
+
+        var finalCandidateIds = final.CandidateFingerprintCountsByCandidate.Keys
+            .ToHashSet(StringComparer.Ordinal);
+        if (!finalCandidateIds.SetEquals(authorizedCandidates))
+        {
+            var missing = authorizedCandidates.Except(finalCandidateIds, StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal);
+            var unexpected = finalCandidateIds.Except(authorizedCandidates, StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal);
+            throw new InvalidDataException(
+                $"Final native candidate identity set differs from authorization. Missing: [{string.Join(", ", missing)}]; unexpected: [{string.Join(", ", unexpected)}].");
+        }
+
+        foreach (var candidateId in authorizedCandidates.OrderBy(value => value, StringComparer.Ordinal))
+        {
+            if (!FingerprintMultisetsEqual(
+                    probe.CandidateFingerprintCountsByCandidate[candidateId],
+                    final.CandidateFingerprintCountsByCandidate[candidateId]))
+            {
+                throw new InvalidDataException(
+                    $"Final native candidate {candidateId} fingerprint multiset differs from the verified closed probe.");
+            }
+        }
+
+        if (!MultisetsEqual(expected, final.OutputFingerprintCounts))
+        {
+            throw new InvalidDataException(
+                "Final DWG structural fingerprint multiset does not equal probe inventory minus authorized source emissions and probe-only native candidates.");
+        }
+    }
+
+    private static void SubtractFingerprintMultiset(
+        IDictionary<string, int> target,
+        IReadOnlyDictionary<string, int> removed,
+        string errorPrefix)
+    {
+        foreach (var pair in removed)
+        {
+            if (!target.TryGetValue(pair.Key, out var available)
+                || available < pair.Value)
+            {
+                throw new InvalidDataException(
+                    $"{errorPrefix}: requested {pair.Value}, available {available}.");
+            }
+
+            var remaining = available - pair.Value;
+            if (remaining == 0)
+                target.Remove(pair.Key);
+            else
+                target[pair.Key] = remaining;
         }
     }
 

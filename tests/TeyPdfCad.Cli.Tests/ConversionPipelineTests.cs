@@ -474,6 +474,37 @@ public sealed class ConversionPipelineTests
     }
 
 
+    [Fact]
+    public async Task Production_interlock_withholds_probe_only_native_axis_from_published_dwg()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateSegmentedAxisPdf());
+
+        var result = await new ConversionPipeline().ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
+        Assert.True(File.Exists(output));
+
+        var drawing = DwgReader.Read(output);
+        Assert.NotEmpty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.DoesNotContain(drawing.Entities, CandidateMetadataCodec.HasCandidateApp);
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.Contains(
+            json.RootElement.GetProperty("warnings").EnumerateArray(),
+            warning => warning.GetString()!.Contains(
+                "probe-only native candidates are withheld",
+                StringComparison.Ordinal));
+    }
+
     private static string CreateTestDirectory()
     {
         var directory = Path.Combine(

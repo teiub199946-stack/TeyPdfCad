@@ -18,7 +18,8 @@ internal static class NativeExpectationBuilder
         DwgDocumentPlan plan,
         IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage,
         IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage,
-        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage)
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage,
+        IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
@@ -47,6 +48,10 @@ internal static class NativeExpectationBuilder
                         page.Number);
             var deferred = replacementPlan.DeferredCandidateKeys
                 .ToHashSet(StringComparer.Ordinal);
+            var authorizedCandidates = NativeCandidateAuthorization.GetAuthorizedCandidateIds(
+                replacementPlan,
+                page.Number,
+                authorizedSuppressedSources);
             var equivalence = SourceEquivalenceAssessor.Build(
                 page,
                 semantics,
@@ -60,7 +65,8 @@ internal static class NativeExpectationBuilder
                 var candidateId = SourceReplacementPlanner.GetCandidateKey(
                     hatchCandidate,
                     page.Number);
-                if (deferred.Contains(candidateId))
+                if (deferred.Contains(candidateId)
+                    || !NativeCandidateAuthorization.ShouldEmit(authorizedCandidates, candidateId))
                     continue;
 
                 var boundary = new LwPolyline(
@@ -112,7 +118,8 @@ internal static class NativeExpectationBuilder
             foreach (var candidate in semantics.Dimensions)
             {
                 var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                if (deferred.Contains(candidateId))
+                if (deferred.Contains(candidateId)
+                    || !NativeCandidateAuthorization.ShouldEmit(authorizedCandidates, candidateId))
                     continue;
 
                 var dimension = BuildExpectedDimension(
@@ -139,7 +146,8 @@ internal static class NativeExpectationBuilder
             foreach (var candidate in semantics.Leaders)
             {
                 var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                if (deferred.Contains(candidateId))
+                if (deferred.Contains(candidateId)
+                    || !NativeCandidateAuthorization.ShouldEmit(authorizedCandidates, candidateId))
                     continue;
 
                 var arrow = new XYZ(
@@ -189,7 +197,8 @@ internal static class NativeExpectationBuilder
             foreach (var candidate in semantics.Axes)
             {
                 var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                if (deferred.Contains(candidateId))
+                if (deferred.Contains(candidateId)
+                    || !NativeCandidateAuthorization.ShouldEmit(authorizedCandidates, candidateId))
                     continue;
 
                 var block = BuildExpectedAxisBlock(expectationDocument, styles);
@@ -226,7 +235,8 @@ internal static class NativeExpectationBuilder
             foreach (var candidate in semantics.Levels)
             {
                 var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                if (deferred.Contains(candidateId))
+                if (deferred.Contains(candidateId)
+                    || !NativeCandidateAuthorization.ShouldEmit(authorizedCandidates, candidateId))
                     continue;
 
                 var block = BuildExpectedLevelBlock(expectationDocument, styles);
@@ -274,7 +284,8 @@ internal static class NativeExpectationBuilder
             foreach (var candidate in semantics.ArcDimensions)
             {
                 var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                if (deferred.Contains(candidateId))
+                if (deferred.Contains(candidateId)
+                    || !NativeCandidateAuthorization.ShouldEmit(authorizedCandidates, candidateId))
                     continue;
 
                 var dimension = BuildExpectedArcDimension(

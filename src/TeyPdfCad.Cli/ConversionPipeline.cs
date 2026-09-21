@@ -161,6 +161,14 @@ public sealed class ConversionPipeline
                     .SelectMany(pair => pair.Value.SuppressSourceIds.Select(
                         sourceId => new PageSourceRef(pair.Key, sourceId)))
                     .ToHashSet();
+                var authorizedNativeCandidateIds = document.Pages
+                    .SelectMany(page =>
+                        NativeCandidateAuthorization.GetAuthorizedCandidateIds(
+                            replacementPlans[page.Number],
+                            page.Number,
+                            authorizedSuppressedSources)
+                        ?? new HashSet<string>(StringComparer.Ordinal))
+                    .ToHashSet(StringComparer.Ordinal);
 
                 probeInventory = verifier.ReadStructuralInventory(probePath);
                 try
@@ -217,13 +225,17 @@ public sealed class ConversionPipeline
                         exception);
                 }
 
-                ValidateManifestParity(probeWrite.Manifest, finalWrite.Manifest);
+                ValidateManifestParity(
+                    probeWrite.Manifest,
+                    finalWrite.Manifest,
+                    authorizedNativeCandidateIds);
 
                 cancellationToken.ThrowIfCancellationRequested();
-                var finalVerification = verifier.Verify(finalPath, probeWrite.Manifest);
+                var finalVerification = verifier.Verify(finalPath, finalWrite.Manifest);
                 ValidateVerifiedCandidatesRemainVerified(
                     probeVerification,
-                    finalVerification);
+                    finalVerification,
+                    authorizedNativeCandidateIds);
 
                 finalInventory = verifier.ReadStructuralInventory(finalPath);
                 try
@@ -232,7 +244,8 @@ public sealed class ConversionPipeline
                         probeInventory,
                         finalInventory,
                         closedProbeSourceEmissions,
-                        authorizedSuppressedSources);
+                        authorizedSuppressedSources,
+                        authorizedNativeCandidateIds);
                 }
                 catch (InvalidDataException exception)
                 {
@@ -310,7 +323,7 @@ public sealed class ConversionPipeline
                     decision.Residuals.Any(residual =>
                         residual.Kind == ReplacementResidualKind.DestructiveSuppressionDisabled)))
             {
-                warnings.Add("Production destructive source suppression is disabled until independent source-equivalence and current-branch 10k semantic quality gates pass; verified native candidates are emitted while source geometry is preserved.");
+                warnings.Add("Production destructive source suppression is disabled until independent source-equivalence is complete; probe-only native candidates are withheld from the published DWG while source geometry is preserved.");
             }
             warnings = warnings.Distinct(StringComparer.Ordinal).ToList();
 
@@ -619,21 +632,36 @@ public sealed class ConversionPipeline
 
     private static void ValidateManifestParity(
         NativeWriteManifest probe,
-        NativeWriteManifest final)
+        NativeWriteManifest final,
+        IReadOnlySet<string> authorizedNativeCandidateIds)
     {
-        if (!probe.Candidates.Keys.OrderBy(value => value, StringComparer.Ordinal)
+        if (!authorizedNativeCandidateIds.OrderBy(value => value, StringComparer.Ordinal)
             .SequenceEqual(
                 final.Candidates.Keys.OrderBy(value => value, StringComparer.Ordinal),
                 StringComparer.Ordinal))
         {
             throw new InvalidDataException(
-                "SourceSuppressionViolation: final native manifest candidate set differs from probe.");
+                "SourceSuppressionViolation: final native manifest candidate set differs from independently authorized native candidates.");
         }
 
-        foreach (var pair in probe.Candidates)
+        foreach (var pair in final.Candidates)
         {
-            var expected = pair.Value;
-            var actual = final.Candidates[pair.Key];
+            if (!probe.Candidates.TryGetValue(pair.Key, out var expected))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: final candidate {pair.Key} was absent from the verified probe manifest.");
+            }
+
+            var actual = pair.Value;
+            if (expected.SourceEquivalenceComplete != actual.SourceEquivalenceComplete
+                || !string.Equals(
+                    expected.SourceEquivalenceReason,
+                    actual.SourceEquivalenceReason,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: candidate {pair.Key} source-equivalence verdict changed between probe and final.");
+            }
             if (!string.Equals(expected.SemanticType, actual.SemanticType, StringComparison.Ordinal))
             {
                 throw new InvalidDataException(
@@ -672,16 +700,36 @@ public sealed class ConversionPipeline
 
     private static void ValidateVerifiedCandidatesRemainVerified(
         NativeReadBackVerification probe,
-        NativeReadBackVerification final)
+        NativeReadBackVerification final,
+        IReadOnlySet<string> authorizedNativeCandidateIds)
     {
-        foreach (var pair in probe.Candidates.Where(pair => pair.Value.IsVerified))
+        foreach (var candidateId in authorizedNativeCandidateIds.OrderBy(value => value, StringComparer.Ordinal))
         {
-            if (!final.Candidates.TryGetValue(pair.Key, out var finalCandidate)
-                || !finalCandidate.IsVerified)
+            if (!probe.Candidates.TryGetValue(candidateId, out var probeCandidate)
+                || !probeCandidate.IsVerified
+                || !probeCandidate.SourceEquivalenceComplete)
             {
                 throw new InvalidDataException(
-                    $"SourceSuppressionViolation: probe-verified candidate {pair.Key} failed final read-back verification.");
+                    $"SourceSuppressionViolation: authorized candidate {candidateId} was not verified with complete source equivalence in the probe.");
             }
+
+            if (!final.Candidates.TryGetValue(candidateId, out var finalCandidate)
+                || !finalCandidate.IsVerified
+                || !finalCandidate.SourceEquivalenceComplete)
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: authorized candidate {candidateId} failed final read-back verification.");
+            }
+        }
+
+        var unexpectedFinal = final.Candidates.Keys
+            .Where(candidateId => !authorizedNativeCandidateIds.Contains(candidateId))
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (unexpectedFinal.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"SourceSuppressionViolation: final verification contains unauthorized candidate(s): {string.Join(", ", unexpectedFinal)}.");
         }
     }
 

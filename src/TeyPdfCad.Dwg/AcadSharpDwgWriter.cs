@@ -86,7 +86,8 @@ public sealed class AcadSharpDwgWriter
             plan,
             hatchRecognitionByPage,
             semanticRecognitionByPage,
-            sourceReplacementPlansByPage);
+            sourceReplacementPlansByPage,
+            authorizedSuppressedSources);
 
         var document = new CadDocument();
         var sourceEmissionCounts = new Dictionary<PageSourceRef, Dictionary<string, int>>();
@@ -153,6 +154,10 @@ public sealed class AcadSharpDwgWriter
             var suppressedSourceIds = authorizedForPage;
             var deferredCandidateKeys = replacementPlan.DeferredCandidateKeys
                 .ToHashSet(StringComparer.Ordinal);
+            var authorizedNativeCandidateKeys = NativeCandidateAuthorization.GetAuthorizedCandidateIds(
+                replacementPlan,
+                page.Number,
+                authorizedSuppressedSources);
             ISet<string>? createdCandidateKeys = null;
             if (createdCandidateKeysByPage is not null)
             {
@@ -175,6 +180,9 @@ public sealed class AcadSharpDwgWriter
             var patternHatches = hatchRecognition.NativeHatches
                 .Where(candidate => !candidate.IsSolid)
                 .Where(candidate => !deferredCandidateKeys.Contains(SourceReplacementPlanner.GetCandidateKey(candidate, page.Number)))
+                .Where(candidate => NativeCandidateAuthorization.ShouldEmit(
+                    authorizedNativeCandidateKeys,
+                    SourceReplacementPlanner.GetCandidateKey(candidate, page.Number)))
                 .ToArray();
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
             foreach (var sourceLine in page.Entities.OfType<VectorLine>())
@@ -350,7 +358,9 @@ public sealed class AcadSharpDwgWriter
                 foreach (var candidate in semantics.Dimensions)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                    if (deferredCandidateKeys.Contains(key)) continue;
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
                     var dimension = WriteDimension(document, styles, sheet, candidate);
                     StampNativeEntity(manifest, key, "primary", dimension);
                     RegisterPaintKey(
@@ -361,7 +371,9 @@ public sealed class AcadSharpDwgWriter
                 foreach (var candidate in semantics.Leaders)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                    if (deferredCandidateKeys.Contains(key)) continue;
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
                     var emitted = WriteLeader(document, styles, sheet, candidate);
                     StampNativeEntity(manifest, key, "primary", emitted.Leader);
                     StampNativeEntity(manifest, key, "annotation", emitted.Annotation);
@@ -375,7 +387,9 @@ public sealed class AcadSharpDwgWriter
                 foreach (var candidate in semantics.Axes)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                    if (deferredCandidateKeys.Contains(key)) continue;
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
                     var axis = WriteAxis(document, styles, sheet, candidate);
                     StampNativeEntity(manifest, key, "primary", axis);
                     RegisterPaintKey(
@@ -386,7 +400,9 @@ public sealed class AcadSharpDwgWriter
                 foreach (var candidate in semantics.Levels)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                    if (deferredCandidateKeys.Contains(key)) continue;
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
                     var emitted = WriteLevel(document, styles, sheet, candidate);
                     StampNativeEntity(manifest, key, "primary", emitted.Insert);
                     StampNativeEntity(manifest, key, "attribute", emitted.Attribute);
@@ -398,7 +414,9 @@ public sealed class AcadSharpDwgWriter
                 foreach (var candidate in semantics.ArcDimensions)
                 {
                     var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
-                    if (deferredCandidateKeys.Contains(key)) continue;
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
                     var dimension = WriteArcDimension(document, styles, sheet, candidate);
                     StampNativeEntity(manifest, key, "primary", dimension);
                     RegisterPaintKey(
