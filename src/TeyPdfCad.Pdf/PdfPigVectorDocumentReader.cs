@@ -47,6 +47,7 @@ public sealed class PdfPigVectorDocumentReader
                 }
                 textSequence++;
                 var heightPoints = MeasureWordHeightPoints(word);
+                var advanceWidthPoints = Math.Sqrt(baselineX * baselineX + baselineY * baselineY);
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
                     Value: word.Text,
@@ -55,7 +56,8 @@ public sealed class PdfPigVectorDocumentReader
                         first.StartBaseLine.Y * VectorPdfPage.MillimetresPerPoint),
                     HeightPoints: heightPoints,
                     Style: new VectorStyle(RgbColor: ToRgb(first.Color.ToRGBValues())),
-                    RotationRadians: Math.Atan2(baselineY, baselineX)));
+                    RotationRadians: Math.Atan2(baselineY, baselineX),
+                    AdvanceWidthPoints: advanceWidthPoints));
             }
 
             pages.Add(new VectorPdfPage(
