@@ -78,6 +78,38 @@ public static class DwgEntityFingerprint
         };
     }
 
+    public static string ComputeDimensionStyle(Dimension dimension)
+    {
+        ArgumentNullException.ThrowIfNull(dimension);
+
+        var style = dimension.Style;
+        if (style is null)
+            return Join("DimensionStyle", "<null>");
+
+        return Join(
+            "DimensionStyle",
+            style.Name ?? string.Empty,
+            Number(style.LinearScaleFactor),
+            Number(style.TextHeight),
+            Number(style.ArrowSize),
+            Number(style.ExtensionLineOffset),
+            Number(style.ExtensionLineExtension),
+            Number(style.ScaleFactor),
+            style.SuppressFirstDimensionLine ? "1" : "0",
+            style.SuppressSecondDimensionLine ? "1" : "0",
+            style.SuppressFirstExtensionLine ? "1" : "0",
+            style.SuppressSecondExtensionLine ? "1" : "0",
+            style.SuppressOutsideExtensions ? "1" : "0",
+            style.PostFix ?? string.Empty,
+            style.DecimalPlaces.ToString(CultureInfo.InvariantCulture),
+            style.ArrowBlock?.Name ?? string.Empty,
+            style.DimArrow1?.Name ?? string.Empty,
+            style.DimArrow2?.Name ?? string.Empty,
+            style.LineType?.Name ?? string.Empty,
+            style.LineTypeExt1?.Name ?? string.Empty,
+            style.LineTypeExt2?.Name ?? string.Empty);
+    }
+
     public static string ComputeBlockDefinition(Insert insert)
     {
         ArgumentNullException.ThrowIfNull(insert);
