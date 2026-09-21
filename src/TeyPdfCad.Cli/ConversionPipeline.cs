@@ -72,32 +72,132 @@ public sealed class ConversionPipeline
             var semanticResults = semanticRecognition
                 .Where(pair => pair.Value.Result is not null)
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
-            var bytes = new AcadSharpDwgWriter().Write(
-                document,
-                plan,
-                hatchRecognition,
-                semanticResults,
-                templateLibrary,
-                templateSelections,
-                replacementPlans);
-            var readBack = DwgReader.Read(new MemoryStream(bytes));
-            var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
-            if (layoutsReadBack != 0)
+            var writer = new AcadSharpDwgWriter();
+            var verifier = new DwgReadBackVerifier();
+
+            var outputFullPath = Path.GetFullPath(outputDwgPath);
+            var outputDirectory = Path.GetDirectoryName(outputFullPath)!;
+            Directory.CreateDirectory(outputDirectory);
+            var runId = Guid.NewGuid().ToString("N");
+            var probePath = Path.Combine(outputDirectory, $".teypdfcad-probe-{runId}.dwg");
+            var finalPath = Path.Combine(outputDirectory, $".teypdfcad-final-{runId}.dwg");
+
+            DwgWriteResult probeWrite;
+            NativeReadBackVerification probeVerification;
+            IReadOnlyDictionary<int, SuppressionDecision> suppressionDecisions;
+            HashSet<PageSourceRef> authorizedSuppressedSources;
+            DwgStructuralInventory probeInventory;
+            DwgStructuralInventory finalInventory;
+            ACadSharp.CadDocument finalReadBack;
+
+            try
             {
-                throw new InvalidDataException($"DWG read-back found {layoutsReadBack} generated layouts; Model Space-only output requires zero.");
+                cancellationToken.ThrowIfCancellationRequested();
+                using (var probeStream = File.Create(probePath))
+                {
+                    probeWrite = writer.Write(
+                        probeStream,
+                        document,
+                        plan,
+                        hatchRecognition,
+                        semanticResults,
+                        templateLibrary,
+                        templateSelections,
+                        replacementPlans,
+                        authorizedSuppressedSources: null);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                probeVerification = verifier.Verify(probePath, probeWrite.Manifest);
+                suppressionDecisions = document.Pages.ToDictionary(
+                    page => page.Number,
+                    page => new SuppressionGate().Evaluate(
+                        replacementPlans[page.Number],
+                        probeVerification));
+
+                authorizedSuppressedSources = suppressionDecisions
+                    .SelectMany(pair => pair.Value.SuppressSourceIds.Select(
+                        sourceId => new PageSourceRef(pair.Key, sourceId)))
+                    .ToHashSet();
+
+                probeInventory = verifier.ReadStructuralInventory(probePath);
+
+                // Validate every requested removal against the actual closed probe
+                // before the final writer is allowed to suppress a source.
+                _ = DwgStructuralSanity.BuildExpectedFinalFingerprintMultiset(
+                    probeInventory,
+                    probeWrite.SourceEmissionSummary,
+                    authorizedSuppressedSources);
+
+                DwgWriteResult finalWrite;
+                using (var finalStream = File.Create(finalPath))
+                {
+                    finalWrite = writer.Write(
+                        finalStream,
+                        document,
+                        plan,
+                        hatchRecognition,
+                        semanticResults,
+                        templateLibrary,
+                        templateSelections,
+                        replacementPlans,
+                        authorizedSuppressedSources);
+                }
+
+                ValidateManifestParity(probeWrite.Manifest, finalWrite.Manifest);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                var finalVerification = verifier.Verify(finalPath, probeWrite.Manifest);
+                ValidateVerifiedCandidatesRemainVerified(
+                    probeVerification,
+                    finalVerification);
+
+                finalInventory = verifier.ReadStructuralInventory(finalPath);
+                try
+                {
+                    DwgStructuralSanity.ValidateFinal(
+                        probeInventory,
+                        finalInventory,
+                        probeWrite.SourceEmissionSummary,
+                        authorizedSuppressedSources);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: {exception.Message}",
+                        exception);
+                }
+
+                finalReadBack = DwgReader.Read(finalPath);
+                var layoutsInFinal = finalReadBack.Layouts.Count(layout =>
+                    layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
+                if (layoutsInFinal != 0)
+                {
+                    throw new InvalidDataException(
+                        $"DWG read-back found {layoutsInFinal} generated layouts; Model Space-only output requires zero.");
+                }
+                ValidateReadBack(finalReadBack, plan, document);
+
+                // Publication happens only after every probe/final gate above passed.
+                File.Move(finalPath, outputFullPath, overwrite: true);
             }
-            ValidateReadBack(readBack, plan, document);
-            var readBackSummary = CreateReadBackSummary(readBack);
-            // Task 1 deliberately has no native read-back verifier yet.
-            // Until Task 2 wires real verification, eligibility never becomes proof.
+            finally
+            {
+                if (File.Exists(probePath))
+                    File.Delete(probePath);
+                if (File.Exists(finalPath))
+                    File.Delete(finalPath);
+            }
+
+            var layoutsReadBack = finalReadBack.Layouts.Count(layout =>
+                layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
+            var readBackSummary = CreateReadBackSummary(finalReadBack);
             var executionReports = document.Pages.ToDictionary(
                 page => page.Number,
                 page => ReplacementExecutionAuditor.Build(
                     replacementPlans[page.Number],
-                    new NativeReadBackVerification(
-                        new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)),
+                    probeVerification,
                     readBackConfirmed: true));
-            await WriteAtomicallyAsync(outputDwgPath, bytes, cancellationToken);
             var warnings = new List<string>();
             if (pagesWithVectors != document.PageCount)
                 warnings.Add("One or more PDF pages contained no usable vector entities; DWG is partial.");
@@ -133,7 +233,7 @@ public sealed class ConversionPipeline
                     report.ReadBackConfirmed
                     && report.CandidateNotVerifiedSourceIds.Count == 0
                     && !report.AnyGeometryLost);
-            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports), readBackSummary, cancellationToken);
+            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports, suppressionDecisions), readBackSummary, cancellationToken);
             return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
         }
         catch (OperationCanceledException) { throw; }
