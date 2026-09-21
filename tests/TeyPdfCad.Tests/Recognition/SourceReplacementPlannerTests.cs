@@ -187,6 +187,110 @@ public sealed class SourceReplacementPlannerTests
         Assert.Equal(plan1.Conflicts, plan2.Conflicts);
     }
 
+    [Fact]
+    public void Shared_source_defers_whole_candidates_and_preserves_their_other_sources()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("shared", new(0, 0), new(20, 0), new VectorStyle()),
+            new VectorLine("a-only", new(0, 1), new(20, 1), new VectorStyle()),
+            new VectorLine("b-only", new(0, 2), new(20, 2), new VectorStyle())
+        };
+        var first = new AxisCandidate(new(0, 0), new(20, 0), 0.95, ["shared", "a-only"]);
+        var second = new LeaderCandidate(new(0, 0), new(20, 2), "K-1", 0.95, ["shared", "b-only"]);
+        var semantics = EmptySemantics() with
+        {
+            Axes = [first],
+            Leaders = [second]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+
+        Assert.Equal(2, plan.DeferredCandidateKeys.Count);
+        Assert.Empty(plan.SuppressedSourceIds);
+        Assert.Equal(new[] { "a-only", "b-only", "shared" }, plan.PreservedSourceIds.OrderBy(x => x));
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredShared
+            && residual.Severity == ReplacementResidualSeverity.High);
+    }
+
+    [Fact]
+    public void Safe_suppression_exposes_candidate_coverage_map()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("line", new(0, 0), new(5, 0), new VectorStyle()),
+            new VectorText("text", "+3.600", new(6, 0), 2.5, new VectorStyle())
+        };
+        var level = new LevelCandidate(new(0, 0), new(6, 0), "+3.600", 0.95, ["line", "text"]);
+        var semantics = EmptySemantics() with { Levels = [level] };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+        var expectedKey = SourceReplacementPlanner.GetCandidateKey(level);
+
+        Assert.Equal(new[] { expectedKey }, plan.SourceCoverageMap["line"]);
+        Assert.Equal(new[] { expectedKey }, plan.SourceCoverageMap["text"]);
+        Assert.Empty(plan.DeferredCandidateKeys);
+    }
+
+    [Fact]
+    public void Empty_provenance_warning_does_not_invent_a_source_claim()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("line", new(0, 0), new(10, 0), new VectorStyle())
+        };
+        var semantics = EmptySemantics() with
+        {
+            Warnings = [new SemanticWarning("page-level", "No source-specific provenance.", [])]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+
+        Assert.Empty(plan.Conflicts);
+        Assert.Empty(plan.Residuals);
+        Assert.Contains("line", plan.PreservedSourceIds);
+    }
+
+    [Fact]
+    public void Warning_for_missing_source_is_critical_conflict()
+    {
+        var semantics = EmptySemantics() with
+        {
+            Warnings = [new SemanticWarning("bad-provenance", "Missing source.", ["missing"])]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan([], semantics);
+
+        Assert.Contains(plan.Conflicts, conflict =>
+            conflict.SourceId == "missing"
+            && conflict.Reason == ReplacementConflictReason.SourceMissingFromPage);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.SourceId == "missing"
+            && residual.Severity == ReplacementResidualSeverity.Critical);
+    }
+
+    [Fact]
+    public void Partial_warning_blocks_whole_candidate_suppression()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorPolyline("poly", [new(0, 0), new(10, 0), new(10, 10)], false, new VectorStyle())
+        };
+        var axis = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["poly"]);
+        var semantics = EmptySemantics() with
+        {
+            Axes = [axis],
+            Warnings = [new SemanticWarning("partial-review", "Partial ambiguity.", ["poly#segment:0"])]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics);
+
+        Assert.Contains(SourceReplacementPlanner.GetCandidateKey(axis), plan.DeferredCandidateKeys);
+        Assert.Contains("poly", plan.PreservedSourceIds);
+        Assert.DoesNotContain("poly", plan.SuppressedSourceIds);
+    }
+
     private static SemanticReconstructionResult EmptySemantics()
         => new([], [], null, 0d);
 }
