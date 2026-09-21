@@ -581,3 +581,7 @@ NativeWriteManifest, NativeReadBackVerification, SourceReplacementPlan, HatchCla
 All five Review Focus inputs are covered by concrete tests in Tasks 1–4.
 
 - Template replacement is fail-closed in P0: a TemplateSelection with SourceIdsToReplace is not emitted and does not suppress source until template INSERTs have persistent read-back proof. CLI reports template-source-replacement-deferred-p0 / PASS_WITH_RESIDUALS. Additive templates with no replacement set remain allowed.
+
+- Final structural fingerprints MUST include persistent page-scoped source identity for every valid emitted source entity via `TEYCONVERT_SOURCE_V1` XData. Geometry/style alone is insufficient because two sources can be identical.
+- `TEYCONVERT_SOURCE_V1` stores PageNumber + SourceId. Malformed source metadata fails structural read-back. Invalid/empty SourceId entities remain emitted without this XData and are never suppressible.
+- Add regression: two identical-geometry sources A/B produce different output fingerprints; authorizing A while final incorrectly removes B must fail `DwgStructuralSanity`.
