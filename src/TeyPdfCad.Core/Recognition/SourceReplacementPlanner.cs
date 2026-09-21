@@ -654,7 +654,7 @@ public sealed class SourceReplacementPlanner
         contract = semanticType switch
         {
             "DIMENSION" => new(
-                [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.Text],
+                [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.ArrowGeometry, SourceUsageRole.Text],
                 [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.ArrowGeometry, SourceUsageRole.Text]),
             "LEADER" => new(
                 [SourceUsageRole.LeaderShaft, SourceUsageRole.LeaderArrow, SourceUsageRole.Text],
@@ -666,7 +666,7 @@ public sealed class SourceReplacementPlanner
                 [SourceUsageRole.LevelMarker, SourceUsageRole.Text],
                 [SourceUsageRole.LevelMarker, SourceUsageRole.Text]),
             "ARC_DIMENSION" => new(
-                [SourceUsageRole.DimensionLine, SourceUsageRole.Text],
+                [SourceUsageRole.DimensionLine, SourceUsageRole.ArrowGeometry, SourceUsageRole.Text],
                 [SourceUsageRole.DimensionLine, SourceUsageRole.ArrowGeometry, SourceUsageRole.Text]),
             "HATCH" => new(
                 [SourceUsageRole.HatchBoundary, SourceUsageRole.HatchPattern],
