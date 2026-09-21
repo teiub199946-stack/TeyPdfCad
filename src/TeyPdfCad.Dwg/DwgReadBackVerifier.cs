@@ -23,6 +23,17 @@ public sealed class DwgReadBackVerifier
 
         var drawing = DwgReader.Read(dwgPath);
         var observations = ReadObservations(drawing, out var globalInvalid, out var invalidByCandidate);
+        var globalIssues = globalInvalid.ToList();
+
+        foreach (var unexpectedCandidateId in observations
+                     .Select(observation => observation.Metadata.CandidateId)
+                     .Concat(invalidByCandidate.Keys)
+                     .Distinct(StringComparer.Ordinal)
+                     .Where(candidateId => !manifest.Candidates.ContainsKey(candidateId))
+                     .OrderBy(candidateId => candidateId, StringComparer.Ordinal))
+        {
+            globalIssues.Add($"Unexpected CandidateId '{unexpectedCandidateId}' exists in DWG read-back.");
+        }
 
         var result = new Dictionary<string, CandidateVerification>(StringComparer.Ordinal);
         foreach (var pair in manifest.Candidates.OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -36,7 +47,7 @@ public sealed class DwgReadBackVerifier
             if (!string.Equals(expected.CandidateId, candidateId, StringComparison.Ordinal))
                 invalid.Add("Manifest candidate key does not equal ExpectedCandidate.CandidateId.");
 
-            invalid.AddRange(globalInvalid);
+            invalid.AddRange(globalIssues);
             if (invalidByCandidate.TryGetValue(candidateId, out var candidateInvalid))
                 invalid.AddRange(candidateInvalid);
 
@@ -45,8 +56,17 @@ public sealed class DwgReadBackVerifier
                     string.Equals(observation.Metadata.CandidateId, candidateId, StringComparison.Ordinal))
                 .ToArray();
 
-            var expectedRoles = expected.Entities
-                .Select(entity => entity.Role)
+            var expectedRoleGroups = expected.Entities
+                .GroupBy(entity => entity.Role, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var duplicateExpectedRole in expectedRoleGroups.Where(group => group.Count() > 1))
+            {
+                duplicates.Add(duplicateExpectedRole.Key);
+                invalid.Add($"Manifest declares role '{duplicateExpectedRole.Key}' more than once.");
+            }
+
+            var expectedRoles = expectedRoleGroups
+                .Select(group => group.Key)
                 .ToHashSet(StringComparer.Ordinal);
 
             foreach (var extra in candidateObservations
