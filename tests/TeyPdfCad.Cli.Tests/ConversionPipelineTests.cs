@@ -1,6 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using ACadSharp.IO;
 using TeyPdfCad.Cli;
+using TeyPdfCad.Core.Conversion;
+using TeyPdfCad.Core.Documents;
+using TeyPdfCad.Core.Recognition;
+using TeyPdfCad.Core.Semantics;
+using TeyPdfCad.Core.Templates;
+using TeyPdfCad.Dwg;
 using Xunit;
 
 namespace TeyPdfCad.Cli.Tests;
@@ -154,7 +161,7 @@ public sealed class ConversionPipelineTests
 
 
     [Fact]
-    public async Task Pipeline_suppresses_axis_source_only_after_verified_probe_round_trip()
+    public async Task Pipeline_publishes_final_only_when_fingerprint_multiset_matches_probe()
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -199,6 +206,134 @@ public sealed class ConversionPipelineTests
         Assert.Equal(3, page.GetProperty("suppressedSourceCount").GetInt32());
         Assert.Equal("FULL_PASS", page.GetProperty("semanticAuditStatus").GetString());
         Assert.True(page.GetProperty("complete").GetBoolean());
+    }
+
+
+    [Fact]
+    public async Task Pipeline_keeps_sources_when_probe_verification_rejects_a_native_candidate()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateSegmentedAxisPdf());
+
+        var pipeline = new ConversionPipeline(
+            new ProductionDwgDocumentWriter(),
+            new RejectFirstCandidateVerification());
+
+        var result = await pipeline.ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
+        Assert.True(File.Exists(output));
+
+        var drawing = DwgReader.Read(output);
+        Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
+        Assert.Single(
+            drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
+            insert => insert.Block.Name == "TEY_AXIS");
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Equal(0, page.GetProperty("suppressedSourceCount").GetInt32());
+        Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
+        Assert.Contains(
+            page.GetProperty("replacementResiduals").EnumerateArray(),
+            residual => residual.GetProperty("kind").GetString() == "CandidateNotVerified");
+    }
+
+    [Fact]
+    public async Task Pipeline_does_not_publish_dwg_when_final_native_fingerprint_changes()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateSegmentedAxisPdf());
+
+        var pipeline = new ConversionPipeline(
+            new MutateFinalAxisWriter(),
+            new ProductionDwgReadBackVerifier());
+
+        var result = await pipeline.ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.InvalidArgumentsOrIo, result.Outcome);
+        Assert.False(File.Exists(output));
+        AssertNoPipelineTempDwgs(directory);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.Contains(
+            json.RootElement.GetProperty("warnings").EnumerateArray(),
+            warning => warning.GetString()!.Contains(
+                "SourceSuppressionViolation",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Pipeline_does_not_publish_dwg_when_requested_source_fingerprint_is_absent_from_probe()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateSegmentedAxisPdf());
+
+        var pipeline = new ConversionPipeline(
+            new CorruptProbeSourceEmissionWriter(),
+            new ProductionDwgReadBackVerifier());
+
+        var result = await pipeline.ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.InvalidArgumentsOrIo, result.Outcome);
+        Assert.False(File.Exists(output));
+        AssertNoPipelineTempDwgs(directory);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.Contains(
+            json.RootElement.GetProperty("warnings").EnumerateArray(),
+            warning => warning.GetString()!.Contains(
+                "SourceSuppressionViolation",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Pipeline_does_not_publish_dwg_when_wrong_source_is_authorized()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateSegmentedAxisPdf());
+
+        var pipeline = new ConversionPipeline(
+            new AddUnauthorizedSourceOnFinalWriter(),
+            new ProductionDwgReadBackVerifier());
+
+        var result = await pipeline.ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.InvalidArgumentsOrIo, result.Outcome);
+        Assert.False(File.Exists(output));
+        AssertNoPipelineTempDwgs(directory);
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        Assert.Contains(
+            json.RootElement.GetProperty("warnings").EnumerateArray(),
+            warning => warning.GetString()!.Contains(
+                "SourceSuppressionViolation",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -260,6 +395,205 @@ public sealed class ConversionPipelineTests
         var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
         Assert.Equal("PASS_WITH_RESIDUALS", page.GetProperty("semanticAuditStatus").GetString());
         Assert.Contains("semantic-recognition-skipped-complexity", page.GetProperty("semanticWarnings").EnumerateArray().Select(value => value.GetString()));
+    }
+
+
+    private static string CreateTestDirectory()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private static byte[] CreateSegmentedAxisPdf()
+        => CreateMinimalPdf(
+            "10 40 m 80 40 l S " +
+            "90 40 m 160 40 l S " +
+            "170 40 m 180 40 l S",
+            240,
+            100);
+
+    private static void AssertNoPipelineTempDwgs(string directory)
+        => Assert.Empty(
+            Directory.EnumerateFiles(
+                directory,
+                ".teypdfcad-*.dwg",
+                SearchOption.TopDirectoryOnly));
+
+    private sealed class RejectFirstCandidateVerification : IDwgReadBackVerifier
+    {
+        private readonly DwgReadBackVerifier _inner = new();
+        private int _verifyCount;
+
+        public NativeReadBackVerification Verify(
+            string dwgPath,
+            NativeWriteManifest manifest)
+        {
+            var actual = _inner.Verify(dwgPath, manifest);
+            _verifyCount++;
+            if (_verifyCount != 1)
+                return actual;
+
+            return new NativeReadBackVerification(
+                actual.Candidates.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value with
+                    {
+                        IsVerified = false,
+                        InvalidEntities =
+                        [
+                            ..pair.Value.InvalidEntities,
+                            "Injected probe rejection."
+                        ]
+                    },
+                    StringComparer.Ordinal));
+        }
+
+        public DwgStructuralInventory ReadStructuralInventory(string dwgPath)
+            => _inner.ReadStructuralInventory(dwgPath);
+    }
+
+    private sealed class MutateFinalAxisWriter : IDwgDocumentWriter
+    {
+        private readonly AcadSharpDwgWriter _inner = new();
+
+        public DwgWriteResult Write(
+            Stream destination,
+            VectorPdfDocument source,
+            DwgDocumentPlan plan,
+            IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
+            IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
+            TemplateLibrary? templateLibrary = null,
+            IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
+            IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
+            IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null)
+        {
+            if (authorizedSuppressedSources is null)
+            {
+                return _inner.Write(
+                    destination,
+                    source,
+                    plan,
+                    hatchRecognitionByPage,
+                    semanticRecognitionByPage,
+                    templateLibrary,
+                    templateSelectionsByPage,
+                    sourceReplacementPlansByPage,
+                    null);
+            }
+
+            using var buffer = new MemoryStream();
+            var result = _inner.Write(
+                buffer,
+                source,
+                plan,
+                hatchRecognitionByPage,
+                semanticRecognitionByPage,
+                templateLibrary,
+                templateSelectionsByPage,
+                sourceReplacementPlansByPage,
+                authorizedSuppressedSources);
+            buffer.Position = 0;
+            var drawing = DwgReader.Read(buffer);
+            var axis = Assert.Single(
+                drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
+                insert => insert.Block.Name == "TEY_AXIS");
+            axis.XScale *= 1.125d;
+
+            var writer = new DwgWriter(destination, drawing)
+            {
+                Configuration = new DwgWriterConfiguration
+                {
+                    CloseStream = false
+                }
+            };
+            writer.Write();
+            return result;
+        }
+    }
+
+    private sealed class CorruptProbeSourceEmissionWriter : IDwgDocumentWriter
+    {
+        private readonly AcadSharpDwgWriter _inner = new();
+
+        public DwgWriteResult Write(
+            Stream destination,
+            VectorPdfDocument source,
+            DwgDocumentPlan plan,
+            IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
+            IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
+            TemplateLibrary? templateLibrary = null,
+            IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
+            IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
+            IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null)
+        {
+            var result = _inner.Write(
+                destination,
+                source,
+                plan,
+                hatchRecognitionByPage,
+                semanticRecognitionByPage,
+                templateLibrary,
+                templateSelectionsByPage,
+                sourceReplacementPlansByPage,
+                authorizedSuppressedSources);
+
+            if (authorizedSuppressedSources is not null)
+                return result;
+
+            var corrupted = result.SourceEmissionSummary.OutputFingerprintCountsBySource
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => (IReadOnlyDictionary<string, int>)new Dictionary<string, int>(
+                        StringComparer.Ordinal)
+                    {
+                        [$"absent-probe-fingerprint:{pair.Key}"] = pair.Value.Values.Sum()
+                    });
+
+            return result with
+            {
+                SourceEmissionSummary = new SourceEmissionSummary(corrupted)
+            };
+        }
+    }
+
+    private sealed class AddUnauthorizedSourceOnFinalWriter : IDwgDocumentWriter
+    {
+        private readonly AcadSharpDwgWriter _inner = new();
+
+        public DwgWriteResult Write(
+            Stream destination,
+            VectorPdfDocument source,
+            DwgDocumentPlan plan,
+            IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
+            IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
+            TemplateLibrary? templateLibrary = null,
+            IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
+            IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
+            IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null)
+        {
+            var authorization = authorizedSuppressedSources;
+            if (authorization is not null)
+            {
+                authorization = authorization
+                    .Append(new PageSourceRef(1, "not-eligible-source"))
+                    .ToHashSet();
+            }
+
+            return _inner.Write(
+                destination,
+                source,
+                plan,
+                hatchRecognitionByPage,
+                semanticRecognitionByPage,
+                templateLibrary,
+                templateSelectionsByPage,
+                sourceReplacementPlansByPage,
+                authorization);
+        }
     }
 
     private static byte[] CreateMinimalPdf(
