@@ -13,7 +13,7 @@ Included:
 - persistent CandidateId XData on native entities;
 - writer expectation manifest and independent read-back verifier;
 - two-pass document writing: probe without suppression, then final with verified suppression;
-- explicit claims and HATCH boundary/pattern classification;
+- explicit claims from every suppressible recognizer and HATCH boundary/pattern classification;
 - basic emitted-entity sanity checks needed to prevent false FULL_PASS;
 - immutable deterministic paint-order key;
 - ACadSharp and user-saved AutoCAD 2022 regression evidence.
@@ -134,6 +134,30 @@ SuppressionGate is the only component allowed to grant suppression. It receives 
 
 A source is suppressed only if it has one full valid suppressible claim, its candidate is verified, and it is neither HatchBoundary nor EvidenceOnly. There is no spatial fallback. Every source has a non-empty page-unique SourceId. An empty or duplicate SourceId produces SourceIdentityViolation at Critical severity, preserves all involved sources, and makes every related candidate ineligible for suppression.
 
+## Recognizer source-claim contract
+
+Every suppressible semantic candidate exposes explicit claims created by its own recognizer. The planner must never infer a role from VectorEntity runtime type and must never use legacy ProvenanceIds to authorize suppression; legacy provenance remains diagnostic only.
+
+~~~
+enum SourceUsageRole
+{
+    DimensionLine, ExtensionLine, ArrowGeometry,
+    LeaderShaft, LeaderArrow, LeaderLanding,
+    AxisGeometry, LevelMarker, Text,
+    HatchPattern, HatchBoundary, EvidenceOnly
+}
+
+sealed record RecognizerSourceClaim(
+    string SourceId,
+    SourceUsageRole Role,
+    SourceClaimState State,
+    bool IsPartial);
+~~~
+
+Dimension recognizers emit DimensionLine, ExtensionLine, ArrowGeometry, and Text claims where those source primitives were used. Leader recognizers emit LeaderShaft, LeaderArrow, LeaderLanding when present, and Text. Axis and Level recognizers emit AxisGeometry/LevelMarker and Text. HATCH continues to use explicit boundary/pattern lists.
+
+A candidate with a missing explicit claim, an EvidenceOnly role, or an Unresolved claim is DeferredUnresolvedClaims at High severity: all its sources are preserved and P0 emits no native candidate for it. This prevents a source-preserved/native-created visual duplicate. SubEntityRef remains excluded; every P0 claim refers to a whole SourceId.
+
 The shared-claim policy remains one-pass over the full graph:
 
 - any SourceId with two or more valid CandidateIds defers all involved candidates;
@@ -143,7 +167,7 @@ The shared-claim policy remains one-pass over the full graph:
 
 A failed verification produces CandidateNotVerified at Critical severity while preserving all sources claimed by that candidate. GeometryLost is not emitted for a preserved source. Any residual produces PASS_WITH_RESIDUALS, not FULL_PASS.
 
-Residual severity is fixed: DeferredShared is High; DeferredUncertainHatch is Medium; CandidateNotVerified, SourceIdentityViolation, and SourceSuppressionViolation are Critical.
+Residual severity is fixed: DeferredShared and DeferredUnresolvedClaims are High; DeferredUncertainHatch is Medium; CandidateNotVerified, SourceIdentityViolation, and SourceSuppressionViolation are Critical.
 
 FULL_PASS means every P0 probe-verification and final-structural-sanity check passed, and no residual, CandidateNotVerified, SourceIdentityViolation, or SourceSuppressionViolation was recorded. It guarantees no detected loss of source geometry and the declared minimum emitted-entity checks. It does not guarantee recognition completeness, visual WYSIWYG fidelity, or engineering-semantic correctness beyond those declared checks.
 
@@ -178,7 +202,7 @@ A semantic or verification failure on a page preserves its unsafe sources and co
 2. Verifier: missing role; duplicate role; wrong entity type; wrong fingerprint; unexpected metadata; BlockRecord metadata; Level parent/child preservation.
 3. Emitted-entity sanity: dimension geometry-derived measurement; leader vertices; text height/value; level Attribute value; axis scale/length; HATCH area/boundary binding.
 4. Two-pass executor: verified candidate suppresses allowed sources; unverified candidate emits CandidateNotVerified and preserves all sources; probe failure emits no final DWG; a requested source-emission multiset absent from the probe inventory fails before final publication; final fingerprint mismatch emits SourceSuppressionViolation and publishes no final DWG; no spatial fallback.
-5. Source identity and shared claims: empty/duplicate SourceId produces SourceIdentityViolation with no suppression; chain and cycle yield identical deferred candidates despite recognizer enumeration order.
+5. Source identity and explicit claims: Duplicate_source_id_is_never_collapsed; Empty_source_id_is_not_suppressible; Duplicate_source_id_for_verified_candidate_still_preserves_sources; role inference from VectorEntity is forbidden; an incomplete explicit claim emits DeferredUnresolvedClaims, preserves all related sources, and emits no native candidate. Shared chains and cycles yield identical deferred candidates despite recognizer enumeration order.
 6. HATCH: confident creates native HATCH, preserves BoundarySourceIds, suppresses PatternSourceIds only after verified boundary binding, and leaves matching boundary fingerprint; uncertain emits no native HATCH and preserves all sources.
 7. Paint order: input enumeration changes do not change immutable ordering.
 8. Regression: ACadSharp round-trip and committed user AutoCAD 2022 save/reopen fixture.
