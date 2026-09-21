@@ -778,8 +778,8 @@ public sealed class SourceReplacementPlanner
         => value.ToString("R", CultureInfo.InvariantCulture);
 
     private sealed record SemanticRoleContract(
-        IReadOnlySet<SourceUsageRole> Required,
-        IReadOnlySet<SourceUsageRole> Allowed);
+        SourceUsageRole[] Required,
+        SourceUsageRole[] Allowed);
 
     private sealed record CandidateDescriptor(
         string CandidateId,
