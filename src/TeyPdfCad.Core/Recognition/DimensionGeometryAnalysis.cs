@@ -125,13 +125,20 @@ internal static class DimensionGeometryAnalysis
         return 1.0 - NumericCompat.Clamp(error / 0.03, 0.0, 1.0);
     }
 
-    public static double ArrowEvidence(IEnumerable<LinePrimitive> lines, LinePrimitive dimensionLine,
-        double textHeight, Point2 unitDim)
+    public static double ArrowEvidence(
+        IEnumerable<LinePrimitive> lines,
+        LinePrimitive dimensionLine,
+        double textHeight,
+        Point2 unitDim,
+        IReadOnlyCollection<LinePrimitive>? excluded = null)
     {
         var materialized = lines as IReadOnlyList<LinePrimitive> ?? lines.ToArray();
+        var excludedSet = excluded is null
+            ? null
+            : new HashSet<LinePrimitive>(excluded, ReferenceEqualityComparer.Instance);
         var radius = Math.Max(textHeight * 2.0, GeometryMath.Distance(dimensionLine.Start, dimensionLine.End) * 0.04);
-        var first = HasArrowLine(materialized, dimensionLine, dimensionLine.Start, radius, textHeight, unitDim);
-        var second = HasArrowLine(materialized, dimensionLine, dimensionLine.End, radius, textHeight, unitDim);
+        var first = HasArrowLine(materialized, dimensionLine, dimensionLine.Start, radius, textHeight, unitDim, excludedSet);
+        var second = HasArrowLine(materialized, dimensionLine, dimensionLine.End, radius, textHeight, unitDim, excludedSet);
         return (Convert.ToInt32(first) + Convert.ToInt32(second)) / 2.0;
     }
 
@@ -139,21 +146,33 @@ internal static class DimensionGeometryAnalysis
         IEnumerable<LinePrimitive> lines,
         LinePrimitive dimensionLine,
         double textHeight,
-        Point2 unitDim)
+        Point2 unitDim,
+        IReadOnlyCollection<LinePrimitive>? excluded = null)
     {
+        var excludedSet = excluded is null
+            ? null
+            : new HashSet<LinePrimitive>(excluded, ReferenceEqualityComparer.Instance);
         var radius = Math.Max(textHeight * 2.0, GeometryMath.Distance(dimensionLine.Start, dimensionLine.End) * 0.04);
         return lines
             .Where(line => !ReferenceEquals(line, dimensionLine))
+            .Where(line => excludedSet is null || !excludedSet.Contains(line))
             .Where(line => IsArrowLineAt(line, dimensionLine.Start, radius, textHeight, unitDim)
                 || IsArrowLineAt(line, dimensionLine.End, radius, textHeight, unitDim))
             .Distinct()
             .ToArray();
     }
 
-    private static bool HasArrowLine(IEnumerable<LinePrimitive> lines, LinePrimitive dimensionLine,
-        Point2 endpoint, double radius, double textHeight, Point2 unitDim)
+    private static bool HasArrowLine(
+        IEnumerable<LinePrimitive> lines,
+        LinePrimitive dimensionLine,
+        Point2 endpoint,
+        double radius,
+        double textHeight,
+        Point2 unitDim,
+        IReadOnlySet<LinePrimitive>? excluded)
         => lines.Any(line =>
             !ReferenceEquals(line, dimensionLine)
+            && (excluded is null || !excluded.Contains(line))
             && IsArrowLineAt(line, endpoint, radius, textHeight, unitDim));
 
     private static bool IsArrowLineAt(
