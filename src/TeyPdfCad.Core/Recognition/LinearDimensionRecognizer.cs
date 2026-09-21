@@ -168,6 +168,13 @@ public sealed class LinearDimensionRecognizer
         var probe = TryAnalyzeGeometry(scene, text, dimensionLine, options);
         if (probe is null) return null;
 
+        // A dimension line + two extensions + numeric text is not sufficient
+        // structural evidence by itself. Without explicit arrow/tick geometry,
+        // table/block/ordinary-line lookalikes can reach the old 0.90 confidence
+        // ceiling and become false-positive native dimensions.
+        if (probe.Value.ArrowEvidence <= 0d)
+            return null;
+
         var rawScale = displayedValue / probe.Value.ProjectedDistance;
         var scale = DimensionGeometryAnalysis.ResolveScale(
             rawScale,
