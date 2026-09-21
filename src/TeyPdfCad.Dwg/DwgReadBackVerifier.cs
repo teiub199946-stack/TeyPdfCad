@@ -86,7 +86,6 @@ public sealed class DwgReadBackVerifier
                 ValidateEntity(
                     matching[0],
                     expectedEntity,
-                    candidateObservations,
                     invalid);
             }
 
@@ -207,7 +206,6 @@ public sealed class DwgReadBackVerifier
     private static void ValidateEntity(
         Observation observation,
         ExpectedNativeEntity expected,
-        IReadOnlyList<Observation> candidateObservations,
         ICollection<string> invalid)
     {
         if (!KindMatches(observation.Entity, expected.EntityKind))
@@ -234,7 +232,36 @@ public sealed class DwgReadBackVerifier
                 invalid.Add($"Role '{expected.Role}' attribute parent INSERT does not carry the same CandidateId.");
         }
 
-        foreach (var property in expected.RequiredProperties.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        if (expected.RequiredProperties.TryGetValue("expectedMeasurement", out var expectedMeasurementText))
+        {
+            if (observation.Entity is not Dimension dimension
+                || !TryDouble(expectedMeasurementText, out var expectedMeasurement))
+            {
+                invalid.Add($"Role '{expected.Role}' property 'expectedMeasurement' failed: property requires a Dimension and numeric value.");
+            }
+            else
+            {
+                var tolerance = 1e-6;
+                if (expected.RequiredProperties.TryGetValue("measurementTolerance", out var toleranceText))
+                {
+                    if (!TryDouble(toleranceText, out tolerance) || tolerance < 0d)
+                    {
+                        invalid.Add($"Role '{expected.Role}' property 'measurementTolerance' failed: tolerance must be non-negative numeric.");
+                        tolerance = 0d;
+                    }
+                }
+
+                if (Math.Abs(dimension.Measurement - expectedMeasurement) > tolerance)
+                {
+                    invalid.Add(
+                        $"Role '{expected.Role}' property 'expectedMeasurement' failed: measurement {dimension.Measurement:R} != {expectedMeasurement:R} within {tolerance:R}.");
+                }
+            }
+        }
+
+        foreach (var property in expected.RequiredProperties
+                     .Where(pair => pair.Key is not "expectedMeasurement" and not "measurementTolerance")
+                     .OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             if (!ValidateProperty(observation.Entity, property.Key, property.Value, out var error))
                 invalid.Add($"Role '{expected.Role}' property '{property.Key}' failed: {error}");
@@ -263,34 +290,6 @@ public sealed class DwgReadBackVerifier
         error = string.Empty;
         switch (key)
         {
-            case "expectedMeasurement":
-                if (entity is not Dimension dimension
-                    || !TryDouble(expectedValue, out var expectedMeasurement))
-                {
-                    error = "property requires a Dimension and numeric value";
-                    return false;
-                }
-                var tolerance = 1e-6;
-                if (Math.Abs(dimension.Measurement - expectedMeasurement) <= tolerance)
-                    return true;
-                error = $"measurement {dimension.Measurement:R} != {expectedMeasurement:R}";
-                return false;
-
-            case "measurementTolerance":
-                // Consumed together with expectedMeasurement by the caller-independent
-                // manifest contract. It is validated for syntax here and applied below.
-                if (!TryDouble(expectedValue, out var parsedTolerance) || parsedTolerance < 0)
-                {
-                    error = "tolerance must be a non-negative number";
-                    return false;
-                }
-                if (entity is Dimension dim
-                    && TryGetRequired(entity, "expectedMeasurement", out var _))
-                {
-                    return true;
-                }
-                return true;
-
             case "minimumVertices":
                 if (entity is not Leader leader || !int.TryParse(expectedValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minimumVertices))
                 {
@@ -418,12 +417,6 @@ public sealed class DwgReadBackVerifier
                 error = "unknown required property";
                 return false;
         }
-    }
-
-    private static bool TryGetRequired(Entity entity, string key, out string value)
-    {
-        value = string.Empty;
-        return false;
     }
 
     private static bool TryDouble(string value, out double parsed)
