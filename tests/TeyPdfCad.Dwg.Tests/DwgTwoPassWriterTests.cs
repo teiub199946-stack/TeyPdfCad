@@ -241,6 +241,36 @@ public sealed class DwgTwoPassWriterTests
         }
     }
 
+
+    [Fact]
+    public void Writer_paint_order_is_stable_when_source_enumeration_is_reversed()
+    {
+        VectorEntity[] forward =
+        [
+            new VectorLine("z-line", new(0, 0), new(20, 0), new VectorStyle("GEOM")),
+            new VectorText("a-text", "TOP", new(5, 0), 2.5, new VectorStyle("TEXT"))
+        ];
+        var reversed = forward.Reverse().ToArray();
+
+        var first = WriteAndRead(new VectorPdfDocument(
+        [
+            new VectorPdfPage(1, 72, 72, 0, forward)
+        ]));
+        var second = WriteAndRead(new VectorPdfDocument(
+        [
+            new VectorPdfPage(1, 72, 72, 0, reversed)
+        ]));
+
+        var firstOrder = first.ModelSpace.SortEntitiesTable!
+            .Select(entry => DwgEntityFingerprint.ComputeOutput(entry.Entity))
+            .ToArray();
+        var secondOrder = second.ModelSpace.SortEntitiesTable!
+            .Select(entry => DwgEntityFingerprint.ComputeOutput(entry.Entity))
+            .ToArray();
+
+        Assert.Equal(firstOrder, secondOrder);
+    }
+
     [Fact]
     public void Source_emission_summary_rejects_unknown_page_source()
     {
@@ -259,4 +289,15 @@ public sealed class DwgTwoPassWriterTests
                 new PageSourceRef(2, "known")
             ]));
     }
+    private static ACadSharp.CadDocument WriteAndRead(VectorPdfDocument document)
+    {
+        using var stream = new MemoryStream();
+        _ = new AcadSharpDwgWriter().Write(
+            stream,
+            document,
+            new DocumentLayoutPlanner().Create(document));
+        stream.Position = 0;
+        return DwgReader.Read(stream);
+    }
+
 }
