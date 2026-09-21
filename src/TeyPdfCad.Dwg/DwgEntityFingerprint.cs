@@ -95,9 +95,18 @@ public static class DwgEntityFingerprint
     public static string ComputeOutput(Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        var metadata = CandidateMetadataCodec.TryRead(entity, out var candidate)
+        var candidateMetadata = CandidateMetadataCodec.TryRead(entity, out var candidate)
             ? Join(candidate.CandidateId, candidate.Role)
-            : string.Empty;
+            : CandidateMetadataCodec.HasCandidateApp(entity)
+                ? "<malformed-candidate-metadata>"
+                : string.Empty;
+        var sourceMetadata = SourceMetadataCodec.TryRead(entity, out var source)
+            ? Join(
+                source.PageNumber.ToString(CultureInfo.InvariantCulture),
+                source.SourceId)
+            : SourceMetadataCodec.HasSourceApp(entity)
+                ? "<malformed-source-metadata>"
+                : string.Empty;
         return Join(
             entity.GetType().Name,
             ComputeGeometry(entity),
@@ -107,7 +116,8 @@ public static class DwgEntityFingerprint
             Number(entity.LineTypeScale),
             entity.Color.ToString(),
             entity.IsInvisible ? "1" : "0",
-            metadata);
+            candidateMetadata,
+            sourceMetadata);
     }
 
     private static string Point(XYZ point)
