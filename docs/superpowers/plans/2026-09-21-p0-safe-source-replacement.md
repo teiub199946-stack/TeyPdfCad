@@ -333,11 +333,13 @@ git commit -m "feat: verify candidate metadata from DWG read-back"
 **Interfaces:**
 
 ~~~
+public readonly record struct PageSourceRef(int PageNumber, string SourceId);
+
 public sealed record SourceEmissionSummary(
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> OutputFingerprintCountsBySourceId)
+    IReadOnlyDictionary<PageSourceRef, IReadOnlyDictionary<string, int>> OutputFingerprintCountsBySource)
 {
     public IReadOnlyDictionary<string, int> GetExpectedSuppressionFingerprintMultiset(
-        IEnumerable<string> sourceIds);
+        IEnumerable<PageSourceRef> sources);
 }
 
 public sealed record DwgWriteResult(
@@ -374,7 +376,7 @@ public DwgWriteResult Write(
     TemplateLibrary? templates,
     IReadOnlyDictionary<int, TemplateSelection>? selections,
     IReadOnlyDictionary<int, SourceReplacementPlan> replacementPlans,
-    IReadOnlySet<string>? authorizedSuppressedSourceIds = null);
+    IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null);
 ~~~
 
 The caller owns destination and closes it after Write returns. Null authorization means probe and suppresses nothing. Non-null authorization affects source output only; native selection is identical.
@@ -383,7 +385,7 @@ Refactor WriteDimension, WriteArcDimension, WriteLeader, WriteAxis, WriteLevel, 
 
 Properties come from semantic candidate input before serialization. Level labels Insert primary and owned AttributeEntity attribute; never label definition. Uncertain hatch does not invoke native hatch writer.
 
-Record the output fingerprint of every emitted DWG source entity under its SourceId, including fills/boundaries. GetExpectedSuppressionFingerprintMultiset merges counts once per distinct ID and rejects unknown IDs. The probe verifier must confirm this requested removal multiset is a sub-multiset of the actual on-disk probe inventory before final subtraction.
+Record the output fingerprint of every emitted DWG source entity under PageSourceRef(pageNumber, SourceId), including fills/boundaries. GetExpectedSuppressionFingerprintMultiset merges counts once per distinct page-scoped source and rejects unknown references. A flat raw-SourceId authorization set is forbidden even though the current PdfPig reader prefixes IDs with page numbers. The probe verifier must confirm this requested removal multiset is a sub-multiset of the actual on-disk probe inventory before final subtraction.
 
 Replace PaintOrderItem.InsertionIndex with:
 
@@ -455,7 +457,7 @@ Expected: FAIL because current pipeline writes once, trusts createdCandidateKeys
 In ConvertAsync:
 1. Build provisional replacement plans. Gate semantic recognition and replacement only at this boundary; disabled semantic means empty claims, disabled replacement means empty final authorization. With EnableSourceReplacement=false, the two-pass driver remains active and final must equal probe.
 2. Write probe without authorization to unique temporary path in output directory; close it.
-3. Verify probe manifest from disk; run SuppressionGate per page; union actual authorization.
+3. Verify probe manifest from disk; run SuppressionGate per page; aggregate authorization only as PageSourceRef(PageNumber, SourceId), never as raw SourceId strings.
 4. Read probe structural inventory from disk. Validate the authorized source-emission fingerprint multiset is a sub-multiset of that real inventory.
 5. Write final to a second unique temporary path with exact authorization.
 6. Read final inventory and require:
