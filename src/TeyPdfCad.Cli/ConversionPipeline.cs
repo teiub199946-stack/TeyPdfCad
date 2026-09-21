@@ -355,7 +355,8 @@ public sealed class ConversionPipeline
         IReadOnlyDictionary<int, PageSemanticSummary> semanticRecognition,
         IReadOnlyDictionary<int, SourceReplacementPlan> replacementPlans,
         IReadOnlyDictionary<int, TemplateSelection>? templateSelections = null,
-        IReadOnlyDictionary<int, ReplacementExecutionReport>? executionReports = null)
+        IReadOnlyDictionary<int, ReplacementExecutionReport>? executionReports = null,
+        IReadOnlyDictionary<int, SuppressionDecision>? suppressionDecisions = null)
         => document.Pages.Select(page => new PageReport(
             page.Number,
             page.WidthMillimetres,
@@ -383,17 +384,29 @@ public sealed class ConversionPipeline
                 ? reasonSelection.Reason
                 : "template-manifest-not-supplied",
             page.Diagnostics,
-            0,
-            replacementPlans[page.Number].PreservedSourceIds.Count,
+            suppressionDecisions is not null
+                && suppressionDecisions.TryGetValue(page.Number, out var pageSuppression)
+                ? pageSuppression.SuppressSourceIds.Count
+                : 0,
+            suppressionDecisions is not null
+                && suppressionDecisions.TryGetValue(page.Number, out var pagePreservation)
+                ? pagePreservation.PreserveSourceIds.Count
+                : replacementPlans[page.Number].PreservedSourceIds.Count,
             replacementPlans[page.Number].DeferredCandidateKeys.Count,
             replacementPlans[page.Number].SourceCoverageMap.Count,
             replacementPlans[page.Number].Conflicts.Count,
-            replacementPlans[page.Number].Residuals,
-            replacementPlans[page.Number].Residuals.Count == 0
-                ? null
-                : replacementPlans[page.Number].Residuals
-                    .OrderByDescending(residual => residual.Severity)
-                    .First().Severity.ToString(),
+            GetReportedResiduals(
+                replacementPlans[page.Number],
+                suppressionDecisions is not null
+                    && suppressionDecisions.TryGetValue(page.Number, out var pageDecision)
+                        ? pageDecision
+                        : null),
+            GetHighestResidualSeverity(
+                replacementPlans[page.Number],
+                suppressionDecisions is not null
+                    && suppressionDecisions.TryGetValue(page.Number, out var severityDecision)
+                        ? severityDecision
+                        : null),
             0,
             ResolvePageAuditStatus(
                 page,
@@ -422,6 +435,112 @@ public sealed class ConversionPipeline
                     || (pageExecution.ReadBackConfirmed
                         && pageExecution.CandidateNotVerifiedSourceIds.Count == 0
                         && !pageExecution.AnyGeometryLost)))).ToArray();
+
+    private static IReadOnlyList<ReplacementResidual> GetReportedResiduals(
+        SourceReplacementPlan plan,
+        SuppressionDecision? decision)
+        => decision?.Residuals ?? plan.Residuals;
+
+    private static string? GetHighestResidualSeverity(
+        SourceReplacementPlan plan,
+        SuppressionDecision? decision)
+    {
+        var residuals = GetReportedResiduals(plan, decision);
+        return residuals.Count == 0
+            ? null
+            : residuals
+                .OrderByDescending(residual => residual.Severity)
+                .First()
+                .Severity
+                .ToString();
+    }
+
+    private static void ValidateManifestParity(
+        NativeWriteManifest probe,
+        NativeWriteManifest final)
+    {
+        if (!probe.Candidates.Keys.OrderBy(value => value, StringComparer.Ordinal)
+            .SequenceEqual(
+                final.Candidates.Keys.OrderBy(value => value, StringComparer.Ordinal),
+                StringComparer.Ordinal))
+        {
+            throw new InvalidDataException(
+                "SourceSuppressionViolation: final native manifest candidate set differs from probe.");
+        }
+
+        foreach (var pair in probe.Candidates)
+        {
+            var expected = pair.Value;
+            var actual = final.Candidates[pair.Key];
+            if (!string.Equals(expected.SemanticType, actual.SemanticType, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: candidate {pair.Key} semantic type changed between probe and final.");
+            }
+
+            var expectedByRole = expected.Entities.ToDictionary(
+                entity => entity.Role,
+                StringComparer.Ordinal);
+            var actualByRole = actual.Entities.ToDictionary(
+                entity => entity.Role,
+                StringComparer.Ordinal);
+            if (!expectedByRole.Keys.OrderBy(value => value, StringComparer.Ordinal)
+                .SequenceEqual(
+                    actualByRole.Keys.OrderBy(value => value, StringComparer.Ordinal),
+                    StringComparer.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: candidate {pair.Key} role set changed between probe and final.");
+            }
+
+            foreach (var role in expectedByRole.Keys)
+            {
+                var probeEntity = expectedByRole[role];
+                var finalEntity = actualByRole[role];
+                if (!string.Equals(probeEntity.EntityKind, finalEntity.EntityKind, StringComparison.Ordinal)
+                    || !string.Equals(probeEntity.GeometryFingerprint, finalEntity.GeometryFingerprint, StringComparison.Ordinal)
+                    || !DictionaryEqual(probeEntity.RequiredProperties, finalEntity.RequiredProperties))
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: candidate {pair.Key} role {role} manifest changed between probe and final.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateVerifiedCandidatesRemainVerified(
+        NativeReadBackVerification probe,
+        NativeReadBackVerification final)
+    {
+        foreach (var pair in probe.Candidates.Where(pair => pair.Value.IsVerified))
+        {
+            if (!final.Candidates.TryGetValue(pair.Key, out var finalCandidate)
+                || !finalCandidate.IsVerified)
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: probe-verified candidate {pair.Key} failed final read-back verification.");
+            }
+        }
+    }
+
+    private static bool DictionaryEqual(
+        IReadOnlyDictionary<string, string> first,
+        IReadOnlyDictionary<string, string> second)
+    {
+        if (first.Count != second.Count)
+            return false;
+
+        foreach (var pair in first)
+        {
+            if (!second.TryGetValue(pair.Key, out var value)
+                || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static string ResolvePageAuditStatus(
         VectorPdfPage page,
