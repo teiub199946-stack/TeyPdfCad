@@ -1,6 +1,8 @@
+using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
 using TeyPdfCad.Core.Recognition;
+using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Semantics.Dimensions;
 using TeyPdfCad.TestGenerator.Diagnostics;
 using TeyPdfCad.TestGenerator.Models;
@@ -242,36 +244,44 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 
     private static bool HasP0SuppressionEvidence(DimensionCandidate candidate)
     {
-        if (candidate.SourceClaims.Count == 0)
+        var declaredSourceIds = candidate.ProvenanceIds
+            .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
+            .ToArray();
+        if (declaredSourceIds.Length == 0)
             return false;
 
-        var claims = candidate.SourceClaims;
-        if (claims.Any(claim =>
-                string.IsNullOrWhiteSpace(claim.SourceId)
-                || claim.State != SourceClaimState.Valid
-                || claim.IsPartial
-                || claim.Role is SourceUsageRole.Unknown
-                    or SourceUsageRole.EvidenceOnly
-                    or SourceUsageRole.PrimaryGeometry))
-        {
-            return false;
-        }
+        // Use the real production planner as the authority for claim/role
+        // readiness. Synthetic source geometry is sufficient here because
+        // this TEST-003 metric asks whether the candidate's identity/claim
+        // contract could reach planner eligibility, not whether source/native
+        // appearance equivalence is complete.
+        var sources = declaredSourceIds
+            .Select((sourceId, index) => (VectorEntity)new VectorLine(
+                sourceId,
+                new Point2(index * 10d, 0d),
+                new Point2(index * 10d + 1d, 0d),
+                new VectorStyle()))
+            .ToArray();
+        var semantics = new SemanticReconstructionResult(
+            [candidate],
+            [],
+            candidate.DrawingScale,
+            candidate.Confidence);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            semantics,
+            hatchRecognition: null,
+            pageNumber: 1);
+        var candidateId = SourceReplacementPlanner.GetCandidateKey(
+            candidate,
+            pageNumber: 1);
 
-        ReadOnlySpan<SourceUsageRole> required =
-        [
-            SourceUsageRole.DimensionLine,
-            SourceUsageRole.ExtensionLine,
-            SourceUsageRole.ArrowGeometry,
-            SourceUsageRole.Text
-        ];
-
-        foreach (var role in required)
-        {
-            if (!claims.Any(claim => claim.Role == role))
-                return false;
-        }
-
-        return true;
+        return !plan.DeferredCandidateKeys.Contains(candidateId)
+            && plan.SourceCoverageMap.Values.Any(candidateIds =>
+                candidateIds.Contains(candidateId, StringComparer.Ordinal))
+            && plan.EligibleSourceIds.Count > 0;
     }
 
     private static DimensionType MapType(DimensionCandidate candidate)
