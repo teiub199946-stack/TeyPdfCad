@@ -50,6 +50,7 @@ public enum ReplacementResidualKind
     SourceIdentityViolation,
     SourceSuppressionViolation,
     CandidateIdentityViolation,
+    DestructiveSuppressionDisabled,
 
     // Legacy/reporting kinds kept while the remaining P0 stages are migrated.
     Unrecognized,
