@@ -579,3 +579,5 @@ NativeWriteManifest, NativeReadBackVerification, SourceReplacementPlan, HatchCla
 ### Review Focus coverage
 
 All five Review Focus inputs are covered by concrete tests in Tasks 1–4.
+
+- Template replacement is fail-closed in P0: a TemplateSelection with SourceIdsToReplace is not emitted and does not suppress source until template INSERTs have persistent read-back proof. CLI reports template-source-replacement-deferred-p0 / PASS_WITH_RESIDUALS. Additive templates with no replacement set remain allowed.
