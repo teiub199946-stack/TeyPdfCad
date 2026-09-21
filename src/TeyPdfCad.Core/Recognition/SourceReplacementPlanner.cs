@@ -86,19 +86,19 @@ public sealed class SourceReplacementPlanner
     }
 
     public static string GetCandidateKey(DimensionCandidate candidate, int pageNumber = 0)
-        => CreateCandidateId(pageNumber, "DIMENSION", ClaimSourceIds(candidate.SourceClaims), Fingerprint(candidate));
+        => CreateCandidateId(pageNumber, "DIMENSION", NormalizeDeclaredSourceIds(candidate.ProvenanceIds), Fingerprint(candidate));
 
     public static string GetCandidateKey(LeaderCandidate candidate, int pageNumber = 0)
-        => CreateCandidateId(pageNumber, "LEADER", ClaimSourceIds(candidate.SourceClaims), Fingerprint(candidate));
+        => CreateCandidateId(pageNumber, "LEADER", NormalizeDeclaredSourceIds(candidate.ProvenanceIds), Fingerprint(candidate));
 
     public static string GetCandidateKey(AxisCandidate candidate, int pageNumber = 0)
-        => CreateCandidateId(pageNumber, "AXIS", ClaimSourceIds(candidate.SourceClaims), Fingerprint(candidate));
+        => CreateCandidateId(pageNumber, "AXIS", NormalizeDeclaredSourceIds(candidate.ProvenanceIds), Fingerprint(candidate));
 
     public static string GetCandidateKey(LevelCandidate candidate, int pageNumber = 0)
-        => CreateCandidateId(pageNumber, "LEVEL", ClaimSourceIds(candidate.SourceClaims), Fingerprint(candidate));
+        => CreateCandidateId(pageNumber, "LEVEL", NormalizeDeclaredSourceIds(candidate.ProvenanceIds), Fingerprint(candidate));
 
     public static string GetCandidateKey(ArcDimensionCandidate candidate, int pageNumber = 0)
-        => CreateCandidateId(pageNumber, "ARC_DIMENSION", ClaimSourceIds(candidate.SourceClaims), Fingerprint(candidate));
+        => CreateCandidateId(pageNumber, "ARC_DIMENSION", NormalizeDeclaredSourceIds(candidate.ProvenanceIds), Fingerprint(candidate));
 
     public static string GetCandidateKey(HatchCandidate candidate, int pageNumber = 0)
         => CreateCandidateId(pageNumber, "HATCH", candidate.ProvenanceIds, Fingerprint(candidate));
