@@ -2,6 +2,7 @@ using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Dwg;
 using TeyPdfCad.Core.Geometry;
+using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Templates;
 using ACadSharp.IO;
@@ -56,6 +57,74 @@ public sealed class DwgDocumentWriterTests
         var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
         Assert.Equal("TEY_LEVEL", insert.Block.Name);
         Assert.Equal("+3.600", Assert.Single(insert.Attributes).Value);
+    }
+
+    [Fact]
+    public void Writer_defers_both_native_candidates_when_they_share_one_source()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("shared", new Point2(0, 0), new Point2(20, 0), new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Axes = [new AxisCandidate(new(0, 0), new(20, 0), 0.95d, ["shared"])],
+            Leaders = [new LeaderCandidate(new(0, 0), new(20, 0), "K-1", 0.95d, ["shared"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Leader>());
+        Assert.DoesNotContain(drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
+            insert => string.Equals(insert.Block.Name, "TEY_AXIS", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Writer_persists_explicit_sort_entities_table_with_text_above_geometry()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("line", new Point2(0, 0), new Point2(20, 0), new VectorStyle()),
+            new VectorText("text", "TOP", new Point2(5, 0), 2.5, new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document))));
+
+        var sort = drawing.ModelSpace.SortEntitiesTable;
+        Assert.NotNull(sort);
+        var ordered = sort!.Select(entry => entry.Entity).ToArray();
+        Assert.IsType<ACadSharp.Entities.TextEntity>(ordered.First());
+        Assert.IsType<ACadSharp.Entities.Line>(ordered.Last());
+    }
+
+    [Fact]
+    public void Writer_records_created_candidate_key_for_execution_audit()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("level-line", new Point2(10, 10), new Point2(15, 10), new VectorStyle()),
+            new VectorText("level-text", "+3.600", new Point2(17, 10), 2.5, new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var level = new LevelCandidate(new(10, 10), new(17, 10), "+3.600", 0.95d, ["level-line", "level-text"]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d) { Levels = [level] };
+        var created = new Dictionary<int, ISet<string>>();
+
+        _ = new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
+            createdCandidateKeysByPage: created);
+
+        Assert.Contains(SourceReplacementPlanner.GetCandidateKey(level), created[1]);
     }
 
     [Fact]
