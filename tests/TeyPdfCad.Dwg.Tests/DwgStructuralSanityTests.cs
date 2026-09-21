@@ -1,3 +1,5 @@
+using ACadSharp.Entities;
+using CSMath;
 using TeyPdfCad.Dwg;
 using Xunit;
 
@@ -87,6 +89,47 @@ public sealed class DwgStructuralSanityTests
             [source]);
 
         Assert.Equal(1, expected["same"]);
+    }
+
+
+    [Fact]
+    public void Wrong_source_removal_with_identical_geometry_is_detected_by_source_identity()
+    {
+        var sourceA = new PageSourceRef(1, "A");
+        var sourceB = new PageSourceRef(1, "B");
+
+        var lineA = new Line(new XYZ(0, 0, 0), new XYZ(10, 0, 0));
+        var lineB = new Line(new XYZ(0, 0, 0), new XYZ(10, 0, 0));
+        SourceMetadataCodec.Write(lineA, sourceA);
+        SourceMetadataCodec.Write(lineB, sourceB);
+
+        var fingerprintA = DwgEntityFingerprint.ComputeOutput(lineA);
+        var fingerprintB = DwgEntityFingerprint.ComputeOutput(lineB);
+        Assert.NotEqual(fingerprintA, fingerprintB);
+
+        var probe = Inventory(
+            candidateMetadata: 0,
+            (fingerprintA, 1),
+            (fingerprintB, 1));
+        var emissions = Summary(
+            (sourceA, new Dictionary<string, int>
+            {
+                [fingerprintA] = 1
+            }));
+
+        // Wrong final: B was removed while authorized A incorrectly remained.
+        // Entity count and geometry are unchanged relative to the intended final,
+        // so only persistent source identity can distinguish the error.
+        var wrongFinal = Inventory(
+            candidateMetadata: 0,
+            (fingerprintA, 1));
+
+        Assert.Throws<InvalidDataException>(() =>
+            DwgStructuralSanity.ValidateFinal(
+                probe,
+                wrongFinal,
+                emissions,
+                [sourceA]));
     }
 
     [Fact]
