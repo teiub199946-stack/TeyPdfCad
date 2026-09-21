@@ -69,9 +69,6 @@ public sealed class ConversionPipeline
             var semanticResults = semanticRecognition
                 .Where(pair => pair.Value.Result is not null)
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
-            var createdCandidateKeysByPage = document.Pages.ToDictionary(
-                page => page.Number,
-                _ => (ISet<string>)new HashSet<string>(StringComparer.Ordinal));
             var bytes = new AcadSharpDwgWriter().Write(
                 document,
                 plan,
@@ -79,8 +76,7 @@ public sealed class ConversionPipeline
                 semanticResults,
                 templateLibrary,
                 templateSelections,
-                replacementPlans,
-                createdCandidateKeysByPage);
+                replacementPlans);
             var readBack = DwgReader.Read(new MemoryStream(bytes));
             var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
             if (layoutsReadBack != 0)
@@ -89,11 +85,14 @@ public sealed class ConversionPipeline
             }
             ValidateReadBack(readBack, plan, document);
             var readBackSummary = CreateReadBackSummary(readBack);
+            // Task 1 deliberately has no native read-back verifier yet.
+            // Until Task 2 wires real verification, eligibility never becomes proof.
             var executionReports = document.Pages.ToDictionary(
                 page => page.Number,
                 page => ReplacementExecutionAuditor.Build(
                     replacementPlans[page.Number],
-                    createdCandidateKeysByPage[page.Number].ToArray(),
+                    new NativeReadBackVerification(
+                        new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)),
                     readBackConfirmed: true));
             await WriteAtomicallyAsync(outputDwgPath, bytes, cancellationToken);
             var warnings = new List<string>();
@@ -111,13 +110,16 @@ public sealed class ConversionPipeline
                 replacementPlans[page.Number].Conflicts.Select(conflict =>
                     $"Page {page.Number}: source replacement conflict {conflict.Reason} on {conflict.SourceId}.")));
             warnings.AddRange(document.Pages.SelectMany(page =>
-                executionReports[page.Number].GeometryLostSourceIds.Select(sourceId =>
-                    $"Page {page.Number}: GEOMETRY_LOST for suppressed source {sourceId}.")));
+                executionReports[page.Number].CandidateNotVerifiedSourceIds.Select(sourceId =>
+                    $"Page {page.Number}: native candidate is not read-back verified for source {sourceId}; source is preserved.")));
             warnings = warnings.Distinct(StringComparer.Ordinal).ToList();
 
             var complete = warnings.Count == 0
                 && replacementPlans.Values.All(planResult => planResult.IsFullPassEligible)
-                && executionReports.Values.All(report => report.ReadBackConfirmed && !report.AnyGeometryLost);
+                && executionReports.Values.All(report =>
+                    report.ReadBackConfirmed
+                    && report.CandidateNotVerifiedSourceIds.Count == 0
+                    && !report.AnyGeometryLost);
             await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports), readBackSummary, cancellationToken);
             return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
         }
@@ -266,9 +268,7 @@ public sealed class ConversionPipeline
                 : replacementPlans[page.Number].Residuals
                     .OrderByDescending(residual => residual.Severity)
                     .First().Severity.ToString(),
-            executionReports is not null && executionReports.TryGetValue(page.Number, out var execution)
-                ? execution.GeometryLostSourceIds.Count
-                : 0,
+            0,
             ResolvePageAuditStatus(
                 page,
                 hatchRecognition[page.Number],
@@ -284,7 +284,9 @@ public sealed class ConversionPipeline
                 && replacementPlans[page.Number].IsFullPassEligible
                 && (executionReports is null
                     || !executionReports.TryGetValue(page.Number, out var pageExecution)
-                    || (pageExecution.ReadBackConfirmed && !pageExecution.AnyGeometryLost)))).ToArray();
+                    || (pageExecution.ReadBackConfirmed
+                        && pageExecution.CandidateNotVerifiedSourceIds.Count == 0
+                        && !pageExecution.AnyGeometryLost)))).ToArray();
 
     private static string ResolvePageAuditStatus(
         VectorPdfPage page,
@@ -297,6 +299,8 @@ public sealed class ConversionPipeline
             return "PARTIAL";
         if (executionReport is { AnyGeometryLost: true })
             return "PARTIAL";
+        if (executionReport is not null && executionReport.CandidateNotVerifiedSourceIds.Count > 0)
+            return "PASS_WITH_RESIDUALS";
         if (hatchRecognition.Warnings.Count > 0
             || semanticRecognition.Warnings.Count > 0
             || !replacementPlan.IsFullPassEligible)
