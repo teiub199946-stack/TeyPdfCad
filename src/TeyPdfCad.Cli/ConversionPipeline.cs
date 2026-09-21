@@ -43,7 +43,7 @@ public sealed class ConversionPipeline
             var document = await new PdfPigVectorDocumentReader().ReadAsync(input, cancellationToken);
             var hatchRecognition = document.Pages.ToDictionary(
                 page => page.Number,
-                page => new HatchRecognizer().Recognize(page.Entities));
+                page => new HatchRecognizer().Recognize(page.Entities, page.Number));
             var semanticRecognition = document.Pages.ToDictionary(
                 page => page.Number,
                 AnalyzeSemantics);
@@ -52,7 +52,8 @@ public sealed class ConversionPipeline
                 page => new SourceReplacementPlanner().BuildPlan(
                     page.Entities,
                     semanticRecognition[page.Number].Result,
-                    hatchRecognition[page.Number]));
+                    hatchRecognition[page.Number],
+                    page.Number));
             var templateLibrary = LoadTemplateLibrary(templateManifestPath);
             var templateSelections = templateLibrary is null
                 ? null
