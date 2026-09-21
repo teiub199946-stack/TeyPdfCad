@@ -33,3 +33,10 @@ jobs:
         run: dotnet test tests/TeyPdfCad.Dwg.Tests/TeyPdfCad.Dwg.Tests.csproj --configuration Release --no-restore
       - name: CLI tests
         run: dotnet test tests/TeyPdfCad.Cli.Tests/TeyPdfCad.Cli.Tests.csproj --configuration Release --no-restore
+      - name: Upload Spike B manual DWG fixtures
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-b-text-layout-fixtures
+          path: tests/TeyPdfCad.Dwg.Tests/bin/Release/net8.0/spike-b-fixtures
+          if-no-files-found: error
+          retention-days: 14
