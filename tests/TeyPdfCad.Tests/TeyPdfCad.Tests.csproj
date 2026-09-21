@@ -9,5 +9,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
+    <ProjectReference Include="../TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj" />
   </ItemGroup>
 </Project>
