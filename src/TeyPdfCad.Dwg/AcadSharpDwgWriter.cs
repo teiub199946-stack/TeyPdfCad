@@ -364,7 +364,8 @@ public sealed class AcadSharpDwgWriter
                         dimension,
                         Properties(
                             ("expectedMeasurement", Number(dimension.Measurement)),
-                            ("measurementTolerance", "0.000001")));
+                            ("measurementTolerance", "0.000001"),
+                            ("expectedDimensionText", dimension.Text ?? string.Empty)));
                     RegisterPaintKey(
                         paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -392,7 +393,8 @@ public sealed class AcadSharpDwgWriter
                         emitted.Annotation,
                         Properties(
                             ("minimumHeight", Number(emitted.Annotation.Height)),
-                            ("nonEmpty", "true")));
+                            ("nonEmpty", "true"),
+                            ("expectedText", candidate.Text)));
                     RegisterPaintKey(
                         paintKeys, emitted.Leader, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     RegisterPaintKey(
@@ -447,7 +449,8 @@ public sealed class AcadSharpDwgWriter
                         emitted.Attribute,
                         Properties(
                             ("attributeTag", "LEVEL"),
-                            ("nonEmptyValue", "true")));
+                            ("nonEmptyValue", "true"),
+                            ("expectedAttributeValue", candidate.Value)));
                     RegisterPaintKey(
                         paintKeys, emitted.Insert, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -467,7 +470,8 @@ public sealed class AcadSharpDwgWriter
                         dimension,
                         Properties(
                             ("expectedMeasurement", Number(dimension.Measurement)),
-                            ("measurementTolerance", "0.000001")));
+                            ("measurementTolerance", "0.000001"),
+                            ("expectedDimensionText", candidate.SourceText)));
                     RegisterPaintKey(
                         paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
                     diagnosticCreatedCandidateKeyCount++;
@@ -686,7 +690,9 @@ public sealed class AcadSharpDwgWriter
             : new DimensionAligned(first, second);
         dimension.DefinitionPoint = dimensionPoint;
         dimension.Style = styles.GetDimensionStyle(candidate.DrawingScale);
-        dimension.Text = string.Empty;
+        dimension.Text = NativeDimensionTextBuilder.Build(
+            candidate.SourceText,
+            candidate.DisplayedValue);
         dimension.Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ");
         document.Entities.Add(dimension);
         return dimension;
