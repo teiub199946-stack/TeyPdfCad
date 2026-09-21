@@ -332,6 +332,136 @@ public sealed class SourceReplacementPlannerTests
         Assert.Equal(new[] { "line" }, accepted.SuppressSourceIds.OrderBy(x => x));
     }
 
+
+    [Fact]
+    public void ChainDeferral_DeferredCandidateStillCountsForNextSource()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("s1", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorLine("a", new(0, 1), new(10, 1), new VectorStyle()),
+            new VectorLine("s2", new(0, 2), new(10, 2), new VectorStyle()),
+            new VectorLine("b", new(0, 3), new(10, 3), new VectorStyle()),
+            new VectorLine("s3", new(0, 4), new(10, 4), new VectorStyle())
+        };
+        var first = new AxisCandidate(new(0, 0), new(10, 1), 0.95, ["s1", "a"])
+        {
+            SourceClaims =
+            [
+                new("s1", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("a", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var middle = new AxisCandidate(new(0, 0), new(10, 3), 0.96, ["s1", "s2", "b"])
+        {
+            SourceClaims =
+            [
+                new("s1", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("s2", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("b", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+        var last = new AxisCandidate(new(0, 2), new(10, 4), 0.97, ["s2", "s3"])
+        {
+            SourceClaims =
+            [
+                new("s2", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("s3", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [first, middle, last] },
+            pageNumber: 1);
+
+        Assert.Equal(3, plan.DeferredCandidateKeys.Count);
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Equal(new[] { "a", "b", "s1", "s2", "s3" }, plan.PreservedSourceIds.OrderBy(x => x));
+        Assert.Contains(plan.Residuals, residual =>
+            residual.SourceId == "s2"
+            && residual.Kind == ReplacementResidualKind.DeferredShared);
+    }
+
+    [Fact]
+    public void SameSource_SameRoleTwice_IsDeduplicatedExplicitly()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("axis", new(0, 0), new(10, 0), new VectorStyle())
+        };
+        var candidate = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["axis"])
+        {
+            SourceClaims =
+            [
+                new("axis", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("axis", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [candidate] },
+            pageNumber: 1);
+
+        Assert.Equal(new[] { "axis" }, plan.EligibleSourceIds);
+        Assert.DoesNotContain(plan.Conflicts, conflict =>
+            conflict.Reason == ReplacementConflictReason.ClaimRoleConflict);
+    }
+
+    [Fact]
+    public void UnexpectedRoleForSemanticType_Rejected()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("axis", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorText("text", "A", new(5, 0), 2.5, new VectorStyle())
+        };
+        var candidate = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["axis", "text"])
+        {
+            SourceClaims =
+            [
+                new("axis", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [candidate] },
+            pageNumber: 1);
+
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Equal(new[] { "axis", "text" }, plan.PreservedSourceIds.OrderBy(x => x));
+        Assert.Contains(plan.Residuals, residual =>
+            residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims
+            && residual.Severity == ReplacementResidualSeverity.High);
+    }
+
+    [Fact]
+    public void PartialSourceIdFormat_RequiresFailClosedHandling()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("A1#segment:0", new(0, 0), new(10, 0), new VectorStyle())
+        };
+        var candidate = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["A1#segment:0"])
+        {
+            SourceClaims =
+            [
+                new("A1#segment:0", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)
+            ]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            sources,
+            EmptySemantics() with { Axes = [candidate] },
+            pageNumber: 1);
+
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains("A1#segment:0", plan.PreservedSourceIds);
+    }
+
     private static SemanticReconstructionResult EmptySemantics()
         => new([], [], null, 0d);
 }
