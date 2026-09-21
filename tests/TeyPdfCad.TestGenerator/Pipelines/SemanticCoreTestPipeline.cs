@@ -146,6 +146,8 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             id.Contains(":dimline:left", StringComparison.Ordinal) ||
             id.Contains(":dimline:right", StringComparison.Ordinal));
 
+        var suppressionAssessment = EvaluateP0SuppressionEvidence(dimensions);
+
         var actual = new ActualDimensionResult
         {
             CaseId = testCase.Id,
@@ -159,8 +161,8 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             DrawingScale = drawingScale,
             ConfidenceClass = MapConfidence(confidence),
             IsDimensionTypeAmbiguous = isDimensionTypeAmbiguous,
-            SuppressionEvidenceEligible = EvaluateP0SuppressionEvidence(dimensions).Eligible,
-            SuppressionBlockers = EvaluateP0SuppressionEvidence(dimensions).Blockers.ToList(),
+            SuppressionEvidenceEligible = suppressionAssessment.Eligible,
+            SuppressionBlockers = suppressionAssessment.Blockers.ToList(),
             Diagnostics = diagnostics
         };
 
