@@ -152,6 +152,55 @@ public sealed class ConversionPipelineTests
         Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
     }
 
+
+    [Fact]
+    public async Task Pipeline_suppresses_axis_source_only_after_verified_probe_round_trip()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+
+        // Three collinear segments satisfy the segmented-axis recognizer:
+        // two long segments + one short segment, with small deterministic gaps.
+        const string content =
+            "10 40 m 80 40 l S " +
+            "90 40 m 160 40 l S " +
+            "170 40 m 180 40 l S";
+        await File.WriteAllBytesAsync(
+            input,
+            CreateMinimalPdf(content, 240, 100));
+
+        var result = await new ConversionPipeline().ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        Assert.True(File.Exists(output));
+
+        var drawing = ACadSharp.IO.DwgReader.Read(output);
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        var axisInsert = Assert.Single(
+            drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Equal("TEY_AXIS", axisInsert.Block.Name);
+
+        using var json = JsonDocument.Parse(
+            await File.ReadAllTextAsync(report));
+        Assert.True(json.RootElement.GetProperty("complete").GetBoolean());
+        var page = Assert.Single(
+            json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Equal(1, page.GetProperty("axisCandidateCount").GetInt32());
+        Assert.Equal(3, page.GetProperty("suppressedSourceCount").GetInt32());
+        Assert.Equal("FULL_PASS", page.GetProperty("semanticAuditStatus").GetString());
+        Assert.True(page.GetProperty("complete").GetBoolean());
+    }
+
     [Fact]
     public async Task Pipeline_marks_the_result_partial_when_a_pdf_path_operation_is_unsupported()
     {
@@ -213,13 +262,16 @@ public sealed class ConversionPipelineTests
         Assert.Contains("semantic-recognition-skipped-complexity", page.GetProperty("semanticWarnings").EnumerateArray().Select(value => value.GetString()));
     }
 
-    private static byte[] CreateMinimalPdf(string contents)
+    private static byte[] CreateMinimalPdf(
+        string contents,
+        int widthPoints = 72,
+        int heightPoints = 72)
     {
         var objects = new[]
         {
             "<< /Type /Catalog /Pages 2 0 R >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] /Contents 4 0 R >>",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {widthPoints} {heightPoints}] /Contents 4 0 R >>",
             $"<< /Length {Encoding.ASCII.GetByteCount(contents)} >>\nstream\n{contents}\nendstream"
         };
         var builder = new StringBuilder("%PDF-1.4\n");
