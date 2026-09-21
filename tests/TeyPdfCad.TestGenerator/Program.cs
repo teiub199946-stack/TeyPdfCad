@@ -25,6 +25,7 @@ public static class Program
                 "self-check" => await SelfCheckAsync(cli, config),
                 "core-run" => await CoreRunAsync(cli, config),
                 "diagnose-core" => await DiagnoseCoreAsync(cli, config),
+                "p0-quality-gate" => await P0QualityGateAsync(cli, config),
                 "compare" => await CompareAsync(cli, config),
                 "baseline" => await BaselineAsync(cli),
                 "verify" => await VerifyAsync(cli, config),
@@ -137,6 +138,121 @@ public static class Program
         Console.WriteLine($"Worst real Core defects written: {worst.Count}");
         Console.WriteLine($"Report: {Path.GetFullPath(Path.Combine(output, "report.json"))}");
         return 0;
+    }
+
+    private static async Task<int> P0QualityGateAsync(
+        CliArgs cli,
+        TestConfig config)
+    {
+        var coreReportPath = cli.Require("--core-report");
+        var diagnosticReportPath = cli.Require("--diagnostic-report");
+        var outputPath = cli.Get("--output")
+            ?? Path.Combine(
+                Path.GetDirectoryName(coreReportPath) ?? ".",
+                "p0_gate.json");
+        var expectedCount = cli.GetInt("--expected-count", 10000);
+
+        var core = JsonSerializer.Deserialize<RegressionReport>(
+            await File.ReadAllTextAsync(coreReportPath),
+            JsonDefaults.Options)
+            ?? throw new InvalidDataException("Unable to deserialize TEST-002 report.");
+
+        var diagnostic = JsonSerializer.Deserialize<DiagnosticRegressionReport>(
+            await File.ReadAllTextAsync(diagnosticReportPath),
+            JsonDefaults.Options)
+            ?? throw new InvalidDataException("Unable to deserialize TEST-003 report.");
+
+        var reasons = new List<string>();
+
+        if (core.Total != expectedCount)
+        {
+            reasons.Add(
+                $"TEST-002 case count {core.Total} != required {expectedCount}.");
+        }
+
+        if (diagnostic.Total != expectedCount)
+        {
+            reasons.Add(
+                $"TEST-003 case count {diagnostic.Total} != required {expectedCount}.");
+        }
+
+        if (core.Seed != diagnostic.Seed)
+        {
+            reasons.Add(
+                $"TEST-002 seed {core.Seed} != TEST-003 seed {diagnostic.Seed}.");
+        }
+
+        if (!string.Equals(
+                core.ReleaseGate.Status,
+                "PASS",
+                StringComparison.Ordinal))
+        {
+            reasons.AddRange(
+                core.ReleaseGate.Reasons.Count == 0
+                    ? ["TEST-002 absolute release gate failed."]
+                    : core.ReleaseGate.Reasons.Select(reason =>
+                        "TEST-002: " + reason));
+        }
+
+        var expectedNegativeCount = diagnostic.Cases.Count(record =>
+            record.Expected.ExpectedResult == ExpectedResult.Rejected);
+        var diagnosticFalsePositiveRate = expectedNegativeCount == 0
+            ? 0d
+            : (double)diagnostic.FalsePositive / expectedNegativeCount;
+        if (diagnosticFalsePositiveRate > config.MaxFalsePositiveRate)
+        {
+            reasons.Add(
+                $"TEST-003 false-positive rate {diagnosticFalsePositiveRate:P3} exceeds {config.MaxFalsePositiveRate:P3}.");
+        }
+
+        var forcedAmbiguousRecognition = diagnostic.Cases.Count(record =>
+            record.Expected.ExpectedResult == ExpectedResult.Ambiguous
+            && record.Actual.Result == ExpectedResult.Recognized);
+        if (forcedAmbiguousRecognition > 0)
+        {
+            reasons.Add(
+                $"TEST-003 forced recognition occurred in {forcedAmbiguousRecognition} ambiguous case(s); P0 requires abstention.");
+        }
+
+        var gate = new
+        {
+            schemaVersion = "1.0",
+            status = reasons.Count == 0 ? "PASS" : "FAIL",
+            expectedCount,
+            coreTotal = core.Total,
+            diagnosticTotal = diagnostic.Total,
+            seed = core.Seed,
+            coreReleaseGate = core.ReleaseGate,
+            diagnosticFalsePositiveRate,
+            maxFalsePositiveRate = config.MaxFalsePositiveRate,
+            forcedAmbiguousRecognition,
+            reasons
+        };
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        await File.WriteAllTextAsync(
+            outputPath,
+            JsonSerializer.Serialize(
+                gate,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                }));
+
+        Console.WriteLine($"P0 semantic quality gate: {gate.status}");
+        Console.WriteLine(
+            $"TEST-002/003 cases: {core.Total}/{diagnostic.Total}; seed: {core.Seed}");
+        Console.WriteLine(
+            $"Diagnostic FPR: {diagnosticFalsePositiveRate:P3}; forced ambiguous recognition: {forcedAmbiguousRecognition}");
+        foreach (var reason in reasons)
+            Console.WriteLine("FAIL: " + reason);
+        Console.WriteLine($"Gate report: {Path.GetFullPath(outputPath)}");
+
+        return reasons.Count == 0 ? 0 : 2;
     }
 
     private static async Task<int> CompareAsync(CliArgs cli, TestConfig config)
@@ -265,6 +381,7 @@ public static class Program
               self-check    --count N --seed N --output DIR [--baseline FILE]
               core-run      --count N --seed N --output DIR [--baseline FILE] [--split] [--enforce-gate]
               diagnose-core --count N --seed N --output DIR
+              p0-quality-gate --core-report FILE --diagnostic-report FILE [--expected-count N] [--output FILE]
               compare       --cases FILE --actual FILE --output DIR [--baseline FILE]
               baseline      --report FILE --output FILE
               verify        --output DIR
