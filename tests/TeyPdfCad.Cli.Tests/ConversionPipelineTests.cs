@@ -193,9 +193,10 @@ public sealed class ConversionPipelineTests
 
         var drawing = ACadSharp.IO.DwgReader.Read(output);
         Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
-        var axisInsert = Assert.Single(
-            drawing.Entities.OfType<ACadSharp.Entities.Insert>());
-        Assert.Equal("TEY_AXIS", axisInsert.Block.Name);
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.DoesNotContain(
+            drawing.Entities,
+            entity => CandidateMetadataCodec.TryRead(entity, out _));
 
         using var json = JsonDocument.Parse(
             await File.ReadAllTextAsync(report));
@@ -237,7 +238,7 @@ public sealed class ConversionPipelineTests
 
         var drawing = DwgReader.Read(output);
         Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
-        Assert.Single(
+        Assert.Empty(
             drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
             insert => insert.Block.Name == "TEY_AXIS");
 
@@ -503,7 +504,7 @@ public sealed class ConversionPipelineTests
         Assert.Contains(
             json.RootElement.GetProperty("warnings").EnumerateArray(),
             warning => warning.GetString()!.Contains(
-                "probe-only native candidates are withheld",
+                "SourceEquivalenceIncomplete",
                 StringComparison.Ordinal));
     }
 
