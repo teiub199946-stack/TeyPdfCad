@@ -93,6 +93,7 @@ public sealed class IndependentNativeExpectationTests
         [
             new VectorLine("dim", new(10, 10), new(60, 10), new VectorStyle()),
             new VectorLine("ext", new(10, 10), new(10, 20), new VectorStyle()),
+            new VectorLine("arrow", new(10, 20), new(12, 22), new VectorStyle()),
             new VectorText("text", "50", new(35, 20), 2.5, new VectorStyle())
         ]);
         var candidate = new DimensionCandidate(
@@ -106,12 +107,13 @@ public sealed class IndependentNativeExpectationTests
             0.95,
             "50",
             1,
-            ["dim", "ext", "text"])
+            ["dim", "ext", "arrow", "text"])
         {
             SourceClaims =
             [
                 new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
                 new("ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
                 new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
             ]
         };
