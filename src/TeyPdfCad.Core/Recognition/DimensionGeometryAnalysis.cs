@@ -185,6 +185,15 @@ internal static class DimensionGeometryAnalysis
         var length = GeometryMath.Distance(line.Start, line.End);
         if (length <= 1e-9 || length > Math.Max(textHeight * 4.0, radius * 2.0)) return false;
         if (GeometryMath.Distance(GeometryMath.Midpoint(line.Start, line.End), endpoint) > radius) return false;
+
+        // Arrow/tick geometry must actually touch or cross the dimension
+        // endpoint (within PDF-import noise tolerance). Merely being a short
+        // diagonal nearby is not enough; otherwise wall/grid fragments can
+        // masquerade as the second arrow.
+        var contactTolerance = Math.Max(textHeight * 0.5d, 0.5d);
+        if (GeometryMath.DistancePointToSegment(endpoint, line.Start, line.End) > contactTolerance)
+            return false;
+
         var dot = Math.Abs(GeometryMath.Dot(
             GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start)),
             unitDim));
