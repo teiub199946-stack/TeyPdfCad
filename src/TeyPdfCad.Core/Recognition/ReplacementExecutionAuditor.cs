@@ -31,16 +31,4 @@ public static class ReplacementExecutionAuditor
 
         return new ReplacementExecutionReport(notVerified, readBackConfirmed);
     }
-
-    // Transitional diagnostic overload. It never proves successful replacement;
-    // every eligible source is treated as not independently verified.
-    public static ReplacementExecutionReport Build(
-        SourceReplacementPlan plan,
-        IReadOnlyCollection<string> createdCandidateKeys,
-        bool readBackConfirmed)
-        => new(
-            plan.EligibleSourceIds
-                .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
-                .ToArray(),
-            readBackConfirmed);
 }
