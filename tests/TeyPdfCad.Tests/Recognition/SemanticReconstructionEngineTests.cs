@@ -33,6 +33,8 @@ public sealed class SemanticReconstructionEngineTests
         scene.Lines.Add(new LinePrimitive(new Point2(30, 0), new Point2(52, 0)));
         foreach (var x in new[] { 0.0, 12.0, 30.0, 52.0 })
             scene.Lines.Add(new LinePrimitive(new Point2(x, -12), new Point2(x, 1)));
+        foreach (var x in new[] { 0.0, 12.0, 30.0, 52.0 })
+            scene.Lines.Add(new LinePrimitive(new Point2(x - 1, -1), new Point2(x + 1, 1)));
 
         scene.Texts.Add(new TextPrimitive("1200", new Point2(6, 3), 2.5, 0));
         scene.Texts.Add(new TextPrimitive("1800", new Point2(21, 3), 2.5, 0));
