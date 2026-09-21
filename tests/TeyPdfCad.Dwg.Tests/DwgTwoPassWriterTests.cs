@@ -112,11 +112,33 @@ public sealed class DwgTwoPassWriterTests
         ]);
         var document = new VectorPdfDocument([firstPage, secondPage]);
 
+        var plans = new Dictionary<int, SourceReplacementPlan>
+        {
+            [1] = new(
+                ["shared"],
+                [],
+                [],
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+                {
+                    ["shared"] = ["verified-candidate"]
+                },
+                [],
+                []),
+            [2] = new(
+                [],
+                ["shared"],
+                [],
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal),
+                [],
+                [])
+        };
+
         using var stream = new MemoryStream();
         _ = new AcadSharpDwgWriter().Write(
             stream,
             document,
             new DocumentLayoutPlanner().Create(document),
+            sourceReplacementPlansByPage: plans,
             authorizedSuppressedSources: new HashSet<PageSourceRef>
             {
                 new(1, "shared")
