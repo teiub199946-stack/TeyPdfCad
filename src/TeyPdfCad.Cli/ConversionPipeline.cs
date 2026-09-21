@@ -25,6 +25,22 @@ public sealed record ConversionResult(ConversionOutcome Outcome, string ReportPa
 
 public sealed class ConversionPipeline
 {
+    private readonly IDwgDocumentWriter _dwgWriter;
+    private readonly IDwgReadBackVerifier _dwgVerifier;
+
+    public ConversionPipeline()
+        : this(new ProductionDwgDocumentWriter(), new ProductionDwgReadBackVerifier())
+    {
+    }
+
+    internal ConversionPipeline(
+        IDwgDocumentWriter dwgWriter,
+        IDwgReadBackVerifier dwgVerifier)
+    {
+        _dwgWriter = dwgWriter ?? throw new ArgumentNullException(nameof(dwgWriter));
+        _dwgVerifier = dwgVerifier ?? throw new ArgumentNullException(nameof(dwgVerifier));
+    }
+
     public async Task<ConversionResult> ConvertAsync(
         string inputPdfPath,
         string outputDwgPath,
@@ -72,8 +88,8 @@ public sealed class ConversionPipeline
             var semanticResults = semanticRecognition
                 .Where(pair => pair.Value.Result is not null)
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
-            var writer = new AcadSharpDwgWriter();
-            var verifier = new DwgReadBackVerifier();
+            var writer = _dwgWriter;
+            var verifier = _dwgVerifier;
 
             var outputFullPath = Path.GetFullPath(outputDwgPath);
             var outputDirectory = Path.GetDirectoryName(outputFullPath)!;
