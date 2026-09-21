@@ -25,10 +25,65 @@ public sealed class AcadSharpDwgWriter
         IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
         IDictionary<int, ISet<string>>? createdCandidateKeysByPage = null)
     {
+        using var output = new MemoryStream();
+        _ = WriteCore(
+            output,
+            source,
+            plan,
+            hatchRecognitionByPage,
+            semanticRecognitionByPage,
+            templateLibrary,
+            templateSelectionsByPage,
+            sourceReplacementPlansByPage,
+            authorizedSuppressedSources: null,
+            createdCandidateKeysByPage);
+        return output.ToArray();
+    }
+
+    public DwgWriteResult Write(
+        Stream destination,
+        VectorPdfDocument source,
+        DwgDocumentPlan plan,
+        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
+        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
+        TemplateLibrary? templateLibrary = null,
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
+        IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null)
+        => WriteCore(
+            destination,
+            source,
+            plan,
+            hatchRecognitionByPage,
+            semanticRecognitionByPage,
+            templateLibrary,
+            templateSelectionsByPage,
+            sourceReplacementPlansByPage,
+            authorizedSuppressedSources,
+            createdCandidateKeysByPage: null);
+
+    private static DwgWriteResult WriteCore(
+        Stream destination,
+        VectorPdfDocument source,
+        DwgDocumentPlan plan,
+        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage,
+        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage,
+        TemplateLibrary? templateLibrary,
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage,
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage,
+        IReadOnlySet<PageSourceRef>? authorizedSuppressedSources,
+        IDictionary<int, ISet<string>>? createdCandidateKeysByPage)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
+        if (!destination.CanWrite)
+            throw new ArgumentException("Destination stream must be writable.", nameof(destination));
 
         var document = new CadDocument();
+        var manifestBuilders = new Dictionary<string, CandidateManifestBuilder>(StringComparer.Ordinal);
+        var sourceEmissionCounts = new Dictionary<PageSourceRef, Dictionary<string, int>>();
+        var diagnosticCreatedCandidateKeyCount = 0;
         var styles = new AcadSharpStyleCatalog(document);
         var sheetsByPage = plan.Sheets.ToDictionary(sheet => sheet.PageNumber);
         var preservedBoundaryEntities = new HashSet<Entity>();
@@ -59,9 +114,24 @@ public sealed class AcadSharpDwgWriter
                 && sourceReplacementPlansByPage.TryGetValue(page.Number, out var suppliedReplacementPlan)
                     ? suppliedReplacementPlan
                     : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition, page.Number);
-            // Task 1 produces eligibility only. Until probe read-back + SuppressionGate
-            // are wired in later P0 tasks, destructive source suppression is forbidden.
-            var suppressedSourceIds = new HashSet<string>(StringComparer.Ordinal);
+            var authorizedForPage = authorizedSuppressedSources is null
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : authorizedSuppressedSources
+                    .Where(sourceRef => sourceRef.PageNumber == page.Number)
+                    .Select(sourceRef => sourceRef.SourceId)
+                    .ToHashSet(StringComparer.Ordinal);
+            var eligibleForPage = replacementPlan.EligibleSourceIds
+                .ToHashSet(StringComparer.Ordinal);
+            var invalidAuthorization = authorizedForPage
+                .Where(sourceId => !eligibleForPage.Contains(sourceId))
+                .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
+                .ToArray();
+            if (invalidAuthorization.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Page {page.Number} suppression authorization contains non-eligible SourceId(s): {string.Join(", ", invalidAuthorization)}.");
+            }
+            var suppressedSourceIds = authorizedForPage;
             var deferredCandidateKeys = replacementPlan.DeferredCandidateKeys
                 .ToHashSet(StringComparer.Ordinal);
             ISet<string>? createdCandidateKeys = null;
@@ -246,10 +316,40 @@ public sealed class AcadSharpDwgWriter
             }
         }
         ApplyExplicitPaintOrder(document, preservedBoundaryEntities);
-        using var output = new MemoryStream();
-        using var writer = new DwgWriter(output, document);
+
+        var writer = new DwgWriter(destination, document)
+        {
+            Configuration = new DwgWriterConfiguration
+            {
+                CloseStream = false
+            }
+        };
         writer.Write();
-        return output.ToArray();
+
+        var manifest = new NativeWriteManifest(
+            manifestBuilders
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => new ExpectedCandidate(
+                        pair.Key,
+                        pair.Value.SemanticType,
+                        pair.Value.Entities.ToArray()),
+                    StringComparer.Ordinal));
+        var sourceSummary = new SourceEmissionSummary(
+            sourceEmissionCounts
+                .OrderBy(pair => pair.Key.PageNumber)
+                .ThenBy(pair => pair.Key.SourceId, StringComparer.Ordinal)
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => (IReadOnlyDictionary<string, int>)pair.Value
+                        .OrderBy(item => item.Key, StringComparer.Ordinal)
+                        .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal)));
+
+        return new DwgWriteResult(
+            manifest,
+            sourceSummary,
+            diagnosticCreatedCandidateKeyCount);
     }
 
     private static void ApplyExplicitPaintOrder(
