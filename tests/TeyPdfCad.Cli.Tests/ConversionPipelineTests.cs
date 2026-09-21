@@ -238,7 +238,7 @@ public sealed class ConversionPipelineTests
 
         var drawing = DwgReader.Read(output);
         Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
-        Assert.Empty(
+        Assert.DoesNotContain(
             drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
             insert => insert.Block.Name == "TEY_AXIS");
 
