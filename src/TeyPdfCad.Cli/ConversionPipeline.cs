@@ -262,7 +262,9 @@ public sealed class ConversionPipeline
             replacementPlans[page.Number].Residuals,
             replacementPlans[page.Number].Residuals.Count == 0
                 ? null
-                : replacementPlans[page.Number].Residuals.Max(residual => residual.Severity).ToString(),
+                : replacementPlans[page.Number].Residuals
+                    .OrderByDescending(residual => residual.Severity)
+                    .First().Severity.ToString(),
             executionReports is not null && executionReports.TryGetValue(page.Number, out var execution)
                 ? execution.GeometryLostSourceIds.Count
                 : 0,
