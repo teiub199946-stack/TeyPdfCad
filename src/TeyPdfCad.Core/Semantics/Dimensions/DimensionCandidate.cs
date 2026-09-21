@@ -1,4 +1,5 @@
 using TeyPdfCad.Core.Geometry;
+using TeyPdfCad.Core.Recognition;
 
 namespace TeyPdfCad.Core.Semantics.Dimensions;
 
@@ -22,5 +23,10 @@ public sealed record DimensionCandidate(
     IReadOnlyList<string>? SourcePrimitiveIds = null)
 {
     public double? RotationRadians { get; init; }
+
+    // Legacy provenance remains diagnostic only. P0 suppression consumes
+    // recognizer-owned SourceClaims.
     public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
+
+    public IReadOnlyList<RecognizerSourceClaim> SourceClaims { get; init; } = [];
 }
