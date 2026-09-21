@@ -36,6 +36,8 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(30, 0), new Point2(52, 0)));
         scene.Lines.Add(new LinePrimitive(new Point2(0, -12), new Point2(0, 1)));
         scene.Lines.Add(new LinePrimitive(new Point2(52, -12), new Point2(52, 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1, -1), new Point2(1, 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(51, -1), new Point2(53, 1)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
 
         var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
@@ -51,6 +53,8 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(component, component)));
         scene.Lines.Add(new LinePrimitive(new Point2(8.485281374, -8.485281374), new Point2(-0.707106781, 0.707106781)));
         scene.Lines.Add(new LinePrimitive(new Point2(component + 8.485281374, component - 8.485281374), new Point2(component - 0.707106781, component + 0.707106781)));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1, 0), new Point2(1, 0)));
+        scene.Lines.Add(new LinePrimitive(new Point2(component - 1, component), new Point2(component + 1, component)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(16.263455967, 20.506096654), 2.5, 45));
 
         var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
@@ -66,6 +70,8 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(0.01, -0.01), new Point2(52.02, 0.02)));
         scene.Lines.Add(new LinePrimitive(new Point2(-0.02, -12), new Point2(0.04, 1.01)));
         scene.Lines.Add(new LinePrimitive(new Point2(52.03, -12.02), new Point2(51.98, 1.02)));
+        scene.Lines.Add(new LinePrimitive(new Point2(-0.99, -1.01), new Point2(1.01, 0.99)));
+        scene.Lines.Add(new LinePrimitive(new Point2(51.01, -0.99), new Point2(53.01, 1.01)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(26.01, 3.02), 2.5, 0));
 
         var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
@@ -179,6 +185,8 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(0, y), new Point2(importedLength, y)));
         scene.Lines.Add(new LinePrimitive(new Point2(0, y - 12), new Point2(0, y + 1)));
         scene.Lines.Add(new LinePrimitive(new Point2(importedLength, y - 12), new Point2(importedLength, y + 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1, y - 1), new Point2(1, y + 1)));
+        scene.Lines.Add(new LinePrimitive(new Point2(importedLength - 1, y - 1), new Point2(importedLength + 1, y + 1)));
         scene.Texts.Add(new TextPrimitive(displayedValue, new Point2(importedLength / 2.0, y + 3), 2.5, 0));
     }
 }
