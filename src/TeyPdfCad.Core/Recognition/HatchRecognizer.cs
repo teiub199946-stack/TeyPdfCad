@@ -11,7 +11,7 @@ public sealed class HatchRecognizer
     private const int MaximumPatternLineCandidates = 2_000;
     private const int MaximumPatternBoundaryCandidates = 300;
 
-    public HatchRecognitionResult Recognize(IReadOnlyList<VectorEntity> entities)
+    public HatchRecognitionResult Recognize(IReadOnlyList<VectorEntity> entities, int pageNumber = 0)
     {
         if (entities is null)
         {
@@ -20,6 +20,7 @@ public sealed class HatchRecognizer
 
         var hatches = new List<HatchCandidate>();
         var warnings = new List<SemanticWarning>();
+        var claims = new List<HatchClaim>();
         foreach (var filledPath in entities.OfType<VectorFilledPath>())
         {
             if (HasValidBoundary(filledPath.Boundary))
@@ -59,10 +60,30 @@ public sealed class HatchRecognizer
                 var pattern = TryCreatePatternCandidate(boundary, interiorLines, texts);
                 if (pattern is not null)
                 {
-                    hatches.Add(pattern);
-                    foreach (var sourceId in pattern.ProvenanceIds.Skip(1))
+                    var candidateId = SourceReplacementPlanner.GetCandidateKey(pattern, pageNumber);
+                    var classification = HasStrongPatternEvidence(boundary)
+                        ? HatchClassification.Confident
+                        : HatchClassification.Uncertain;
+                    claims.Add(new HatchClaim(
+                        candidateId,
+                        [boundary.SourceId],
+                        pattern.ProvenanceIds.Skip(1).Distinct(StringComparer.Ordinal).ToArray(),
+                        classification));
+
+                    if (classification == HatchClassification.Confident)
                     {
-                        consumedPatternLineIds.Add(sourceId);
+                        hatches.Add(pattern);
+                        foreach (var sourceId in pattern.ProvenanceIds.Skip(1))
+                        {
+                            consumedPatternLineIds.Add(sourceId);
+                        }
+                    }
+                    else
+                    {
+                        warnings.Add(new SemanticWarning(
+                            "hatch-uncertain",
+                            "Parallel geometry looks hatch-like but lacks strong source evidence; native HATCH is deferred and all source geometry is preserved.",
+                            pattern.ProvenanceIds));
                     }
                 }
             }
@@ -80,7 +101,15 @@ public sealed class HatchRecognizer
                 unresolvedPatternGroup.Select(line => line.SourceId).ToArray()));
         }
 
-        return new HatchRecognitionResult(hatches, warnings);
+        return new HatchRecognitionResult(hatches, warnings, claims);
+    }
+
+    private static bool HasStrongPatternEvidence(VectorPolyline boundary)
+    {
+        var layer = boundary.Style.SourceLayer;
+        return !string.IsNullOrWhiteSpace(layer)
+            && (layer.IndexOf("HATCH", StringComparison.OrdinalIgnoreCase) >= 0
+                || layer.IndexOf("ШТРИХ", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private static bool HasValidBoundary(IReadOnlyList<Point2> boundary)
@@ -237,4 +266,8 @@ public sealed class HatchRecognizer
 
 public sealed record HatchRecognitionResult(
     IReadOnlyList<HatchCandidate> NativeHatches,
-    IReadOnlyList<SemanticWarning> Warnings);
+    IReadOnlyList<SemanticWarning> Warnings,
+    IReadOnlyList<HatchClaim>? SourceClaims = null)
+{
+    public IReadOnlyList<HatchClaim> Claims => SourceClaims ?? [];
+}
