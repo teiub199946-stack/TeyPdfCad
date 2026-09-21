@@ -31,6 +31,16 @@ public sealed class DimensionCasePrimitiveSceneBuilder
             return scene;
         }
 
+        if (testCase.ExpectedResult == ExpectedResult.Ambiguous)
+        {
+            BuildSingle(
+                scene,
+                testCase,
+                $"{testCase.Id}:ambiguous",
+                includeSecondArrow: false);
+            return scene;
+        }
+
         BuildSingle(scene, testCase, $"{testCase.Id}:primary");
 
         if (testCase.Tags.Contains("nearby-dimensions", StringComparer.Ordinal))
@@ -41,7 +51,11 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         return scene;
     }
 
-    private static void BuildSingle(PrimitiveScene scene, DimensionCase testCase, string prefix)
+    private static void BuildSingle(
+        PrimitiveScene scene,
+        DimensionCase testCase,
+        string prefix,
+        bool includeSecondArrow = true)
     {
         var scale = testCase.DrawingScale;
         AddDimensionEvidence(
@@ -60,7 +74,8 @@ public sealed class DimensionCasePrimitiveSceneBuilder
             testCase.IsDimensionLineBroken,
             includeExtensions: true,
             includeArrows: true,
-            prefix);
+            prefix,
+            includeSecondArrow);
     }
 
     private static void BuildChain(PrimitiveScene scene, DimensionCase testCase)
@@ -193,7 +208,8 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         bool isBroken,
         bool includeExtensions,
         bool includeArrows,
-        string prefix)
+        string prefix,
+        bool includeSecondArrow = true)
     {
         var rawDirection = Normalize(p2 - p1);
         var direction = Rotate(rawDirection, noise.AngularSkewDegrees);
@@ -223,7 +239,10 @@ public sealed class DimensionCasePrimitiveSceneBuilder
         if (includeArrows)
         {
             AddArrowEvidence(scene, dimStart, direction, normal, arrowSize, arrowType, true, $"{prefix}:arrow:1");
-            AddArrowEvidence(scene, dimEnd, direction, normal, arrowSize, arrowType, false, $"{prefix}:arrow:2");
+            if (includeSecondArrow)
+            {
+                AddArrowEvidence(scene, dimEnd, direction, normal, arrowSize, arrowType, false, $"{prefix}:arrow:2");
+            }
         }
 
         AddText(scene, displayedValue, textPosition, textHeight, textRotation, $"{prefix}:text");
