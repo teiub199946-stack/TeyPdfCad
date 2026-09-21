@@ -33,6 +33,32 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal("+3.600", Assert.Single(inserts[1].Attributes).Value);
     }
     [Fact]
+    public void Writer_removes_exact_source_objects_replaced_by_native_level()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("level-line", new Point2(10, 10), new Point2(15, 10), new VectorStyle()),
+            new VectorText("level-text", "+3.600", new Point2(17, 10), 2.5, new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d)
+        {
+            Levels = [new LevelCandidate(new(10, 10), new(17, 10), "+3.600", 0.95d, ["level-line", "level-text"])]
+        };
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.TextEntity>());
+        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Equal("TEY_LEVEL", insert.Block.Name);
+        Assert.Equal("+3.600", Assert.Single(insert.Attributes).Value);
+    }
+
+    [Fact]
     public void Writer_emits_arc_length_as_native_arc_dimension()
     {
         var page = new VectorPdfPage(1, 72, 72, 0, []);
