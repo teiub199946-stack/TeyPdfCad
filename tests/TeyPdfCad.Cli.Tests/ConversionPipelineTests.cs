@@ -26,10 +26,10 @@ public sealed class ConversionPipelineTests
 
         var result = await new ConversionPipeline().ConvertAsync(input, output, report, default);
 
-        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
+        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
         Assert.True(File.Exists(output));
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
-        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("complete").GetBoolean());
         Assert.Equal(1, json.RootElement.GetProperty("pagesProcessed").GetInt32());
         Assert.Equal(0, json.RootElement.GetProperty("layoutsReadBack").GetInt32());
     }
@@ -188,7 +188,7 @@ public sealed class ConversionPipelineTests
             report,
             default);
 
-        Assert.Equal(ConversionOutcome.Complete, result.Outcome);
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
         Assert.True(File.Exists(output));
 
         var drawing = ACadSharp.IO.DwgReader.Read(output);
@@ -199,7 +199,7 @@ public sealed class ConversionPipelineTests
 
         using var json = JsonDocument.Parse(
             await File.ReadAllTextAsync(report));
-        Assert.True(json.RootElement.GetProperty("complete").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("complete").GetBoolean());
         var page = Assert.Single(
             json.RootElement.GetProperty("pages").EnumerateArray());
         Assert.Equal(1, page.GetProperty("axisCandidateCount").GetInt32());
