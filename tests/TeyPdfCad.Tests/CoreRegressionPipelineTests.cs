@@ -90,6 +90,27 @@ public sealed class CoreRegressionPipelineTests
         Assert.False(actual.SuppressionEvidenceEligible);
     }
 
+    [Fact]
+    public async Task NumberInsideBlock_NegativePattern_Is_Not_Recognized_Or_Suppressible()
+    {
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_negative_number_inside_block",
+            DimensionType = DimensionType.Negative,
+            ExpectedResult = ExpectedResult.Rejected,
+            ExpectedDimensions = 0,
+            ExpectedConfidenceClass = ConfidenceClass.None,
+            NegativePattern = NegativePattern.NumberInsideBlock
+        };
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Rejected, actual.Result);
+        Assert.Equal(0, actual.DetectedDimensions);
+        Assert.False(actual.SuppressionEvidenceEligible);
+        Assert.Contains("NoRecognizedDimension", actual.SuppressionBlockers);
+    }
+
     [Theory]
     [InlineData(ArrowType.ClosedFilled)]
     [InlineData(ArrowType.ClosedBlank)]
