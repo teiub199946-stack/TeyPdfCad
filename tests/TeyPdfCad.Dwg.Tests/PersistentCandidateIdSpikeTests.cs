@@ -2,6 +2,7 @@ using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
 using ACadSharp.Objects;
+using ACadSharp.Tables;
 using ACadSharp.XData;
 using CSMath;
 using Xunit;
