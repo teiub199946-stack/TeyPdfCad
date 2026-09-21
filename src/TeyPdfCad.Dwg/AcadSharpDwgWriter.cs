@@ -517,6 +517,7 @@ public sealed class AcadSharpDwgWriter
         IDictionary<PageSourceRef, Dictionary<string, int>> sourceEmissionCounts)
     {
         var sourceRef = new PageSourceRef(pageNumber, sourceId);
+        SourceMetadataCodec.Write(entity, sourceRef);
         if (!sourceEmissionCounts.TryGetValue(sourceRef, out var counts))
         {
             counts = new Dictionary<string, int>(StringComparer.Ordinal);
