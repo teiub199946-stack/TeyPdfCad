@@ -159,6 +159,7 @@ public sealed record ActualDimensionResult
     public double? DrawingScale { get; init; }
     public ConfidenceClass? ConfidenceClass { get; init; }
     public bool IsDimensionTypeAmbiguous { get; init; }
+    public bool SuppressionEvidenceEligible { get; init; }
     public bool IsMissing { get; init; }
     public List<string> Diagnostics { get; init; } = new();
 }
