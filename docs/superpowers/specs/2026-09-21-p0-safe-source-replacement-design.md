@@ -2,77 +2,69 @@
 
 ## Goal
 
-Permit source PDF geometry to be suppressed only after the written DWG has been read back and has proved that every expected native entity for the replacement candidate exists with its persistent CandidateId and role.
+Permit source PDF geometry to be suppressed only after a temporary written DWG has been read back and has proved that every expected native entity for a replacement candidate exists with its CandidateId, role, type, geometry fingerprint, and required properties.
 
 ## Scope
 
-P0 closes the unsafe replacement path already present in the semantic pipeline. It does not broaden semantic recognition quality.
+P0 closes the unsafe source-replacement path; it does not improve recognition quality.
 
-P0 includes:
+Included:
 
-- persistent CandidateId metadata written on native entities;
-- a writer-produced expectation manifest and a separate read-back verifier;
-- source suppression driven by verified entities, never by writer counters;
-- explicit candidate source roles;
-- explicit HATCH boundary/pattern claims and conservative uncertain handling;
-- deterministic paint-order identity;
-- regression tests for ACadSharp and AutoCAD 2022 evidence.
+- persistent CandidateId XData on native entities;
+- writer expectation manifest and independent read-back verifier;
+- two-pass document writing: probe without suppression, then final with verified suppression;
+- explicit claims and HATCH boundary/pattern classification;
+- basic emitted-entity sanity checks needed to prevent false FULL_PASS;
+- immutable deterministic paint-order key;
+- ACadSharp and user-saved AutoCAD 2022 regression evidence.
 
-P0 does not include:
+Excluded:
 
-- spatial matching or any bounding-box fallback;
-- Core Console, copy/paste, mirror, or array persistence testing;
-- semantic correctness validators such as dimension measurement checks;
-- wider recognizer accuracy improvements;
-- final visual acceptance comparison of Aidyn.pdf page 29.
+- spatial or bbox fallback;
+- Core Console, copy/paste, mirror, and array persistence paths;
+- ExtDict fallback, unless a later regression invalidates confirmed XData;
+- SubEntityRef;
+- broader recognizer accuracy and visual acceptance work;
+- broad review-overlay paint-order policy.
 
-## Pipeline
+## One pipeline, two gates
 
-```
-Vector extraction → recognition → candidate claims → provisional replacement plan
-      → DWG writer + expected entity manifest → DWG read-back verifier
-      → verified replacement plan → final source suppression → report
-```
+The only mode gates are EnableSemanticRecognition and EnableSourceReplacement.
 
-The pipeline remains one pipeline. The only mode gates are:
+With recognition disabled, the candidate and claim sets are empty. With source replacement disabled, every source is preserved. No downstream stage may branch on either gate.
 
-- `EnableSemanticRecognition`: if false, recognition returns no candidates or claims.
-- `EnableSourceReplacement`: if false, the final plan preserves every source.
+## Two-pass document write
 
-No lower layer may branch on the mode.
+The unit is the complete DWG document, never one DWG per page.
 
-## Persistent metadata contract
+1. Probe pass: write all source entities and all eligible native candidates to a temporary probe DWG; close the file.
+2. Verify: reopen the probe file from disk through DwgReadBackVerifier and evaluate its manifest.
+3. Final pass: write the same native candidates and suppress only SourceIds authorized by SuppressionGate; close and atomically move the final DWG.
 
-Every native entity generated for a semantic candidate receives exactly one XData group under AppId `TEYCONVERT_CANDIDATE_V1`.
+If a candidate fails verification, it has no suppression authorization and every source it claims is written in the final DWG. A probe serialization or probe read-back failure fails the complete document and produces no final DWG.
 
-The group contains exactly two flat ASCII strings, in this order:
+## Persistent metadata
 
-1. `CandidateId`
-2. `Role`
+Every native entity generated for a semantic candidate has exactly one XData group under AppId TEYCONVERT_CANDIDATE_V1. The group contains exactly two flat ASCII strings, in this order:
 
-CandidateId is a deterministic, ASCII-safe identifier. Its canonical input is:
+1. CandidateId
+2. Role
 
-- schema version;
-- page number;
-- semantic type;
-- SourceIds sorted by ordinal;
-- normalized geometry fingerprint.
+CandidateId is deterministic from schema version, page number, semantic type, SourceIds sorted by ordinal, and normalized geometry fingerprint. Recognizer version is reported separately, not included in CandidateId. Empty IDs and page-local collisions are rejected before writing.
 
-The recognizer version is reported separately and is not part of CandidateId. CandidateId creation must reject empty input and collisions within a page.
+One candidate may own multiple entities. One entity has one CandidateId and one role only. INSERT carries its CandidateId on the instance, never BlockRecord. A level AttributeEntity carries the same CandidateId as its parent INSERT and role attribute.
 
-One candidate may own multiple entities. One entity may own one CandidateId and one role only. Writing a second CandidateId to the same entity is a validation failure before DWG serialization.
+## Writer manifest
 
-Candidate metadata belongs only to entity instances. In particular, axis and level CandidateId belong to INSERT, never BlockRecord. A level AttributeEntity uses the same CandidateId as its INSERT and role `attribute`.
+The writer returns an expectation, not evidence.
 
-## Expected entity manifest
-
-The writer must return `DwgWriteManifest`, not `createdCandidateKeys`.
-
-```csharp
+~~~
 sealed record ExpectedNativeEntity(
     string CandidateId,
     string Role,
-    string EntityKind);
+    string EntityKind,
+    string GeometryFingerprint,
+    IReadOnlyDictionary<string, string> RequiredProperties);
 
 sealed record ExpectedCandidate(
     string CandidateId,
@@ -81,37 +73,35 @@ sealed record ExpectedCandidate(
 
 sealed record DwgWriteManifest(
     IReadOnlyDictionary<string, ExpectedCandidate> Candidates);
-```
+~~~
+
+A writer-created-key counter may remain as diagnostics, but no branch may use it to decide source suppression.
 
 Expected roles:
 
-| Semantic type | Expected native entity roles |
+| Semantic type | Required native roles |
 |---|---|
-| DIMENSION / ARC_DIMENSION | `primary` |
-| LEADER | `primary`, `annotation` |
-| AXIS | `primary` on INSERT |
-| LEVEL | `primary` on INSERT, `attribute` on AttributeEntity |
-| HATCH | `primary` on HATCH |
-
-The writer may add no source suppression evidence itself. Its manifest is an expectation only.
+| DIMENSION / ARC_DIMENSION | primary: Dimension |
+| LEADER | primary: Leader; annotation: Text |
+| AXIS | primary: Insert |
+| LEVEL | primary: Insert; attribute: AttributeEntity |
+| HATCH | primary: Hatch |
 
 ## Read-back verifier
 
-The verifier reads the serialized DWG byte stream independently from the writer and builds actual `(CandidateId, Role, EntityKind)` bindings.
+DwgReadBackVerifier closes and reopens the on-disk probe file, independently from the writer. It compares the triple CandidateId, Role, EntityKind, then fingerprint and required properties. Fingerprints verify entities already identified by XData; they are not spatial matching.
 
-A candidate is verified only if:
+A candidate is verified only when:
 
-- every expected entity role appears exactly once;
-- it is on the expected DWG entity type;
-- each entity has exactly one XData group with exactly two strings;
-- both strings are non-empty;
-- no candidate metadata is present on BlockRecord;
-- an expected level attribute remains a child of its expected INSERT;
-- no unexpected duplicate role exists for that CandidateId.
+- every expected role/type appears exactly once;
+- every matched entity has exactly one valid two-string XData group;
+- CandidateId and Role are non-empty;
+- every fingerprint and required property passes its declared tolerance;
+- a level attribute is still a child of its expected INSERT;
+- BlockRecord has no candidate metadata;
+- no duplicate or unexpected entity metadata exists for that CandidateId.
 
-If any condition fails, the candidate is unverified. An unverified candidate cannot suppress any source geometry.
-
-```csharp
+~~~
 sealed record CandidateVerification(
     string CandidateId,
     bool IsVerified,
@@ -121,39 +111,39 @@ sealed record CandidateVerification(
 
 sealed record DwgReadBackVerification(
     IReadOnlyDictionary<string, CandidateVerification> Candidates);
-```
+~~~
 
-The final replacement executor receives only verified CandidateIds. There is no spatial fallback.
+The required emitted-entity checks are:
 
-## Claims and source suppression
+| Type | Required checks |
+|---|---|
+| Dimension | endpoints define nonzero expected measurement within tolerance |
+| Leader | at least two vertices |
+| Leader text | non-empty value and positive height |
+| Axis Insert | expected BlockRecord name, positive scale and length |
+| Level | expected INSERT and non-empty Attribute value |
+| Hatch | nonzero boundary area and Hatch path geometry matching expected boundary fingerprint |
 
-Claims are explicit output from each recognizer. A claim contains CandidateId, SourceId, source role, and full/partial provenance.
+## Suppression gate and claims
 
-A source is suppressed only when:
+SuppressionGate is the only component allowed to grant suppression. It receives the provisional replacement plan and DwgReadBackVerification.
 
-- it is claimed by exactly one candidate;
-- that candidate is verified by read-back;
-- its claim is full, valid, and suppressible;
-- it has no `HatchBoundary` or `EvidenceOnly` role;
-- its candidate is not deferred.
+A source is suppressed only if it has one full valid suppressible claim, its candidate is verified, and it is neither HatchBoundary nor EvidenceOnly. There is no spatial fallback.
 
-The existing single-pass shared-claim policy remains:
+The shared-claim policy remains one-pass over the full graph:
 
-- build the complete source-to-candidate claim graph;
-- for every SourceId claimed by two or more valid candidates, defer all involved candidates;
-- do not recompute or promote candidates after deferral;
-- defer preserves all sources for every deferred candidate;
-- emit `DeferredShared` residuals at High severity.
+- any SourceId with two or more valid CandidateIds defers all involved candidates;
+- there is no recomputation or promotion after deferral;
+- every source used by a deferred candidate is preserved;
+- each deferred case reports DeferredShared at High severity.
 
-Any residual means `PASS_WITH_RESIDUALS`, never `FULL_PASS`.
-
-A candidate that fails read-back produces a `GeometryLost` residual at Critical severity. The page is written with its source preserved.
+A failed verification produces GeometryLost at Critical severity. Any residual produces PASS_WITH_RESIDUALS, not FULL_PASS.
 
 ## HATCH
 
-The previous convention “first ProvenanceId is the boundary” is removed.
+The first-ProvenanceId-as-boundary rule is removed.
 
-```csharp
+~~~
 sealed record HatchClaim(
     string CandidateId,
     IReadOnlyList<string> BoundarySourceIds,
@@ -162,32 +152,29 @@ sealed record HatchClaim(
     HatchClassification Classification);
 
 enum HatchClassification { Confident, Uncertain }
-```
+~~~
 
-- `Confident`: write native HATCH; preserve BoundarySourceIds; PatternSourceIds can be suppressed only after HATCH read-back is verified.
-- `Uncertain`: do not write native HATCH; preserve all its sources; emit `DeferredUncertainHatch` at Medium severity.
+Confident writes native HATCH, preserves BoundarySourceIds, and can suppress PatternSourceIds only after verified HATCH path/boundary binding. Uncertain writes no native HATCH, preserves all HATCH sources, and emits DeferredUncertainHatch at Medium severity.
 
-## Deterministic paint order
+## Paint order
 
-Paint order must use immutable ordering identity, not document insertion enumeration. The identity is derived from page number, source/candidate key, entity role, priority, and stable entity ordinal inside the candidate.
-
-The ordering remains bottom-to-top: base geometry, solid fill, hatch pattern, preserved boundary, dimensions/annotations/text, review overlay. Equal keys are ordered lexically by immutable identity.
+P0 uses immutable identity, not document insertion enumeration. The sort key is page number, source/candidate key, role, priority, and stable ordinal inside a candidate. Its bottom-to-top policy is base geometry, solid fill, hatch pattern, preserved boundary, dimension/annotation/text, review overlay.
 
 ## Failure policy
 
-- Semantic / verification failure on one page: write the page with source preserved for unsafe candidates, continue the document, report the page as `PASS_WITH_RESIDUALS`; document status is the worst page status.
-- DWG serialization or document read-back failure: fail fast and emit no output DWG.
+A semantic or verification failure on a page preserves its unsafe sources and continues document processing. Overall document status is the worst page status. A serialization or probe read-back failure aborts the complete document and produces no final DWG.
 
 ## Required tests
 
-1. Candidate metadata codec: valid flat schema; empty/one/three fields; unknown app; duplicate candidate metadata; case-sensitive CandidateId.
-2. Read-back verifier: expected primary, Leader + annotation, Level INSERT + Attribute, wrong entity kind, missing role, duplicate role, metadata on BlockRecord.
-3. Planner/executor: a verified candidate suppresses only allowed sources; any unverified candidate preserves every source; no spatial fallback.
-4. Shared claims: chain and cycle produce the same deferred set independent of recognizer ordering.
-5. HATCH: explicit confident boundary/pattern roles; uncertain HATCH emits no native HATCH and preserves all source.
-6. Paint-order: identical candidate/source set yields identical immutable order after input enumeration changes.
-7. Regression: ACadSharp round-trip and committed user AutoCAD 2022 save/reopen fixture.
+1. Metadata codec: valid flat schema; empty, one, three fields; unknown app; duplicate metadata; case-sensitive CandidateId.
+2. Verifier: missing role; duplicate role; wrong entity type; wrong fingerprint; unexpected metadata; BlockRecord metadata; Level parent/child preservation.
+3. Emitted-entity sanity: dimension geometry-derived measurement; leader vertices; text height/value; level Attribute value; axis scale/length; HATCH area/boundary binding.
+4. Two-pass executor: verified candidate suppresses allowed sources; unverified candidate preserves all sources; probe failure emits no final DWG; no spatial fallback.
+5. Shared claims: chain and cycle yield identical deferred candidates despite recognizer enumeration order.
+6. HATCH: confident explicit roles; uncertain emits no native HATCH and preserves all sources.
+7. Paint order: input enumeration changes do not change immutable ordering.
+8. Regression: ACadSharp round-trip and committed user AutoCAD 2022 save/reopen fixture.
 
 ## Acceptance
 
-P0 is complete only when CI demonstrates that source suppression depends on read-back verification rather than writer counters, and all required tests pass. It is not a claim of semantic accuracy or visual WYSIWYG acceptance.
+P0 is complete only when CI proves source suppression comes from on-disk read-back verification, not writer counters, and every required test passes. It is not a claim of visual WYSIWYG acceptance.
