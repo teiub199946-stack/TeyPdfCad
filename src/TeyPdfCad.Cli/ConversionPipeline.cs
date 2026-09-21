@@ -57,7 +57,10 @@ public sealed class ConversionPipeline
             var templateLibrary = LoadTemplateLibrary(templateManifestPath);
             var templateSelections = templateLibrary is null
                 ? null
-                : document.Pages.ToDictionary(page => page.Number, page => SelectTemplate(page, templateLibrary));
+                : document.Pages.ToDictionary(
+                    page => page.Number,
+                    page => DeferUnverifiedTemplateReplacement(
+                        SelectTemplate(page, templateLibrary)));
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
@@ -109,6 +112,16 @@ public sealed class ConversionPipeline
             warnings.AddRange(document.Pages.SelectMany(page =>
                 replacementPlans[page.Number].Conflicts.Select(conflict =>
                     $"Page {page.Number}: source replacement conflict {conflict.Reason} on {conflict.SourceId}.")));
+            if (templateSelections is not null)
+            {
+                warnings.AddRange(templateSelections
+                    .Where(pair => string.Equals(
+                        pair.Value.Reason,
+                        "template-source-replacement-deferred-p0",
+                        StringComparison.Ordinal))
+                    .Select(pair =>
+                        $"Page {pair.Key}: template source replacement is deferred until native read-back verification exists; source geometry is preserved."));
+            }
             warnings.AddRange(document.Pages.SelectMany(page =>
                 executionReports[page.Number].CandidateNotVerifiedSourceIds.Select(sourceId =>
                     $"Page {page.Number}: native candidate is not read-back verified for source {sourceId}; source is preserved.")));
@@ -201,6 +214,19 @@ public sealed class ConversionPipeline
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
 
+    private static TemplateSelection DeferUnverifiedTemplateReplacement(
+        TemplateSelection selection)
+    {
+        if (!selection.IsConfirmed || selection.SourceIdsToReplace.Count == 0)
+            return selection;
+
+        return new TemplateSelection(
+            false,
+            selection.TemplateName,
+            "template-source-replacement-deferred-p0",
+            selection.SourceIdsToReplace);
+    }
+
     private static async Task TryWriteFailureReportAsync(string reportPath, string message, CancellationToken cancellationToken)
     {
         try
@@ -274,6 +300,9 @@ public sealed class ConversionPipeline
                 hatchRecognition[page.Number],
                 semanticRecognition[page.Number],
                 replacementPlans[page.Number],
+                templateSelections is not null && templateSelections.TryGetValue(page.Number, out var auditTemplateSelection)
+                    ? auditTemplateSelection
+                    : null,
                 executionReports is not null && executionReports.TryGetValue(page.Number, out var executionReport)
                     ? executionReport
                     : null),
@@ -282,6 +311,12 @@ public sealed class ConversionPipeline
                 && hatchRecognition[page.Number].Warnings.Count == 0
                 && semanticRecognition[page.Number].Warnings.Count == 0
                 && replacementPlans[page.Number].IsFullPassEligible
+                && (templateSelections is null
+                    || !templateSelections.TryGetValue(page.Number, out var completionTemplateSelection)
+                    || !string.Equals(
+                        completionTemplateSelection.Reason,
+                        "template-source-replacement-deferred-p0",
+                        StringComparison.Ordinal))
                 && (executionReports is null
                     || !executionReports.TryGetValue(page.Number, out var pageExecution)
                     || (pageExecution.ReadBackConfirmed
@@ -293,6 +328,7 @@ public sealed class ConversionPipeline
         HatchRecognitionResult hatchRecognition,
         PageSemanticSummary semanticRecognition,
         SourceReplacementPlan replacementPlan,
+        TemplateSelection? templateSelection,
         ReplacementExecutionReport? executionReport)
     {
         if (page.Entities.Count == 0 || page.Diagnostics.Count > 0)
@@ -300,6 +336,11 @@ public sealed class ConversionPipeline
         if (executionReport is { AnyGeometryLost: true })
             return "PARTIAL";
         if (executionReport is not null && executionReport.CandidateNotVerifiedSourceIds.Count > 0)
+            return "PASS_WITH_RESIDUALS";
+        if (string.Equals(
+                templateSelection?.Reason,
+                "template-source-replacement-deferred-p0",
+                StringComparison.Ordinal))
             return "PASS_WITH_RESIDUALS";
         if (hatchRecognition.Warnings.Count > 0
             || semanticRecognition.Warnings.Count > 0
