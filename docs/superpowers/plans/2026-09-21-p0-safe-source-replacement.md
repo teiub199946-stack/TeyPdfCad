@@ -14,18 +14,20 @@
 
 - Suppression is allowed only after on-disk probe-file read-back; writer counters are diagnostics only.
 - Candidate metadata is exactly two flat ASCII XData strings under TEYCONVERT_CANDIDATE_V1: CandidateId, then Role.
+- Every source has a non-empty page-unique SourceId. Duplicate or empty IDs are Critical SourceIdentityViolation; preserve all involved source and authorize none.
 - One entity has exactly one CandidateId and role; a candidate may own multiple entities. Never attach candidate metadata to BlockRecord.
 - No spatial or bbox fallback, ExtDict fallback, Core Console path, SubEntityRef, or source XData in P0.
-- HATCH: confident preserves boundary and may suppress pattern only after verification; uncertain writes no native HATCH, preserves all its sources, and emits a Medium residual.
+- HATCH: confident preserves boundary and may suppress pattern only after verification; uncertain writes no native HATCH, preserves all its sources, and emits DeferredUncertainHatch at Medium.
+- Residual severities are fixed: DeferredShared High; DeferredUncertainHatch Medium; CandidateNotVerified, SourceIdentityViolation, SourceSuppressionViolation Critical.
 - The document is written twice as a whole; per-page semantic failures preserve source and continue, but serialization/probe-read-back/final-sanity failures publish no DWG.
-- Final sanity uses emitted-DWG-entity delta, not SourceId count. It is structural only, not a per-source final verifier.
+- Final sanity uses on-disk output-fingerprint multisets, not SourceId count. It is structural only, not a per-source final verifier.
 - Immutable paint ordering must not depend on document insertion enumeration.
 - FULL_PASS is P0 geometry preservation plus declared minimum checks, not WYSIWYG, recognition completeness, or broad engineering-semantic correctness.
 
 ## Review Focus
 
 - Malformed or duplicate candidate XData must preserve all claimed source instead of being accepted by a permissive reader. Task 2.
-- A multi-entity leader or level with one missing child must fail the whole candidate and preserve every eligible source. Task 2.
+- A multi-entity leader or level with one missing child must emit CandidateNotVerified and preserve every eligible source. Task 2.
 - A source that emits several DWG entities must contribute its exact output-fingerprint multiset to final sanity. Task 3.
 - A final-pass bug that drops, swaps, or replaces a native/source entity with a different fingerprint must fail closed and publish no DWG. Task 4.
 - Changing recognizer or source enumeration order must not change candidate identity, shared deferral, or paint order. Tasks 1 and 3.
@@ -34,7 +36,7 @@
 
 | File | Responsibility |
 |---|---|
-| src/TeyPdfCad.Core/Recognition/ReplacementVerificationContracts.cs | Immutable manifest, read-back result, suppression decision, and page status contracts. |
+| src/TeyPdfCad.Core/Recognition/ReplacementVerificationContracts.cs | Existing/modified SourceReplacementPlan plus neutral NativeWriteManifest, NativeReadBackVerification, HatchClaim, gate, residual, and page-status contracts. |
 | src/TeyPdfCad.Core/Recognition/SourceReplacementPlanner.cs | CandidateId canonicalization, explicit source roles, deterministic shared claims, explicit HATCH classification. |
 | src/TeyPdfCad.Core/Recognition/ReplacementExecutionAuditor.cs | Verification-driven residual construction; no writer-key authority. |
 | src/TeyPdfCad.Core/Recognition/HatchRecognizer.cs | Explicit boundary/pattern lists and Confident/Uncertain classification. |
@@ -51,13 +53,13 @@
 
 ## Required implementation sequencing
 
-The task sections describe ownership; execute their deliverables in this safety order, with a focused test run and commit after every line.
+The task sections describe ownership; execute their deliverables in this safety order, with a focused test run and commit after every line. The writer receives a caller-owned Stream and never closes it; CLI owns, closes, and atomically publishes both temporary files.
 
 1. Implement only Task 1 contracts and deterministic CandidateId. Do not change shared-claim or HATCH behavior yet.
 2. Implement the Task 2 metadata codec and its smoke tests.
 3. Implement the Task 3 writer manifest and metadata emission in probe-only mode; authorization is always empty and all sources remain.
 4. Implement Task 2 read-back verification against closed files, including required-property failures.
-5. Implement Task 4 probe/final orchestration with empty authorization and final fingerprint-multiset sanity. This proves two writes cannot publish an altered output before destructive suppression exists.
+5. Implement Task 4 probe/final orchestration with empty authorization and final fingerprint-multiset sanity. This establishes the idempotent baseline: final equals probe and no altered file can be published.
 6. Implement Task 1 SuppressionGate. Its first end-to-end behavior is one verified candidate authorizing one whole source.
 7. Implement Task 1 shared-claim deferral, then explicit HATCH Confident/Uncertain behavior. Both are now tested against verification-driven authorization, never a writer counter.
 8. Implement Task 3 immutable paint order as an independent commit after verifier/gate tests are green.
@@ -97,7 +99,7 @@ public sealed record ExpectedCandidate(
     string CandidateId, string SemanticType,
     IReadOnlyList<ExpectedNativeEntity> Entities);
 
-public sealed record DwgWriteManifest(
+public sealed record NativeWriteManifest(
     IReadOnlyDictionary<string, ExpectedCandidate> Candidates);
 
 public sealed record CandidateVerification(
@@ -106,7 +108,7 @@ public sealed record CandidateVerification(
     IReadOnlyList<string> DuplicateRoles,
     IReadOnlyList<string> InvalidEntities);
 
-public sealed record DwgReadBackVerification(
+public sealed record NativeReadBackVerification(
     IReadOnlyDictionary<string, CandidateVerification> Candidates);
 
 public sealed record SuppressionDecision(
@@ -118,7 +120,7 @@ public sealed class SuppressionGate
 {
     public SuppressionDecision Evaluate(
         SourceReplacementPlan plan,
-        DwgReadBackVerification verification);
+        NativeReadBackVerification verification);
 }
 ~~~
 
@@ -152,11 +154,11 @@ public void Gate_preserves_every_claim_of_an_unverified_multi_source_candidate()
 
     Assert.Empty(decision.SuppressSourceIds);
     Assert.Equal(["s-1", "s-2"], decision.PreserveSourceIds.Order());
-    Assert.Contains(decision.Residuals, x => x.Kind == ReplacementResidualKind.GeometryLost);
+    Assert.Contains(decision.Residuals, x => x.Kind == ReplacementResidualKind.CandidateNotVerified);
 }
 ~~~
 
-Also add chain and cycle cases with shuffled recognizer order, checking identical sorted deferred candidates and preservation of every claimed source. Add uncertain-HATCH test: no native candidate is eligible, all HATCH sources preserved, one DeferredUncertainHatch Medium residual.
+Also add empty-SourceId and duplicate-SourceId cases: planner returns SourceIdentityViolation Critical, preserves all involved sources, and exposes no eligible source. Add chain and cycle cases with shuffled recognizer order, checking identical sorted deferred candidates and preservation of every claimed source. Add uncertain-HATCH test: no native candidate is eligible, all HATCH sources preserved, one DeferredUncertainHatch Medium residual.
 
 - [ ] **Step 2: Run the focused Core tests and verify they fail**
 
@@ -168,7 +170,7 @@ Expected: FAIL because the contracts, canonical ID, explicit hatch roles, and Su
 
 Add the contract file above. Rename provisional SourceReplacementPlan.SuppressedSourceIds to EligibleSourceIds, updating all callers in this task. Only SuppressionGate may produce actual suppression. A source may be authorized only if it has one valid suppressible claim, that candidate is verified, and its role is neither HatchBoundary nor EvidenceOnly.
 
-For every unverified candidate, preserve all sources claimed by it and append a Critical GeometryLost residual per affected source. No branch may inspect createdCandidateKeys.
+For every unverified candidate, preserve all sources claimed by it and append a Critical CandidateNotVerified residual per affected source. Empty or duplicate page SourceId similarly emits Critical SourceIdentityViolation and blocks all related candidates. No branch may inspect createdCandidateKeys.
 
 Add:
 
@@ -235,7 +237,7 @@ public sealed record DwgStructuralInventory(
 
 public sealed class DwgReadBackVerifier
 {
-    public DwgReadBackVerification Verify(string dwgPath, DwgWriteManifest manifest);
+    public NativeReadBackVerification Verify(string dwgPath, NativeWriteManifest manifest);
     public DwgStructuralInventory ReadStructuralInventory(string dwgPath);
 }
 ~~~
@@ -306,8 +308,7 @@ public sealed record SourceEmissionSummary(
 }
 
 public sealed record DwgWriteResult(
-    byte[] Bytes,
-    DwgWriteManifest Manifest,
+    NativeWriteManifest Manifest,
     SourceEmissionSummary SourceEmissionSummary,
     int DiagnosticCreatedCandidateKeyCount);
 ~~~
@@ -332,6 +333,7 @@ Change writer API:
 
 ~~~
 public DwgWriteResult Write(
+    Stream destination,
     VectorPdfDocument document,
     DwgDocumentPlan plan,
     IReadOnlyDictionary<int, HatchRecognitionResult> hatches,
@@ -342,7 +344,7 @@ public DwgWriteResult Write(
     IReadOnlySet<string>? authorizedSuppressedSourceIds = null);
 ~~~
 
-Null authorization means probe and suppresses nothing. Non-null authorization affects source output only; native selection is identical.
+The caller owns destination and closes it after Write returns. Null authorization means probe and suppresses nothing. Non-null authorization affects source output only; native selection is identical.
 
 Refactor WriteDimension, WriteArcDimension, WriteLeader, WriteAxis, WriteLevel, and WritePatternHatch to pass every created native through AddExpectedNative(entity, candidateId, role, entityKind, fingerprint, properties, document, manifest). That helper writes metadata, records ExpectedNativeEntity, and rejects duplicate CandidateId/Role.
 
@@ -401,8 +403,9 @@ Add tests named:
 - Pipeline_publishes_final_only_when_fingerprint_multiset_matches_probe
 - Pipeline_does_not_publish_dwg_when_final_native_fingerprint_changes
 - Pipeline_does_not_publish_dwg_when_wrong_source_is_suppressed
+- Pipeline_does_not_publish_dwg_when_requested_source_fingerprint_is_absent_from_probe
 
-For final-count failure, inject an internal IDwgDocumentWriter seam whose final pass omits one native. Assert InvalidArgumentsOrIo, no output DWG, and report residual SourceSuppressionViolation.
+For final failure, inject an internal IDwgDocumentWriter seam whose final pass omits one native. Assert InvalidArgumentsOrIo, no output DWG, and report residual SourceSuppressionViolation. Add a distinct test in which the requested source-emission fingerprint is absent from the on-disk probe inventory; final sanity must fail before publication.
 
 Add two-page fixture: one page contains uncertain HATCH or failed candidate, the other ordinary source geometry. Assert output exists, unsafe page PASS_WITH_RESIDUALS, other page independently reported, whole document Partial.
 
@@ -415,7 +418,7 @@ Expected: FAIL because current pipeline writes once, trusts createdCandidateKeys
 - [ ] **Step 3: Implement two-pass sequence**
 
 In ConvertAsync:
-1. Build provisional replacement plans. Gate semantic recognition and replacement only at this boundary; disabled semantic means empty claims, disabled replacement means empty final authorization.
+1. Build provisional replacement plans. Gate semantic recognition and replacement only at this boundary; disabled semantic means empty claims, disabled replacement means empty final authorization. With EnableSourceReplacement=false, the two-pass driver remains active and final must equal probe.
 2. Write probe without authorization to unique temporary path in output directory; close it.
 3. Verify probe manifest from disk; run SuppressionGate per page; union actual authorization.
 4. Read probe structural inventory from disk. Validate the authorized source-emission fingerprint multiset is a sub-multiset of that real inventory.
@@ -436,13 +439,13 @@ This catches wrong-source suppression whenever outputs differ, native loss/repla
 7. On mismatch create Critical SourceSuppressionViolation, remove only known temp paths, write failure report, and do not publish an output DWG.
 8. On success atomically move final temp to requested output and remove probe temp.
 
-Keep writer key count as diagnostic only. Reports and GeometryLost use gate/verifier data only.
+Keep writer key count as diagnostic only. Reports and CandidateNotVerified use gate/verifier data only.
 
 - [ ] **Step 4: Define status and run CLI regression**
 
 Implement:
-- FULL_PASS: all probe verifier and final structural checks pass; no residual, GeometryLost, or SourceSuppressionViolation.
-- PASS_WITH_RESIDUALS: published output, but a page preserved source due to defer/uncertainty/verification failure.
+- FULL_PASS: all probe verifier and final structural checks pass; no residual, CandidateNotVerified, SourceIdentityViolation, or SourceSuppressionViolation.
+- PASS_WITH_RESIDUALS: published output, but a page preserved source due to DeferredShared High, DeferredUncertainHatch Medium, CandidateNotVerified Critical, or SourceIdentityViolation Critical.
 - PARTIAL: existing source-PDF diagnostics make page partial.
 - serialization, probe read-back, or final sanity failure: InvalidArgumentsOrIo and no final DWG.
 
@@ -533,7 +536,7 @@ No TODO/TBD or generic test/handling steps remain. Each test and implementation 
 
 ### Type consistency
 
-DwgWriteManifest, DwgReadBackVerification, SuppressionGate, CandidateMetadataCodec, DwgStructuralInventory, SourceEmissionSummary, and DwgWriteResult are introduced before consumption. Structural inventory scope is consistently ModelSpace top-level entities plus nested Insert attributes.
+NativeWriteManifest, NativeReadBackVerification, SourceReplacementPlan, HatchClaim, SuppressionGate, CandidateMetadataCodec, DwgStructuralInventory, SourceEmissionSummary, and DwgWriteResult are introduced before consumption. Structural inventory scope is consistently ModelSpace top-level entities plus nested Insert attributes.
 
 ### Review Focus coverage
 
