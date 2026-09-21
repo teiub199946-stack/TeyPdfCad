@@ -256,6 +256,64 @@ public sealed class DwgReadBackVerifierTests
         }
     }
 
+
+    [Fact]
+    public void Block_definition_change_rejects_insert_candidate()
+    {
+        const string candidateId = "v1:1:AXIS:block-definition";
+        var drawing = new CadDocument();
+        var block = new BlockRecord("TEY_AXIS");
+        block.Entities.Add(new Line(
+            new XYZ(0, 0, 0),
+            new XYZ(1, 0, 0)));
+        drawing.BlockRecords.Add(block);
+
+        var insert = new Insert(block)
+        {
+            InsertPoint = new XYZ(10, 10, 0),
+            XScale = 25,
+            YScale = 1,
+            ZScale = 1
+        };
+        CandidateMetadataCodec.Write(
+            insert,
+            new(candidateId, "primary"));
+        drawing.Entities.Add(insert);
+
+        var expectedBlockFingerprint =
+            DwgEntityFingerprint.ComputeBlockDefinition(insert);
+        var manifest = Manifest(
+            candidateId,
+            "AXIS",
+            Expected(
+                candidateId,
+                "primary",
+                "Insert",
+                insert,
+                ("blockName", "TEY_AXIS"),
+                ("blockDefinitionFingerprint", expectedBlockFingerprint),
+                ("minimumScale", "1"),
+                ("minimumLength", "1")));
+
+        // Simulate a writer/serialization defect that changes visible block
+        // contents while preserving INSERT identity and candidate metadata.
+        block.Entities.Add(new Line(
+            new XYZ(0, 5, 0),
+            new XYZ(1, 5, 0)));
+
+        using var file = WriteDrawing(drawing);
+        var candidate = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.False(candidate.IsVerified);
+        Assert.Contains(
+            candidate.InvalidEntities,
+            value => value.Contains(
+                "block definition fingerprint mismatch",
+                StringComparison.Ordinal));
+    }
+
     [Fact]
     public void BlockRecord_candidate_metadata_rejects_verification()
     {
