@@ -159,6 +159,8 @@ Dimension recognizers emit DimensionLine, ExtensionLine, ArrowGeometry, and Text
 
 The candidate's declared whole-source set is independent from its claim list and is used for deterministic identity and completeness validation only; it never authorizes suppression. The normalized declared SourceId set must equal the distinct union of RecognizerSourceClaim.SourceId. Any mismatch is DeferredUnresolvedClaims at High severity, preserves the complete union, and makes the candidate ineligible. This allows legacy provenance/source-set data to detect omissions while forbidding it from granting suppression.
 
+Each semantic type has both a minimum required-role set and a closed allowed-role set. An unknown semantic type or any role outside the allowed set is fail-closed as DeferredUnresolvedClaims High.
+
 Minimum required roles are:
 - DIMENSION: DimensionLine, ExtensionLine, Text; ArrowGeometry is additionally claimed whenever arrow source geometry was used.
 - LEADER: LeaderShaft, LeaderArrow, Text; LeaderLanding is required only when landing geometry was used.
@@ -167,7 +169,7 @@ Minimum required roles are:
 - ARC_DIMENSION: DimensionLine and Text.
 - confident HATCH: HatchBoundary and HatchPattern.
 
-Unknown/default role, EvidenceOnly, Unresolved, or IsPartial=true always defers the whole candidate. One SourceId carrying more than one distinct role inside the same candidate is a ClaimRoleConflict and also defers the whole candidate because P0 has no SubEntityRef to disambiguate parts.
+Unknown/default role, EvidenceOnly, Unresolved, IsPartial=true, or a claim SourceId containing a partial marker while presented as a whole-source claim always defers the whole candidate. Exact duplicate claims with identical SourceId/Role/State/IsPartial are normalized away deterministically before validation. One SourceId carrying more than one distinct role inside the same candidate is a ClaimRoleConflict and also defers the whole candidate because P0 has no SubEntityRef to disambiguate parts.
 
 CandidateId uses the normalized declared source set, not the claim set. Exact duplicate candidate descriptors with the same CandidateId are deterministically deduplicated. The same CandidateId with different semantic type, source set, claims, or HATCH classification is CandidateIdentityViolation Critical; every involved source is preserved and no candidate with that identity is emitted.
 
@@ -177,8 +179,11 @@ A candidate with a missing explicit claim, an EvidenceOnly role, or an Unresolve
 
 The shared-claim policy remains one-pass over the full graph:
 
+- the overlap graph is built once from every valid claim before eligibility is evaluated;
+- deferred candidates remain claimants for every other SourceId they claim;
 - any SourceId with two or more valid CandidateIds defers all involved candidates;
-- there is no recomputation or promotion after deferral;
+- there is no recomputation, claimant removal, or promotion after deferral;
+- therefore chain/cycle conflicts propagate deterministically across the full claim graph;
 - every source used by a deferred candidate is preserved;
 - each deferred case reports DeferredShared at High severity.
 
