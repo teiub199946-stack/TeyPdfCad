@@ -218,7 +218,7 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
-    public void Writer_inserts_confirmed_template_block_in_model_space()
+    public void Writer_defers_template_that_would_replace_unverified_source_geometry()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
             [new VectorLine("stamp", new Point2(0, 0), new Point2(10, 0), new VectorStyle())]);
@@ -240,10 +240,8 @@ public sealed class DwgDocumentWriterTests
                 [1] = new(true, "A3-landscape", "test", ["stamp"])
             })));
 
-        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
-        Assert.Equal("A3-landscape", insert.Block.Name);
-        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
-        Assert.Single(insert.Block.Entities.OfType<ACadSharp.Entities.Circle>());
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
     }
 
     [Fact]
@@ -322,7 +320,7 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
-    public void Writer_does_not_duplicate_template_mtext_when_source_text_is_preserved()
+    public void Writer_preserves_source_and_skips_unverified_replacement_template()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
@@ -347,8 +345,8 @@ public sealed class DwgDocumentWriterTests
                 [1] = new(true, "A3-landscape", "test", ["frame"])
             })));
 
-        var insert = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
-        Assert.Empty(insert.Block.Entities.OfType<ACadSharp.Entities.TextEntity>());
+        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Insert>());
+        Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Line>());
         Assert.Equal("Исходное значение", Assert.Single(
             drawing.Entities.OfType<ACadSharp.Entities.TextEntity>()).Value);
     }
