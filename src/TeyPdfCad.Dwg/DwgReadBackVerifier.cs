@@ -9,7 +9,12 @@ namespace TeyPdfCad.Dwg;
 public sealed record DwgStructuralInventory(
     int CountedEntityCount,
     int CandidateMetadataEntityCount,
-    IReadOnlyDictionary<string, int> OutputFingerprintCounts);
+    IReadOnlyDictionary<string, int> OutputFingerprintCounts)
+{
+    public IReadOnlyDictionary<PageSourceRef, IReadOnlyDictionary<string, int>>
+        SourceFingerprintCountsBySource { get; init; }
+        = new Dictionary<PageSourceRef, IReadOnlyDictionary<string, int>>();
+}
 
 public sealed class DwgReadBackVerifier
 {
@@ -156,10 +161,35 @@ public sealed class DwgReadBackVerifier
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
 
+        var sourceFingerprints = counted
+            .Select(entity => new
+            {
+                Entity = entity,
+                HasSource = SourceMetadataCodec.TryRead(entity, out var source),
+                Source = source
+            })
+            .Where(item => item.HasSource)
+            .GroupBy(item => item.Source)
+            .OrderBy(group => group.Key.PageNumber)
+            .ThenBy(group => group.Key.SourceId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyDictionary<string, int>)group
+                    .Select(item => DwgEntityFingerprint.ComputeOutput(item.Entity))
+                    .GroupBy(value => value, StringComparer.Ordinal)
+                    .OrderBy(fingerprintGroup => fingerprintGroup.Key, StringComparer.Ordinal)
+                    .ToDictionary(
+                        fingerprintGroup => fingerprintGroup.Key,
+                        fingerprintGroup => fingerprintGroup.Count(),
+                        StringComparer.Ordinal));
+
         return new DwgStructuralInventory(
             counted.Count,
             counted.Count(CandidateMetadataCodec.HasCandidateApp),
-            fingerprints);
+            fingerprints)
+        {
+            SourceFingerprintCountsBySource = sourceFingerprints
+        };
     }
 
     private static IReadOnlyList<Observation> ReadObservations(
