@@ -691,7 +691,7 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
-    public void Writer_replaces_confirmed_parallel_source_lines_with_a_native_pattern_hatch()
+    public void Writer_probe_keeps_confirmed_pattern_sources_until_read_back_authorization()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
@@ -704,7 +704,7 @@ public sealed class DwgDocumentWriterTests
 
         var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(document, new DocumentLayoutPlanner().Create(document))));
 
-        Assert.Empty(drawing.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
         Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.LwPolyline>());
         var hatch = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Hatch>());
         Assert.False(hatch.IsSolid);
