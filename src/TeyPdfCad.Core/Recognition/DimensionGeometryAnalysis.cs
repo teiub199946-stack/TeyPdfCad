@@ -128,24 +128,47 @@ internal static class DimensionGeometryAnalysis
     public static double ArrowEvidence(IEnumerable<LinePrimitive> lines, LinePrimitive dimensionLine,
         double textHeight, Point2 unitDim)
     {
+        var materialized = lines as IReadOnlyList<LinePrimitive> ?? lines.ToArray();
         var radius = Math.Max(textHeight * 2.0, GeometryMath.Distance(dimensionLine.Start, dimensionLine.End) * 0.04);
-        var first = HasArrowLine(lines, dimensionLine, dimensionLine.Start, radius, textHeight, unitDim);
-        var second = HasArrowLine(lines, dimensionLine, dimensionLine.End, radius, textHeight, unitDim);
+        var first = HasArrowLine(materialized, dimensionLine, dimensionLine.Start, radius, textHeight, unitDim);
+        var second = HasArrowLine(materialized, dimensionLine, dimensionLine.End, radius, textHeight, unitDim);
         return (Convert.ToInt32(first) + Convert.ToInt32(second)) / 2.0;
+    }
+
+    public static IReadOnlyList<LinePrimitive> FindArrowGeometryLines(
+        IEnumerable<LinePrimitive> lines,
+        LinePrimitive dimensionLine,
+        double textHeight,
+        Point2 unitDim)
+    {
+        var radius = Math.Max(textHeight * 2.0, GeometryMath.Distance(dimensionLine.Start, dimensionLine.End) * 0.04);
+        return lines
+            .Where(line => !ReferenceEquals(line, dimensionLine))
+            .Where(line => IsArrowLineAt(line, dimensionLine.Start, radius, textHeight, unitDim)
+                || IsArrowLineAt(line, dimensionLine.End, radius, textHeight, unitDim))
+            .Distinct()
+            .ToArray();
     }
 
     private static bool HasArrowLine(IEnumerable<LinePrimitive> lines, LinePrimitive dimensionLine,
         Point2 endpoint, double radius, double textHeight, Point2 unitDim)
+        => lines.Any(line =>
+            !ReferenceEquals(line, dimensionLine)
+            && IsArrowLineAt(line, endpoint, radius, textHeight, unitDim));
+
+    private static bool IsArrowLineAt(
+        LinePrimitive line,
+        Point2 endpoint,
+        double radius,
+        double textHeight,
+        Point2 unitDim)
     {
-        foreach (var line in lines)
-        {
-            if (ReferenceEquals(line, dimensionLine)) continue;
-            var length = GeometryMath.Distance(line.Start, line.End);
-            if (length <= 1e-9 || length > Math.Max(textHeight * 4.0, radius * 2.0)) continue;
-            if (GeometryMath.Distance(GeometryMath.Midpoint(line.Start, line.End), endpoint) > radius) continue;
-            var dot = Math.Abs(GeometryMath.Dot(GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start)), unitDim));
-            if (dot is > 0.20 and < 0.98) return true;
-        }
-        return false;
+        var length = GeometryMath.Distance(line.Start, line.End);
+        if (length <= 1e-9 || length > Math.Max(textHeight * 4.0, radius * 2.0)) return false;
+        if (GeometryMath.Distance(GeometryMath.Midpoint(line.Start, line.End), endpoint) > radius) return false;
+        var dot = Math.Abs(GeometryMath.Dot(
+            GeometryMath.Normalize(GeometryMath.Subtract(line.End, line.Start)),
+            unitDim));
+        return dot is > 0.20 and < 0.98;
     }
 }
