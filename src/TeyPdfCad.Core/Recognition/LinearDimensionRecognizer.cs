@@ -172,7 +172,11 @@ public sealed class LinearDimensionRecognizer
         // structural evidence by itself. Without explicit arrow/tick geometry,
         // table/block/ordinary-line lookalikes can reach the old 0.90 confidence
         // ceiling and become false-positive native dimensions.
-        if (probe.Value.ArrowEvidence <= 0d)
+        // Full native dimension reconstruction requires arrow/tick evidence
+        // at both endpoints. One-sided evidence is intentionally treated as
+        // ambiguous and abstained from rather than promoted to a destructive
+        // semantic replacement candidate.
+        if (probe.Value.ArrowEvidence < 1d)
             return null;
 
         var rawScale = displayedValue / probe.Value.ProjectedDistance;
