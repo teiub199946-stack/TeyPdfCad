@@ -26,8 +26,8 @@
 
 - Malformed or duplicate candidate XData must preserve all claimed source instead of being accepted by a permissive reader. Task 2.
 - A multi-entity leader or level with one missing child must fail the whole candidate and preserve every eligible source. Task 2.
-- A source that emits several DWG entities must contribute its true count to final sanity. Task 3.
-- A final-pass bug that drops a native entity or ignores suppression must fail closed and publish no DWG. Task 4.
+- A source that emits several DWG entities must contribute its exact output-fingerprint multiset to final sanity. Task 3.
+- A final-pass bug that drops, swaps, or replaces a native/source entity with a different fingerprint must fail closed and publish no DWG. Task 4.
 - Changing recognizer or source enumeration order must not change candidate identity, shared deferral, or paint order. Tasks 1 and 3.
 
 ## File structure
@@ -39,7 +39,7 @@
 | src/TeyPdfCad.Core/Recognition/ReplacementExecutionAuditor.cs | Verification-driven residual construction; no writer-key authority. |
 | src/TeyPdfCad.Core/Recognition/HatchRecognizer.cs | Explicit boundary/pattern lists and Confident/Uncertain classification. |
 | src/TeyPdfCad.Dwg/CandidateMetadataCodec.cs | Strict two-string XData codec. |
-| src/TeyPdfCad.Dwg/DwgReadBackVerifier.cs | Probe verification, required-property checks, and structural summaries. |
+| src/TeyPdfCad.Dwg/DwgReadBackVerifier.cs | Probe verification, required-property checks, and on-disk output-fingerprint inventories. |
 | src/TeyPdfCad.Dwg/AcadSharpDwgWriter.cs | Metadata, manifest, source-emission summary, and immutable paint keys. |
 | src/TeyPdfCad.Dwg/PaintOrderEngine.cs | Ordering only by immutable identity fields. |
 | src/TeyPdfCad.Cli/ConversionPipeline.cs | Probe → verify → gate → final → final-sanity sequence. |
@@ -205,14 +205,15 @@ public static class CandidateMetadataCodec
     public static bool TryRead(Entity entity, out CandidateEntityMetadata metadata);
 }
 
-public sealed record DwgStructuralSummary(
+public sealed record DwgStructuralInventory(
     int CountedEntityCount,
-    int CandidateMetadataEntityCount);
+    int CandidateMetadataEntityCount,
+    IReadOnlyDictionary<string, int> OutputFingerprintCounts);
 
 public sealed class DwgReadBackVerifier
 {
     public DwgReadBackVerification Verify(string dwgPath, DwgWriteManifest manifest);
-    public DwgStructuralSummary ReadStructuralSummary(string dwgPath);
+    public DwgStructuralInventory ReadStructuralInventory(string dwgPath);
 }
 ~~~
 
@@ -242,7 +243,7 @@ Implement required-property evaluators:
 - level.attributeTag and level.nonEmptyValue plus parent ownership;
 - hatch.minimumArea and hatch.boundaryFingerprint.
 
-ReadStructuralSummary counts ModelSpace top-level entities plus nested Insert attributes, and separately valid metadata-bearing entities. It never counts BlockRecord definition entities.
+ReadStructuralInventory counts ModelSpace top-level entities plus nested Insert attributes, separately valid metadata-bearing entities, and an OutputFingerprint multiset. A fingerprint covers entity kind, canonical geometry, relevant style, and valid CandidateId/Role when present. It never counts BlockRecord definition entities.
 
 - [ ] **Step 4: Run focused and persistence regressions**
 
@@ -275,9 +276,10 @@ git commit -m "feat: verify candidate metadata from DWG read-back"
 
 ~~~
 public sealed record SourceEmissionSummary(
-    IReadOnlyDictionary<string, int> EmittedEntityCountBySourceId)
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> OutputFingerprintCountsBySourceId)
 {
-    public int GetExpectedSuppressionDelta(IEnumerable<string> sourceIds);
+    public IReadOnlyDictionary<string, int> GetExpectedSuppressionFingerprintMultiset(
+        IEnumerable<string> sourceIds);
 }
 
 public sealed record DwgWriteResult(
@@ -291,7 +293,7 @@ public sealed record DwgWriteResult(
 
 Use a fixture with Dimension, Leader+Text, Axis Insert, Level Insert+Attribute, and Hatch. Assert manifest roles/types, exact metadata on all natives, same CandidateId but differing Leader/Level roles, and no BlockRecord metadata.
 
-Add source count test where a filled source creates a boundary plus Hatch; its SourceEmissionSummary value must be two or more. Add authorized-suppression test: a source is emitted in probe mode and omitted only when its ID is passed in final authorization.
+Add source-inventory test where a filled source creates a boundary plus Hatch; its SourceEmissionSummary multiset must contain at least two output occurrences. Add authorized-suppression test: a source is emitted in probe mode and omitted only when its ID is passed in final authorization.
 
 Shuffle input entity order and expect unchanged immutable paint keys.
 
@@ -323,7 +325,7 @@ Refactor WriteDimension, WriteArcDimension, WriteLeader, WriteAxis, WriteLevel, 
 
 Properties come from semantic candidate input before serialization. Level labels Insert primary and owned AttributeEntity attribute; never label definition. Uncertain hatch does not invoke native hatch writer.
 
-Record every emitted DWG entity under its SourceId, including fills/boundaries. GetExpectedSuppressionDelta sums counts once per distinct ID and rejects unknown IDs.
+Record the output fingerprint of every emitted DWG source entity under its SourceId, including fills/boundaries. GetExpectedSuppressionFingerprintMultiset merges counts once per distinct ID and rejects unknown IDs. The probe verifier must confirm this requested removal multiset is a sub-multiset of the actual on-disk probe inventory before final subtraction.
 
 Replace PaintOrderItem.InsertionIndex with:
 
@@ -363,8 +365,8 @@ git commit -m "feat: emit native manifest and source summaries"
 
 ~~~
 private static void EnsureFinalStructuralSanity(
-    DwgStructuralSummary probe,
-    DwgStructuralSummary final,
+    DwgStructuralInventory probe,
+    DwgStructuralInventory final,
     SourceEmissionSummary sourceEmission,
     IReadOnlySet<string> authorizedSuppressedSourceIds);
 ~~~
@@ -373,8 +375,9 @@ private static void EnsureFinalStructuralSanity(
 
 Add tests named:
 - Pipeline_keeps_sources_when_probe_verification_rejects_a_native_candidate
-- Pipeline_publishes_final_only_when_structural_delta_matches_probe
-- Pipeline_does_not_publish_dwg_when_final_native_count_changes
+- Pipeline_publishes_final_only_when_fingerprint_multiset_matches_probe
+- Pipeline_does_not_publish_dwg_when_final_native_fingerprint_changes
+- Pipeline_does_not_publish_dwg_when_wrong_source_is_suppressed
 
 For final-count failure, inject an internal IDwgDocumentWriter seam whose final pass omits one native. Assert InvalidArgumentsOrIo, no output DWG, and report residual SourceSuppressionViolation.
 
@@ -392,16 +395,20 @@ In ConvertAsync:
 1. Build provisional replacement plans. Gate semantic recognition and replacement only at this boundary; disabled semantic means empty claims, disabled replacement means empty final authorization.
 2. Write probe without authorization to unique temporary path in output directory; close it.
 3. Verify probe manifest from disk; run SuppressionGate per page; union actual authorization.
-4. Read probe structural summary.
+4. Read probe structural inventory from disk. Validate the authorized source-emission fingerprint multiset is a sub-multiset of that real inventory.
 5. Write final to a second unique temporary path with exact authorization.
-6. Read final summary and require:
+6. Read final inventory and require:
 
 ~~~
 final.CandidateMetadataEntityCount == probe.CandidateMetadataEntityCount
-final.CountedEntityCount ==
-    probe.CountedEntityCount -
-    probe.SourceEmissionSummary.GetExpectedSuppressionDelta(authorized)
+final.OutputFingerprintCounts ==
+    MultisetSubtract(
+        probe.OutputFingerprintCounts,
+        probe.SourceEmissionSummary
+            .GetExpectedSuppressionFingerprintMultiset(authorized))
 ~~~
+
+This catches wrong-source suppression whenever outputs differ, native loss/replacement, and count-preserving swaps. It deliberately does not claim to distinguish geometrically and stylistically identical sources without source XData.
 
 7. On mismatch create Critical SourceSuppressionViolation, remove only known temp paths, write failure report, and do not publish an output DWG.
 8. On success atomically move final temp to requested output and remove probe temp.
@@ -492,7 +499,7 @@ git commit -m "test: cover P0 report and failure policy"
 - Probe verification, manifest, triple comparison, sanity properties, no writer-count authority: Tasks 1–4.
 - Exact XData schema, multi-entity roles, Insert vs BlockRecord, AutoCAD fixture: Tasks 2, 3, 5.
 - Shared claims, deterministic identity, no spatial fallback, explicit HATCH uncertainty: Task 1.
-- Whole-document two-pass, actual emitted delta, atomic publish, fail-closed: Task 4.
+- Whole-document two-pass, verified output-fingerprint multiset, atomic publish, fail-closed: Task 4.
 - Immutable paint order: Task 3.
 - Per-page status and truthful reports: Tasks 4–5.
 - Exclusions remain stated in Global Constraints and unchanged by all tasks.
@@ -503,7 +510,7 @@ No TODO/TBD or generic test/handling steps remain. Each test and implementation 
 
 ### Type consistency
 
-DwgWriteManifest, DwgReadBackVerification, SuppressionGate, CandidateMetadataCodec, DwgStructuralSummary, SourceEmissionSummary, and DwgWriteResult are introduced before consumption. Structural count scope is consistently ModelSpace top-level entities plus nested Insert attributes.
+DwgWriteManifest, DwgReadBackVerification, SuppressionGate, CandidateMetadataCodec, DwgStructuralInventory, SourceEmissionSummary, and DwgWriteResult are introduced before consumption. Structural inventory scope is consistently ModelSpace top-level entities plus nested Insert attributes.
 
 ### Review Focus coverage
 
