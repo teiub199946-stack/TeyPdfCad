@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TeyPdfCad.TestGenerator.Diagnostics;
+using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Reporting;
 using Xunit;
 
@@ -7,6 +8,158 @@ namespace TeyPdfCad.Tests;
 
 public sealed class DiagnosticCliTests
 {
+
+    [Fact]
+    public async Task P0QualityGate_PassesCleanCurrentBranchEvidence()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "teypdfcad-p0-gate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var corePath = Path.Combine(directory, "core.json");
+            var diagnosticPath = Path.Combine(directory, "diagnostic.json");
+            var gatePath = Path.Combine(directory, "gate.json");
+
+            var core = new RegressionReport
+            {
+                Seed = 12345,
+                Total = 1,
+                ReleaseGate = new ReleaseGateResult
+                {
+                    Status = "PASS"
+                }
+            };
+            var diagnostic = new DiagnosticRegressionReport
+            {
+                Seed = 12345,
+                Total = 1,
+                FalsePositive = 0,
+                Cases =
+                [
+                    new DiagnosticCaseRecord
+                    {
+                        Expected = new DimensionCase
+                        {
+                            ExpectedResult = ExpectedResult.Recognized
+                        },
+                        Actual = new ActualDimensionResult
+                        {
+                            Result = ExpectedResult.Recognized
+                        }
+                    }
+                ]
+            };
+
+            await File.WriteAllTextAsync(
+                corePath,
+                JsonDefaults.Serialize(core));
+            await File.WriteAllTextAsync(
+                diagnosticPath,
+                JsonDefaults.Serialize(diagnostic));
+
+            var exitCode = await TestGenerator.Program.Main(
+            [
+                "p0-quality-gate",
+                "--core-report", corePath,
+                "--diagnostic-report", diagnosticPath,
+                "--expected-count", "1",
+                "--output", gatePath
+            ]);
+
+            Assert.Equal(0, exitCode);
+            using var gate = JsonDocument.Parse(
+                await File.ReadAllTextAsync(gatePath));
+            Assert.Equal(
+                "PASS",
+                gate.RootElement.GetProperty("status").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task P0QualityGate_FailsWhenAmbiguousEvidenceIsForcedIntoRecognition()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "teypdfcad-p0-gate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var corePath = Path.Combine(directory, "core.json");
+            var diagnosticPath = Path.Combine(directory, "diagnostic.json");
+            var gatePath = Path.Combine(directory, "gate.json");
+
+            var core = new RegressionReport
+            {
+                Seed = 12345,
+                Total = 1,
+                ReleaseGate = new ReleaseGateResult
+                {
+                    Status = "PASS"
+                }
+            };
+            var diagnostic = new DiagnosticRegressionReport
+            {
+                Seed = 12345,
+                Total = 1,
+                FalsePositive = 0,
+                Cases =
+                [
+                    new DiagnosticCaseRecord
+                    {
+                        Expected = new DimensionCase
+                        {
+                            ExpectedResult = ExpectedResult.Ambiguous
+                        },
+                        Actual = new ActualDimensionResult
+                        {
+                            Result = ExpectedResult.Recognized
+                        }
+                    }
+                ]
+            };
+
+            await File.WriteAllTextAsync(
+                corePath,
+                JsonDefaults.Serialize(core));
+            await File.WriteAllTextAsync(
+                diagnosticPath,
+                JsonDefaults.Serialize(diagnostic));
+
+            var exitCode = await TestGenerator.Program.Main(
+            [
+                "p0-quality-gate",
+                "--core-report", corePath,
+                "--diagnostic-report", diagnosticPath,
+                "--expected-count", "1",
+                "--output", gatePath
+            ]);
+
+            Assert.Equal(2, exitCode);
+            using var gate = JsonDocument.Parse(
+                await File.ReadAllTextAsync(gatePath));
+            Assert.Equal(
+                "FAIL",
+                gate.RootElement.GetProperty("status").GetString());
+            Assert.Equal(
+                1,
+                gate.RootElement
+                    .GetProperty("forcedAmbiguousRecognition")
+                    .GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task DiagnoseCore_WritesDedicatedTest003Artifacts()
     {
