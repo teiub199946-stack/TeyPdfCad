@@ -14,11 +14,16 @@
 
 - Suppression is allowed only after on-disk probe-file read-back; writer counters are diagnostics only.
 - Candidate metadata is exactly two flat ASCII XData strings under TEYCONVERT_CANDIDATE_V1: CandidateId, then Role.
-- Every source has a non-empty page-unique SourceId. Duplicate or empty IDs are Critical SourceIdentityViolation; preserve all involved source and authorize none.
+- Every source has a non-empty page-unique SourceId. Duplicate or empty IDs are Critical SourceIdentityViolation; preserve all involved source and authorize none. Invalid-ID entities never enter authorization and remain emitted; P0 does not introduce per-entity ordinal identity.
 - One entity has exactly one CandidateId and role; a candidate may own multiple entities. Never attach candidate metadata to BlockRecord.
 - No spatial or bbox fallback, ExtDict fallback, Core Console path, SubEntityRef, or source XData in P0.
 - HATCH: confident preserves boundary and may suppress pattern only after verification; uncertain writes no native HATCH, preserves all its sources, and emits DeferredUncertainHatch at Medium.
-- Residual severities are fixed: DeferredShared High; DeferredUncertainHatch Medium; CandidateNotVerified, SourceIdentityViolation, SourceSuppressionViolation Critical.
+- Residual severities are fixed: DeferredShared High; DeferredUnresolvedClaims High; DeferredUncertainHatch Medium; CandidateNotVerified, SourceIdentityViolation, CandidateIdentityViolation, SourceSuppressionViolation Critical.
+- Candidate identity is built from page + semantic type + normalized declared source set + normalized geometry fingerprint. Claims never supply missing identity inputs.
+- The normalized declared source set must exactly equal the distinct union of explicit recognizer claims; mismatch is fail-closed.
+- Unknown/default role, EvidenceOnly, Unresolved, partial claim, or one SourceId carrying multiple distinct roles defers the whole candidate.
+- Exact duplicate candidate descriptors may be deduplicated; same CandidateId with differing descriptor data is Critical CandidateIdentityViolation.
+- Warning provenance is EvidenceOnly: preserve its source; overlap with a candidate defers that candidate.
 - The document is written twice as a whole; per-page semantic failures preserve source and continue, but serialization/probe-read-back/final-sanity failures publish no DWG.
 - Final sanity uses on-disk output-fingerprint multisets, not SourceId count. It is structural only, not a per-source final verifier.
 - Immutable paint ordering must not depend on document insertion enumeration.
@@ -182,7 +187,7 @@ public void Gate_preserves_every_claim_of_an_unverified_multi_source_candidate()
 
 Add three named RED cases: Duplicate_source_id_is_never_collapsed, Empty_source_id_is_not_suppressible, and Duplicate_source_id_for_verified_candidate_still_preserves_sources. Each asserts SourceIdentityViolation Critical, preservation of every involved source, and no eligible source.
 
-Add explicit-role cases: a Dimension claim retains DimensionLine/ExtensionLine/ArrowGeometry/Text; Leader retains LeaderShaft/LeaderArrow/Text; Axis and Level retain AxisGeometry/LevelMarker/Text. A candidate missing any suppressible explicit claim or containing EvidenceOnly/Unresolved returns DeferredUnresolvedClaims High, preserves sources, and is absent from native emission eligibility. The planner test proves it does not inspect VectorEntity runtime type to derive roles.
+Add explicit-role cases: a Dimension claim retains DimensionLine/ExtensionLine/ArrowGeometry/Text; Leader retains LeaderShaft/LeaderArrow/Text; Axis and Level retain AxisGeometry/LevelMarker/Text. Add named red-team cases Dimension_MissingExtensionLine_IsDeferred_NoEligibleSources, SameSource_TwoRoles_SameCandidate_Violation, CandidateSourceSet_MustEqualUnionOfClaims_MismatchDefers, Claim_UnsetRole_Rejected_NotSilentlyDefaulted, PartialFlag_AlwaysDefers_RegardlessOfSourceShape, TwoCandidates_SameCandidateId_WithDifferentClaims_BothDeferred, DuplicateCandidate_ExactDuplicate_IsDeduplicatedDeterministically, WarningEvidence_OverlappingCandidate_BlocksEligibility, and OrphanEvidenceOnlyClaim_SourcePreserved_NoCandidateImpact. A candidate missing any required explicit claim or containing Unknown/EvidenceOnly/Unresolved/partial data returns DeferredUnresolvedClaims High, preserves sources, and is absent from native emission eligibility. The planner test proves it does not inspect VectorEntity runtime type to derive roles.
 
 Add chain and cycle cases with shuffled recognizer order, checking identical sorted deferred candidates and preservation of every claimed source. Add uncertain-HATCH test: no native candidate is eligible, all HATCH sources preserved, one DeferredUncertainHatch Medium residual.
 
@@ -210,7 +215,7 @@ public sealed record HatchClaim(
     HatchClassification Classification);
 ~~~
 
-Refactor Dimension, Leader, Axis, Level, ArcDimension, and Hatch recognizers to populate RecognizerSourceClaim directly on their candidate results. Refactor SourceReplacementPlanner to consume those claims exclusively; delete the VectorText-versus-PrimaryGeometry inference and the provenance[0] HATCH convention. A missing explicit claim, EvidenceOnly role, or Unresolved state yields High DeferredUnresolvedClaims, preserves all related sources, and removes that candidate from writer eligibility. Uncertain HATCH produces no native candidate and a Medium DeferredUncertainHatch residual.
+Refactor Dimension, Leader, Axis, Level, ArcDimension, and Hatch recognizers to populate RecognizerSourceClaim directly on their candidate results. Refactor SourceReplacementPlanner to consume claims exclusively for authorization decisions; delete the VectorText-versus-PrimaryGeometry inference and the provenance[0] HATCH convention. Keep a normalized declared source set only for CandidateId and fail-closed completeness validation: it must exactly equal the distinct union of claim SourceIds and may never authorize suppression. Enforce minimum semantic roles, Unknown/default-role rejection, IsPartial=true rejection, same-candidate multi-role SourceId conflict, exact duplicate-candidate deduplication, differing-descriptor CandidateId collision rejection, and EvidenceOnly warning blockers. A missing explicit claim, EvidenceOnly role, or Unresolved state yields High DeferredUnresolvedClaims, preserves all related sources, and removes that candidate from writer eligibility. Uncertain HATCH produces no native candidate and a Medium DeferredUncertainHatch residual.
 
 Implement CreateCandidateId(page, semanticType, sourceIds, normalizedGeometryFingerprint): sort ordinally; concatenate version/page/type/sources/fingerprint with unambiguous separators; hash SHA-256; return v1:page:type:first-16-lowercase-hex. Reject blank IDs and page-local collisions. Report recognizer version separately; it is not hash input.
 
