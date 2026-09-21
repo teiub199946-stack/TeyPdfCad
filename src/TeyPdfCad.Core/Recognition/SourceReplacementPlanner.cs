@@ -131,6 +131,29 @@ public sealed class SourceReplacementPlanner
                 []));
         }
 
+        foreach (var sourceId in sources
+                     .Select(source => source.SourceId)
+                     .Where(sourceId =>
+                         !string.IsNullOrWhiteSpace(sourceId)
+                         && sourceId.Any(char.IsControl))
+                     .Distinct(StringComparer.Ordinal)
+                     .OrderBy(sourceId => sourceId, StringComparer.Ordinal))
+        {
+            invalid.Add(sourceId);
+            AddResidual(
+                residuals,
+                sourceId,
+                null,
+                ReplacementResidualKind.SourceIdentityViolation,
+                ReplacementResidualSeverity.Critical,
+                "SourceId contains control characters and cannot be persisted as P0 source identity; source is preserved.");
+            conflicts.Add(new ReplacementConflict(
+                sourceId,
+                ReplacementConflictReason.SourceIdentityViolation,
+                "P0 SourceId must be non-empty and contain no control characters.",
+                []));
+        }
+
         foreach (var group in sources
                      .Where(source => !string.IsNullOrWhiteSpace(source.SourceId))
                      .GroupBy(source => source.SourceId, StringComparer.Ordinal)
