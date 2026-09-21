@@ -37,9 +37,13 @@
 | File | Responsibility |
 |---|---|
 | src/TeyPdfCad.Core/Recognition/ReplacementVerificationContracts.cs | Existing/modified SourceReplacementPlan plus neutral NativeWriteManifest, NativeReadBackVerification, HatchClaim, gate, residual, and page-status contracts. |
-| src/TeyPdfCad.Core/Recognition/SourceReplacementPlanner.cs | CandidateId canonicalization, explicit source roles, deterministic shared claims, explicit HATCH classification. |
+| src/TeyPdfCad.Core/Recognition/SourceReplacementPlanner.cs | Consumes explicit recognizer claims only; candidate identity, source identity, deterministic shared claims, HATCH classification. |
 | src/TeyPdfCad.Core/Recognition/ReplacementExecutionAuditor.cs | Verification-driven residual construction; no writer-key authority. |
 | src/TeyPdfCad.Core/Recognition/HatchRecognizer.cs | Explicit boundary/pattern lists and Confident/Uncertain classification. |
+| src/TeyPdfCad.Core/Recognition/SemanticReconstructionEngine.cs | Carries recognizer-owned claims into SemanticReconstructionResult. |
+| src/TeyPdfCad.Core/Semantics/Dimensions/DimensionCandidate.cs | Explicit DimensionLine/ExtensionLine/ArrowGeometry/Text claims. |
+| src/TeyPdfCad.Core/Semantics/AnnotationCandidates.cs | Explicit Leader/Axis/Level source claims. |
+| src/TeyPdfCad.Core/Semantics/SemanticReconstructionResult.cs | Stores candidate claim sets; legacy ProvenanceIds remain diagnostics only. |
 | src/TeyPdfCad.Dwg/CandidateMetadataCodec.cs | Strict two-string XData codec. |
 | src/TeyPdfCad.Dwg/DwgReadBackVerifier.cs | Probe verification, required-property checks, and on-disk output-fingerprint inventories. |
 | src/TeyPdfCad.Dwg/AcadSharpDwgWriter.cs | Metadata, manifest, source-emission summary, and immutable paint keys. |
@@ -55,7 +59,7 @@
 
 The task sections describe ownership; execute their deliverables in this safety order, with a focused test run and commit after every line. The writer receives a caller-owned Stream and never closes it; CLI owns, closes, and atomically publishes both temporary files.
 
-1. Implement only Task 1 contracts and deterministic CandidateId. Do not change shared-claim or HATCH behavior yet.
+1. Implement only Task 1 contracts, deterministic CandidateId, SourceIdentityViolation, and recognizer-owned claims. Do not change shared-claim or HATCH replacement behavior yet.
 2. Implement the Task 2 metadata codec and its smoke tests.
 3. Implement the Task 3 writer manifest and metadata emission in probe-only mode; authorization is always empty and all sources remain.
 4. Implement Task 2 read-back verification against closed files, including required-property failures.
@@ -81,6 +85,10 @@ flowchart LR
 **Files:**
 - Create: src/TeyPdfCad.Core/Recognition/ReplacementVerificationContracts.cs
 - Modify: src/TeyPdfCad.Core/Recognition/SourceReplacementPlanner.cs
+- Modify: src/TeyPdfCad.Core/Recognition/SemanticReconstructionEngine.cs
+- Modify: src/TeyPdfCad.Core/Semantics/Dimensions/DimensionCandidate.cs
+- Modify: src/TeyPdfCad.Core/Semantics/AnnotationCandidates.cs
+- Modify: src/TeyPdfCad.Core/Semantics/SemanticReconstructionResult.cs
 - Modify: src/TeyPdfCad.Core/Recognition/ReplacementExecutionAuditor.cs
 - Modify: src/TeyPdfCad.Core/Recognition/HatchRecognizer.cs
 - Create: tests/TeyPdfCad.Tests/Recognition/SourceReplacementPlannerTests.cs
@@ -122,6 +130,12 @@ public sealed class SuppressionGate
         SourceReplacementPlan plan,
         NativeReadBackVerification verification);
 }
+
+public sealed record RecognizerSourceClaim(
+    string SourceId,
+    SourceUsageRole Role,
+    SourceClaimState State,
+    bool IsPartial);
 ~~~
 
 - [ ] **Step 1: Write failing planner and gate tests**
@@ -158,7 +172,11 @@ public void Gate_preserves_every_claim_of_an_unverified_multi_source_candidate()
 }
 ~~~
 
-Also add empty-SourceId and duplicate-SourceId cases: planner returns SourceIdentityViolation Critical, preserves all involved sources, and exposes no eligible source. Add chain and cycle cases with shuffled recognizer order, checking identical sorted deferred candidates and preservation of every claimed source. Add uncertain-HATCH test: no native candidate is eligible, all HATCH sources preserved, one DeferredUncertainHatch Medium residual.
+Add three named RED cases: Duplicate_source_id_is_never_collapsed, Empty_source_id_is_not_suppressible, and Duplicate_source_id_for_verified_candidate_still_preserves_sources. Each asserts SourceIdentityViolation Critical, preservation of every involved source, and no eligible source.
+
+Add explicit-role cases: a Dimension claim retains DimensionLine/ExtensionLine/ArrowGeometry/Text; Leader retains LeaderShaft/LeaderArrow/Text; Axis and Level retain AxisGeometry/LevelMarker/Text. A candidate missing any suppressible explicit claim or containing EvidenceOnly/Unresolved returns DeferredUnresolvedClaims High, preserves sources, and is absent from native emission eligibility. The planner test proves it does not inspect VectorEntity runtime type to derive roles.
+
+Add chain and cycle cases with shuffled recognizer order, checking identical sorted deferred candidates and preservation of every claimed source. Add uncertain-HATCH test: no native candidate is eligible, all HATCH sources preserved, one DeferredUncertainHatch Medium residual.
 
 - [ ] **Step 2: Run the focused Core tests and verify they fail**
 
@@ -184,7 +202,7 @@ public sealed record HatchClaim(
     HatchClassification Classification);
 ~~~
 
-Refactor HatchRecognizer and SourceReplacementPlanner.AddHatchClaims so lists are explicit; delete the provenance[0] convention. Uncertain produces no native candidate and a Medium DeferredUncertainHatch residual.
+Refactor Dimension, Leader, Axis, Level, ArcDimension, and Hatch recognizers to populate RecognizerSourceClaim directly on their candidate results. Refactor SourceReplacementPlanner to consume those claims exclusively; delete the VectorText-versus-PrimaryGeometry inference and the provenance[0] HATCH convention. A missing explicit claim, EvidenceOnly role, or Unresolved state yields High DeferredUnresolvedClaims, preserves all related sources, and removes that candidate from writer eligibility. Uncertain HATCH produces no native candidate and a Medium DeferredUncertainHatch residual.
 
 Implement CreateCandidateId(page, semanticType, sourceIds, normalizedGeometryFingerprint): sort ordinally; concatenate version/page/type/sources/fingerprint with unambiguous separators; hash SHA-256; return v1:page:type:first-16-lowercase-hex. Reject blank IDs and page-local collisions. Report recognizer version separately; it is not hash input.
 
@@ -204,7 +222,7 @@ Expected: PASS. Existing provisional-plan tests must assert EligibleSourceIds; e
 - [ ] **Step 5: Commit**
 
 ~~~bash
-git add src/TeyPdfCad.Core/Recognition tests/TeyPdfCad.Tests/Recognition
+git add src/TeyPdfCad.Core/Recognition src/TeyPdfCad.Core/Semantics tests/TeyPdfCad.Tests/Recognition
 git commit -m "feat: add verification-driven replacement contracts"
 ~~~
 
@@ -526,7 +544,7 @@ git commit -m "test: cover P0 report and failure policy"
 
 - Probe verification, manifest, triple comparison, sanity properties, no writer-count authority: Tasks 1–4.
 - Exact XData schema, multi-entity roles, Insert vs BlockRecord, AutoCAD fixture: Tasks 2, 3, 5.
-- Shared claims, deterministic identity, no spatial fallback, explicit HATCH uncertainty: Task 1.
+- Explicit recognizer claims, SourceIdentityViolation, shared claims, deterministic identity, no spatial fallback, explicit HATCH uncertainty: Task 1.
 - Whole-document two-pass, verified output-fingerprint multiset, atomic publish, fail-closed: Task 4.
 - Immutable paint order: Task 3.
 - Per-page status and truthful reports: Tasks 4–5.
