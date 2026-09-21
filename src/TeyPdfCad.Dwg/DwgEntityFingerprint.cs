@@ -78,6 +78,25 @@ public static class DwgEntityFingerprint
         };
     }
 
+    public static string ComputeBlockDefinition(Insert insert)
+    {
+        ArgumentNullException.ThrowIfNull(insert);
+
+        if (insert.Block is null)
+            return Join("BlockDefinition", "<null>");
+
+        var entityFingerprints = insert.Block.Entities
+            .Select(ComputeOutput)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        return Join(
+            "BlockDefinition",
+            insert.Block.Name ?? string.Empty,
+            entityFingerprints.Length.ToString(CultureInfo.InvariantCulture),
+            string.Join(";", entityFingerprints));
+    }
+
     public static string ComputeHatchBoundary(Hatch hatch)
     {
         ArgumentNullException.ThrowIfNull(hatch);
