@@ -309,8 +309,8 @@ public sealed class DwgReadBackVerifier
                 }
                 var height = entity switch
                 {
-                    TextEntity text => text.Height,
                     AttributeEntity attribute => attribute.Height,
+                    TextEntity text => text.Height,
                     _ => double.NaN
                 };
                 if (!double.IsNaN(height) && height >= minimumHeight)
