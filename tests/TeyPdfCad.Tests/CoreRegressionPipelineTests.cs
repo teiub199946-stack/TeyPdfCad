@@ -40,6 +40,49 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
+    public async Task LinesTextNoArrows_NegativePattern_Is_Not_Recognized()
+    {
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_negative_lines_text_no_arrows",
+            DimensionType = DimensionType.Negative,
+            ExpectedResult = ExpectedResult.Rejected,
+            ExpectedDimensions = 0,
+            ExpectedConfidenceClass = ConfidenceClass.None,
+            NegativePattern = NegativePattern.LinesTextNoArrows
+        };
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Rejected, actual.Result);
+        Assert.Equal(0, actual.DetectedDimensions);
+        Assert.False(actual.SuppressionEvidenceEligible);
+    }
+
+    [Theory]
+    [InlineData(ArrowType.ClosedFilled)]
+    [InlineData(ArrowType.ClosedBlank)]
+    [InlineData(ArrowType.Open)]
+    [InlineData(ArrowType.ArchitecturalTick)]
+    [InlineData(ArrowType.Oblique)]
+    [InlineData(ArrowType.Dot)]
+    public async Task Supported_arrow_types_keep_positive_dimension_recognizable(
+        ArrowType arrowType)
+    {
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_positive_arrow_" + arrowType,
+            ArrowType = arrowType
+        };
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(1, actual.DetectedDimensions);
+        Assert.True(actual.SuppressionEvidenceEligible);
+    }
+
+    [Fact]
     public async Task TextNearOrdinaryLine_NegativePattern_Is_Not_Recognized()
     {
         var testCase = CleanHorizontalCase() with
