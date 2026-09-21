@@ -574,7 +574,7 @@ public sealed class AcadSharpDwgWriter
         return PaintPriority.BaseGeometry;
     }
 
-    private static void WriteDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, DimensionCandidate candidate)
+    private static Dimension WriteDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, DimensionCandidate candidate)
     {
         var first = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint1.X, sheet.ModelOriginY + candidate.DefinitionPoint1.Y, 0d);
         var second = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint2.X, sheet.ModelOriginY + candidate.DefinitionPoint2.Y, 0d);
@@ -592,6 +592,7 @@ public sealed class AcadSharpDwgWriter
         dimension.Text = string.Empty;
         dimension.Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ");
         document.Entities.Add(dimension);
+        return dimension;
     }
 
     private static VectorStyle GetReviewStyle(
@@ -685,7 +686,7 @@ public sealed class AcadSharpDwgWriter
         });
     }
 
-    private static void WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)
+    private static (Leader Leader, TextEntity Annotation) WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)
     {
         var annotation = new TextEntity
         {
@@ -709,9 +710,10 @@ public sealed class AcadSharpDwgWriter
         leader.Vertices.Add(new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d));
         document.Entities.Add(annotation);
         document.Entities.Add(leader);
+        return (leader, annotation);
     }
 
-    private static void WriteAxis(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, AxisCandidate candidate)
+    private static Insert WriteAxis(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, AxisCandidate candidate)
     {
         const string blockName = "TEY_AXIS";
         if (!document.BlockRecords.TryGetValue(blockName, out var block))
@@ -739,9 +741,10 @@ public sealed class AcadSharpDwgWriter
             Layer = styles.GetAnnotationLayer("PDF_ОСИ")
         };
         document.Entities.Add(insert);
+        return insert;
     }
 
-    private static void WriteLevel(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LevelCandidate candidate)
+    private static (Insert Insert, AttributeEntity Attribute) WriteLevel(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LevelCandidate candidate)
     {
         const string blockName = "TEY_LEVEL";
         if (!document.BlockRecords.TryGetValue(blockName, out var block))
@@ -785,9 +788,10 @@ public sealed class AcadSharpDwgWriter
         attribute.Value = candidate.Value;
         attribute.InsertPoint = new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d);
         document.Entities.Add(insert);
+        return (insert, attribute);
     }
 
-    private static void WriteArcDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, ArcDimensionCandidate candidate)
+    private static DimensionArc WriteArcDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, ArcDimensionCandidate candidate)
     {
         var center = new XYZ(
             sheet.ModelOriginX + candidate.Center.X,
@@ -818,6 +822,7 @@ public sealed class AcadSharpDwgWriter
             LineWeight = LineWeightType.W9
         };
         document.Entities.Add(dimension);
+        return dimension;
     }
 
     private static LwPolyline CreateBoundary(IReadOnlyList<TeyPdfCad.Core.Geometry.Point2> loop, double originX, double originY, VectorStyle style, AcadSharpStyleCatalog styles, CadDocument document)
