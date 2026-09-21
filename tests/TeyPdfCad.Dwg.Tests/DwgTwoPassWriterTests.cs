@@ -411,6 +411,134 @@ public sealed class DwgTwoPassWriterTests
         }
     }
 
+
+    [Fact]
+    public void Confident_hatch_final_preserves_boundary_and_suppresses_only_pattern_sources()
+    {
+        var boundary = new VectorPolyline(
+            "boundary",
+            [new(0, 0), new(20, 0), new(20, 20), new(0, 20)],
+            true,
+            new VectorStyle("ШТРИХОВКА"));
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            boundary,
+            new VectorLine("h1", new(1, 4), new(19, 4), new VectorStyle()),
+            new VectorLine("h2", new(1, 8), new(19, 8), new VectorStyle()),
+            new VectorLine("h3", new(1, 12), new(19, 12), new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([], [], null, 0d);
+        var hatchRecognition = new HatchRecognizer().Recognize(page.Entities, page.Number);
+        var nativeHatch = Assert.Single(
+            hatchRecognition.NativeHatches,
+            candidate => !candidate.IsSolid);
+        var plan = new SourceReplacementPlanner().BuildPlan(
+            page.Entities,
+            semantics,
+            hatchRecognition,
+            page.Number);
+        var layout = new DocumentLayoutPlanner().Create(document);
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Dwg.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var probePath = Path.Combine(directory, "probe.dwg");
+        var finalPath = Path.Combine(directory, "final.dwg");
+
+        try
+        {
+            DwgWriteResult probe;
+            using (var probeStream = File.Create(probePath))
+            {
+                probe = new AcadSharpDwgWriter().Write(
+                    probeStream,
+                    document,
+                    layout,
+                    hatchRecognitionByPage: new Dictionary<int, HatchRecognitionResult>
+                    {
+                        [1] = hatchRecognition
+                    },
+                    semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult>
+                    {
+                        [1] = semantics
+                    },
+                    sourceReplacementPlansByPage: new Dictionary<int, SourceReplacementPlan>
+                    {
+                        [1] = plan
+                    });
+            }
+
+            var verifier = new DwgReadBackVerifier();
+            var verification = verifier.Verify(probePath, probe.Manifest);
+            var candidateId = SourceReplacementPlanner.GetCandidateKey(nativeHatch, 1);
+            Assert.True(verification.Candidates[candidateId].IsVerified);
+
+            var decision = new SuppressionGate().Evaluate(plan, verification);
+            Assert.Equal(
+                new[] { "h1", "h2", "h3" },
+                decision.SuppressSourceIds.OrderBy(value => value));
+            Assert.Contains("boundary", decision.PreserveSourceIds);
+
+            var authorization = decision.SuppressSourceIds
+                .Select(sourceId => new PageSourceRef(1, sourceId))
+                .ToHashSet();
+
+            using (var finalStream = File.Create(finalPath))
+            {
+                _ = new AcadSharpDwgWriter().Write(
+                    finalStream,
+                    document,
+                    layout,
+                    hatchRecognitionByPage: new Dictionary<int, HatchRecognitionResult>
+                    {
+                        [1] = hatchRecognition
+                    },
+                    semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult>
+                    {
+                        [1] = semantics
+                    },
+                    sourceReplacementPlansByPage: new Dictionary<int, SourceReplacementPlan>
+                    {
+                        [1] = plan
+                    },
+                    authorizedSuppressedSources: authorization);
+            }
+
+            var finalVerification = verifier.Verify(finalPath, probe.Manifest);
+            Assert.True(finalVerification.Candidates[candidateId].IsVerified);
+
+            var final = DwgReader.Read(finalPath);
+            Assert.Empty(final.Entities.OfType<Line>());
+            Assert.Single(final.Entities.OfType<LwPolyline>());
+            var hatch = Assert.Single(
+                final.Entities.OfType<Hatch>(),
+                candidate => !candidate.IsSolid);
+            Assert.True(CandidateMetadataCodec.TryRead(hatch, out var metadata));
+            Assert.Equal(candidateId, metadata.CandidateId);
+            Assert.Equal("primary", metadata.Role);
+
+            var expectedCandidate = probe.Manifest.Candidates[candidateId];
+            var expectedHatch = Assert.Single(expectedCandidate.Entities);
+            Assert.Equal(
+                expectedHatch.RequiredProperties["boundaryFingerprint"],
+                DwgEntityFingerprint.ComputeHatchBoundary(hatch));
+
+            DwgStructuralSanity.ValidateFinal(
+                verifier.ReadStructuralInventory(probePath),
+                verifier.ReadStructuralInventory(finalPath),
+                probe.SourceEmissionSummary,
+                authorization);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void Source_emission_summary_rejects_unknown_page_source()
     {
