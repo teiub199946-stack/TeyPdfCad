@@ -15,7 +15,11 @@ public sealed class DwgDocumentWriterTests
     [Fact]
     public void Writer_emits_level_as_named_editable_block()
     {
-        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("level", new Point2(10, 10), new Point2(17, 10), new VectorStyle()),
+            new VectorLine("level2", new Point2(30, 20), new Point2(37, 20), new VectorStyle())
+        ]);
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
@@ -130,7 +134,11 @@ public sealed class DwgDocumentWriterTests
     [Fact]
     public void Writer_emits_arc_length_as_native_arc_dimension()
     {
-        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorPolyline("arc", [new Point2(70, 50), new Point2(64, 64), new Point2(50, 70)], false, new VectorStyle()),
+            new VectorText("label", "L=31,42", new Point2(65, 65), 2.5, new VectorStyle())
+        ]);
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
@@ -324,7 +332,8 @@ public sealed class DwgDocumentWriterTests
     [Fact]
     public void Writer_emits_high_confidence_axis_as_editable_named_block()
     {
-        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine("axis", new Point2(0, 0), new Point2(25.4, 0), new VectorStyle())]);
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
@@ -343,7 +352,8 @@ public sealed class DwgDocumentWriterTests
     [Fact]
     public void Writer_emits_recognized_leader_with_service_lineweight()
     {
-        var page = new VectorPdfPage(1, 72, 72, 0, []);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+            [new VectorLine("leader", new Point2(0, 0), new Point2(20, 10), new VectorStyle())]);
         var document = new VectorPdfDocument([page]);
         var semantics = new SemanticReconstructionResult([], [], null, 0d)
         {
