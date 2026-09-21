@@ -188,6 +188,7 @@ public sealed class DwgDocumentWriterTests
         var page = new VectorPdfPage(1, 72, 72, 0,
         [
             new VectorPolyline("arc", [new Point2(70, 50), new Point2(64, 64), new Point2(50, 70)], false, new VectorStyle()),
+            new VectorLine("arrow", new Point2(70, 50), new Point2(68, 52), new VectorStyle()),
             new VectorText("label", "L=31,42", new Point2(65, 65), 2.5, new VectorStyle())
         ]);
         var document = new VectorPdfDocument([page]);
@@ -195,11 +196,12 @@ public sealed class DwgDocumentWriterTests
         {
             ArcDimensions =
             [
-                new ArcDimensionCandidate(new(50, 50), 20, 0, Math.PI / 2, new(65, 65), "L=31,42", 0.95d, ["arc", "label"])
+                new ArcDimensionCandidate(new(50, 50), 20, 0, Math.PI / 2, new(65, 65), "L=31,42", 0.95d, ["arc", "arrow", "label"])
                 {
                     SourceClaims =
                     [
                         new("arc", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                        new("arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
                         new("label", SourceUsageRole.Text, SourceClaimState.Valid, false)
                     ]
                 }
