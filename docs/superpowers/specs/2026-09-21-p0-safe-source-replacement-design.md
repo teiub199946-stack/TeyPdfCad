@@ -31,11 +31,11 @@ Excluded:
 
 The only mode gates are EnableSemanticRecognition and EnableSourceReplacement.
 
-With recognition disabled, the candidate and claim sets are empty. With source replacement disabled, every source is preserved. No downstream stage may branch on either gate.
+With recognition disabled, the candidate and claim sets are empty. With source replacement disabled, every source is preserved. The two-pass driver still runs: SuppressionGate returns empty authorization and final equals probe. No downstream stage may branch on either gate.
 
 ## Two-pass document write
 
-The unit is the complete DWG document, never one DWG per page.
+The unit is the complete DWG document, never one DWG per page. The writer serializes to a Stream supplied by its caller and never owns or closes that Stream. The CLI owns the probe and final FileStreams, closes each one before read-back, and owns atomic publication.
 
 1. Probe pass: write all source entities and all eligible native candidates to a temporary probe DWG; close the file.
 2. Verify: reopen the probe file from disk through DwgReadBackVerifier and evaluate its manifest.
@@ -75,7 +75,7 @@ sealed record ExpectedCandidate(
     string SemanticType,
     IReadOnlyList<ExpectedNativeEntity> Entities);
 
-sealed record DwgWriteManifest(
+sealed record NativeWriteManifest(
     IReadOnlyDictionary<string, ExpectedCandidate> Candidates);
 ~~~
 
@@ -93,7 +93,7 @@ Expected roles:
 
 ## Read-back verifier
 
-DwgReadBackVerifier closes and reopens the on-disk probe file, independently from the writer. It compares the triple CandidateId, Role, EntityKind, then fingerprint and required properties. Fingerprints verify entities already identified by XData; they are not spatial matching.
+DwgReadBackVerifier reopens the on-disk probe file after the CLI has closed its FileStream; it is independent from the writer. It compares the triple CandidateId, Role, EntityKind, then fingerprint and required properties. Fingerprints verify entities already identified by XData; they are not spatial matching.
 
 A candidate is verified only when:
 
@@ -113,7 +113,7 @@ sealed record CandidateVerification(
     IReadOnlyList<string> DuplicateRoles,
     IReadOnlyList<string> InvalidEntities);
 
-sealed record DwgReadBackVerification(
+sealed record NativeReadBackVerification(
     IReadOnlyDictionary<string, CandidateVerification> Candidates);
 ~~~
 
@@ -130,9 +130,9 @@ The required emitted-entity checks are:
 
 ## Suppression gate and claims
 
-SuppressionGate is the only component allowed to grant suppression. It receives the provisional replacement plan and DwgReadBackVerification.
+SuppressionGate is the only component allowed to grant suppression. It receives the existing, modified Core SourceReplacementPlan and NativeReadBackVerification.
 
-A source is suppressed only if it has one full valid suppressible claim, its candidate is verified, and it is neither HatchBoundary nor EvidenceOnly. There is no spatial fallback.
+A source is suppressed only if it has one full valid suppressible claim, its candidate is verified, and it is neither HatchBoundary nor EvidenceOnly. There is no spatial fallback. Every source has a non-empty page-unique SourceId. An empty or duplicate SourceId produces SourceIdentityViolation at Critical severity, preserves all involved sources, and makes every related candidate ineligible for suppression.
 
 The shared-claim policy remains one-pass over the full graph:
 
@@ -141,9 +141,11 @@ The shared-claim policy remains one-pass over the full graph:
 - every source used by a deferred candidate is preserved;
 - each deferred case reports DeferredShared at High severity.
 
-A failed verification produces GeometryLost at Critical severity. Any residual produces PASS_WITH_RESIDUALS, not FULL_PASS.
+A failed verification produces CandidateNotVerified at Critical severity while preserving all sources claimed by that candidate. GeometryLost is not emitted for a preserved source. Any residual produces PASS_WITH_RESIDUALS, not FULL_PASS.
 
-FULL_PASS means every P0 probe-verification and final-structural-sanity check passed, and no residual, GeometryLost, or SourceSuppressionViolation was recorded. It guarantees no detected loss of source geometry and the declared minimum emitted-entity checks. It does not guarantee recognition completeness, visual WYSIWYG fidelity, or engineering-semantic correctness beyond those declared checks.
+Residual severity is fixed: DeferredShared is High; DeferredUncertainHatch is Medium; CandidateNotVerified, SourceIdentityViolation, and SourceSuppressionViolation are Critical.
+
+FULL_PASS means every P0 probe-verification and final-structural-sanity check passed, and no residual, CandidateNotVerified, SourceIdentityViolation, or SourceSuppressionViolation was recorded. It guarantees no detected loss of source geometry and the declared minimum emitted-entity checks. It does not guarantee recognition completeness, visual WYSIWYG fidelity, or engineering-semantic correctness beyond those declared checks.
 
 ## HATCH
 
@@ -175,9 +177,9 @@ A semantic or verification failure on a page preserves its unsafe sources and co
 1. Metadata codec: valid flat schema; empty, one, three fields; unknown app; duplicate metadata; case-sensitive CandidateId.
 2. Verifier: missing role; duplicate role; wrong entity type; wrong fingerprint; unexpected metadata; BlockRecord metadata; Level parent/child preservation.
 3. Emitted-entity sanity: dimension geometry-derived measurement; leader vertices; text height/value; level Attribute value; axis scale/length; HATCH area/boundary binding.
-4. Two-pass executor: verified candidate suppresses allowed sources; unverified candidate preserves all sources; probe failure emits no final DWG; final native-count or expected emitted-entity-delta mismatch emits SourceSuppressionViolation and publishes no final DWG; no spatial fallback.
-5. Shared claims: chain and cycle yield identical deferred candidates despite recognizer enumeration order.
-6. HATCH: confident explicit roles; uncertain emits no native HATCH and preserves all sources.
+4. Two-pass executor: verified candidate suppresses allowed sources; unverified candidate emits CandidateNotVerified and preserves all sources; probe failure emits no final DWG; a requested source-emission multiset absent from the probe inventory fails before final publication; final fingerprint mismatch emits SourceSuppressionViolation and publishes no final DWG; no spatial fallback.
+5. Source identity and shared claims: empty/duplicate SourceId produces SourceIdentityViolation with no suppression; chain and cycle yield identical deferred candidates despite recognizer enumeration order.
+6. HATCH: confident creates native HATCH, preserves BoundarySourceIds, suppresses PatternSourceIds only after verified boundary binding, and leaves matching boundary fingerprint; uncertain emits no native HATCH and preserves all sources.
 7. Paint order: input enumeration changes do not change immutable ordering.
 8. Regression: ACadSharp round-trip and committed user AutoCAD 2022 save/reopen fixture.
 
