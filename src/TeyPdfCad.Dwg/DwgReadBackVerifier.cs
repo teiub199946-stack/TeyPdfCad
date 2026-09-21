@@ -319,6 +319,18 @@ public sealed class DwgReadBackVerifier
         error = string.Empty;
         switch (key)
         {
+            case "dimensionStyleFingerprint":
+                if (entity is Dimension styledDimension)
+                {
+                    var actual = DwgEntityFingerprint.ComputeDimensionStyle(styledDimension);
+                    if (string.Equals(actual, expectedValue, StringComparison.Ordinal))
+                        return true;
+                    error = "dimension style fingerprint mismatch";
+                    return false;
+                }
+                error = "dimensionStyleFingerprint requires Dimension";
+                return false;
+
             case "expectedDimensionText":
                 if (entity is Dimension expectedTextDimension)
                 {
