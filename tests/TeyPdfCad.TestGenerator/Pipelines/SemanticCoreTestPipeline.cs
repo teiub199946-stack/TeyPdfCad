@@ -63,6 +63,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
                 Result = ExpectedResult.Rejected,
                 DetectedDimensions = 0,
                 ConfidenceClass = ConfidenceClass.None,
+                SuppressionEvidenceEligible = false,
                 Diagnostics = diagnostics
             };
 
@@ -156,6 +157,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             DrawingScale = drawingScale,
             ConfidenceClass = MapConfidence(confidence),
             IsDimensionTypeAmbiguous = isDimensionTypeAmbiguous,
+            SuppressionEvidenceEligible = dimensions.Any(HasP0SuppressionEvidence),
             Diagnostics = diagnostics
         };
 
@@ -236,6 +238,40 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             Scale(lineVector, 1.0 / lineLength)));
 
         return cosine >= Math.Cos(Math.PI / 180.0);
+    }
+
+    private static bool HasP0SuppressionEvidence(DimensionCandidate candidate)
+    {
+        if (candidate.SourceClaims.Count == 0)
+            return false;
+
+        var claims = candidate.SourceClaims;
+        if (claims.Any(claim =>
+                string.IsNullOrWhiteSpace(claim.SourceId)
+                || claim.State != SourceClaimState.Valid
+                || claim.IsPartial
+                || claim.Role is SourceUsageRole.Unknown
+                    or SourceUsageRole.EvidenceOnly
+                    or SourceUsageRole.PrimaryGeometry))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<SourceUsageRole> required =
+        [
+            SourceUsageRole.DimensionLine,
+            SourceUsageRole.ExtensionLine,
+            SourceUsageRole.ArrowGeometry,
+            SourceUsageRole.Text
+        ];
+
+        foreach (var role in required)
+        {
+            if (!claims.Any(claim => claim.Role == role))
+                return false;
+        }
+
+        return true;
     }
 
     private static DimensionType MapType(DimensionCandidate candidate)
