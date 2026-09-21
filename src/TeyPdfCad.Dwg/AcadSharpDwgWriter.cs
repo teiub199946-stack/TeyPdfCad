@@ -22,7 +22,8 @@ public sealed class AcadSharpDwgWriter
         IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
         TemplateLibrary? templateLibrary = null,
         IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
-        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null)
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
+        IDictionary<int, ISet<string>>? createdCandidateKeysByPage = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
@@ -59,6 +60,17 @@ public sealed class AcadSharpDwgWriter
                     : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition);
             var suppressedSourceIds = replacementPlan.SuppressedSourceIds
                 .ToHashSet(StringComparer.Ordinal);
+            var deferredCandidateKeys = replacementPlan.DeferredCandidateKeys
+                .ToHashSet(StringComparer.Ordinal);
+            ISet<string>? createdCandidateKeys = null;
+            if (createdCandidateKeysByPage is not null)
+            {
+                if (!createdCandidateKeysByPage.TryGetValue(page.Number, out createdCandidateKeys))
+                {
+                    createdCandidateKeys = new HashSet<string>(StringComparer.Ordinal);
+                    createdCandidateKeysByPage[page.Number] = createdCandidateKeys;
+                }
+            }
             var reviewLayersBySourceId = semantics is null
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
                 : semantics.Warnings
@@ -69,7 +81,10 @@ public sealed class AcadSharpDwgWriter
                     }))
                     .GroupBy(entry => entry.SourceId, StringComparer.Ordinal)
                     .ToDictionary(group => group.Key, group => group.First().Layer, StringComparer.Ordinal);
-            var patternHatches = hatchRecognition.NativeHatches.Where(candidate => !candidate.IsSolid).ToArray();
+            var patternHatches = hatchRecognition.NativeHatches
+                .Where(candidate => !candidate.IsSolid)
+                .Where(candidate => !deferredCandidateKeys.Contains(SourceReplacementPlanner.GetCandidateKey(candidate)))
+                .ToArray();
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
             foreach (var sourceLine in page.Entities.OfType<VectorLine>())
             {
@@ -168,6 +183,7 @@ public sealed class AcadSharpDwgWriter
                 hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 styles.Apply(hatch, candidate.Style);
                 document.Entities.Add(hatch);
+                createdCandidateKeys?.Add(SourceReplacementPlanner.GetCandidateKey(candidate));
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
@@ -190,21 +206,85 @@ public sealed class AcadSharpDwgWriter
             if (semantics is not null)
             {
                 foreach (var candidate in semantics.Dimensions)
+                {
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    if (deferredCandidateKeys.Contains(key)) continue;
                     WriteDimension(document, styles, sheet, candidate);
+                    createdCandidateKeys?.Add(key);
+                }
                 foreach (var candidate in semantics.Leaders)
+                {
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    if (deferredCandidateKeys.Contains(key)) continue;
                     WriteLeader(document, styles, sheet, candidate);
+                    createdCandidateKeys?.Add(key);
+                }
                 foreach (var candidate in semantics.Axes)
+                {
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    if (deferredCandidateKeys.Contains(key)) continue;
                     WriteAxis(document, styles, sheet, candidate);
+                    createdCandidateKeys?.Add(key);
+                }
                 foreach (var candidate in semantics.Levels)
+                {
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    if (deferredCandidateKeys.Contains(key)) continue;
                     WriteLevel(document, styles, sheet, candidate);
+                    createdCandidateKeys?.Add(key);
+                }
                 foreach (var candidate in semantics.ArcDimensions)
+                {
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
+                    if (deferredCandidateKeys.Contains(key)) continue;
                     WriteArcDimension(document, styles, sheet, candidate);
+                    createdCandidateKeys?.Add(key);
+                }
             }
         }
+        ApplyExplicitPaintOrder(document);
         using var output = new MemoryStream();
         using var writer = new DwgWriter(output, document);
         writer.Write();
         return output.ToArray();
+    }
+
+    private static void ApplyExplicitPaintOrder(CadDocument document)
+    {
+        var ordered = PaintOrderEngine.OrderBottomToTop(document.Entities
+            .Select((entity, index) => new PaintOrderItem<Entity>(
+                entity,
+                ResolvePaintPriority(entity),
+                index,
+                (entity.Layer?.Name ?? string.Empty) + "|" + entity.GetType().Name)));
+
+        var sortTable = document.ModelSpace.CreateSortEntitiesTable();
+        foreach (var entry in ordered)
+            sortTable.MoveToTop(entry.Item);
+    }
+
+    private static PaintPriority ResolvePaintPriority(Entity entity)
+    {
+        var layerName = entity.Layer?.Name ?? string.Empty;
+        if (layerName.StartsWith("TEY_REVIEW", StringComparison.OrdinalIgnoreCase))
+            return PaintPriority.ReviewOverlay;
+        if (entity is TextEntity)
+            return PaintPriority.Text;
+        if (entity is Dimension)
+            return PaintPriority.Dimension;
+        if (entity is Leader)
+            return PaintPriority.Annotation;
+        if (entity is Insert insert)
+        {
+            if (string.Equals(insert.Block?.Name, "TEY_AXIS", StringComparison.OrdinalIgnoreCase))
+                return PaintPriority.Axis;
+            if (string.Equals(insert.Block?.Name, "TEY_LEVEL", StringComparison.OrdinalIgnoreCase))
+                return PaintPriority.Annotation;
+            return PaintPriority.BaseGeometry;
+        }
+        if (entity is Hatch hatch)
+            return hatch.IsSolid ? PaintPriority.SolidFill : PaintPriority.PatternHatch;
+        return PaintPriority.BaseGeometry;
     }
 
     private static void WriteDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, DimensionCandidate candidate)
