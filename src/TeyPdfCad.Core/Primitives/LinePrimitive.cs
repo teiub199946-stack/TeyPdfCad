@@ -6,7 +6,8 @@ public sealed record LinePrimitive(
     Point2 Start,
     Point2 End,
     string? Layer = null,
-    IReadOnlyList<string>? SourceIds = null)
+    IReadOnlyList<string>? SourceIds = null,
+    double? StrokeWidthMm = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 }

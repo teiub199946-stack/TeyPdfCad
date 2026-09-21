@@ -1,6 +1,8 @@
 using Autodesk.AutoCAD.DatabaseServices;
+using System.Globalization;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
+using TeyPdfCad.Core.Sheets;
 
 namespace TeyPdfCad.AutoCAD;
 
@@ -21,7 +23,7 @@ internal sealed class AutoCadPrimitiveReader
             switch (entity)
             {
                 case Line line:
-                    AddLine(scene, line.StartPoint, line.EndPoint, line.Layer, SourceId(line));
+                    AddLine(scene, line.StartPoint, line.EndPoint, line.Layer, SourceId(line), StrokeWidthMm(line));
                     break;
 
                 case Polyline polyline:
@@ -50,8 +52,57 @@ internal sealed class AutoCadPrimitiveReader
             }
         }
 
+        if (TryReadSheetMetadata(out var sheet))
+        {
+            scene.Sheet = sheet;
+            scene.TitleBlock = TitleBlockDetector.Detect(scene, sheet);
+            if (scene.TitleBlock is null && scene.Texts.Count == 0)
+            {
+                // SHX labels can arrive as linework; keep geometry without inventing text fields.
+                scene.TitleBlock = TitleBlockDetector.DetectGeometryOnly(scene, sheet);
+            }
+        }
+
         return scene;
     }
+
+    private static bool TryReadSheetMetadata(out SheetMetadata sheet)
+    {
+        sheet = null!;
+        if (SheetRuntimeSettings.TryGetBounds(out var runtimeBounds))
+        {
+            sheet = StandardSheetDetector.Detect(runtimeBounds.WidthMm, runtimeBounds.HeightMm).ToMetadata() with
+            {
+                PageBounds = runtimeBounds,
+            };
+            return true;
+        }
+
+        var widthText = Environment.GetEnvironmentVariable("TEYPDFCAD_SHEET_WIDTH_MM");
+        var heightText = Environment.GetEnvironmentVariable("TEYPDFCAD_SHEET_HEIGHT_MM");
+        if (!double.TryParse(widthText, NumberStyles.Float, CultureInfo.InvariantCulture, out var width) ||
+            !double.TryParse(heightText, NumberStyles.Float, CultureInfo.InvariantCulture, out var height) ||
+            width <= 0 || height <= 0)
+            return false;
+
+        var detection = StandardSheetDetector.Detect(width, height);
+        var minX = ParseOptionalCoordinate("TEYPDFCAD_SHEET_MIN_X");
+        var minY = ParseOptionalCoordinate("TEYPDFCAD_SHEET_MIN_Y");
+        sheet = detection.ToMetadata() with
+        {
+            PageBounds = new SheetPageBounds(minX, minY, width, height),
+        };
+        return true;
+    }
+
+    private static double ParseOptionalCoordinate(string variableName)
+        => double.TryParse(
+            Environment.GetEnvironmentVariable(variableName),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : 0;
 
     private static void AddPolyline(PrimitiveScene scene, Polyline polyline)
     {
@@ -60,15 +111,39 @@ internal sealed class AutoCadPrimitiveReader
 
         for (var i = 0; i < segmentCount; i++)
         {
-            if (polyline.GetSegmentType(i) != SegmentType.Line) continue;
+            var sourceId = $"{handle}#segment:{i}";
+            switch (polyline.GetSegmentType(i))
+            {
+                case SegmentType.Line:
+                {
+                    var segment = polyline.GetLineSegmentAt(i);
+                    AddLine(
+                        scene,
+                        segment.StartPoint,
+                        segment.EndPoint,
+                        polyline.Layer,
+                        sourceId,
+                        StrokeWidthMm(polyline));
+                    break;
+                }
 
-            var segment = polyline.GetLineSegmentAt(i);
-            AddLine(
-                scene,
-                segment.StartPoint,
-                segment.EndPoint,
-                polyline.Layer,
-                $"{handle}#segment:{i}");
+                case SegmentType.Arc:
+                {
+                    var arc = polyline.GetArcSegmentAt(i);
+                    var steps = ArcTessellator.BuildSteps(arc.StartAngle, arc.EndAngle, sourceId);
+                    foreach (var step in steps)
+                    {
+                        AddLine(
+                            scene,
+                            arc.EvaluatePoint(step.StartParameter),
+                            arc.EvaluatePoint(step.EndParameter),
+                            polyline.Layer,
+                            step.SourceId,
+                            StrokeWidthMm(polyline));
+                    }
+                    break;
+                }
+            }
         }
     }
 
@@ -77,13 +152,21 @@ internal sealed class AutoCadPrimitiveReader
         Autodesk.AutoCAD.Geometry.Point3d start,
         Autodesk.AutoCAD.Geometry.Point3d end,
         string? layer,
-        string sourceId)
+        string sourceId,
+        double? strokeWidthMm)
     {
         scene.Lines.Add(new LinePrimitive(
             ToPoint2(start),
             ToPoint2(end),
             layer,
-            [sourceId]));
+            [sourceId],
+            strokeWidthMm));
+    }
+
+    private static double? StrokeWidthMm(Entity entity)
+    {
+        var raw = (short)entity.LineWeight;
+        return raw > 0 ? raw / 100.0 : null;
     }
 
     private static Point2 ToPoint2(Autodesk.AutoCAD.Geometry.Point3d point)
