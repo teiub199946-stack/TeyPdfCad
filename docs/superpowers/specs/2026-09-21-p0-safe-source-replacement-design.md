@@ -39,7 +39,11 @@ The unit is the complete DWG document, never one DWG per page.
 
 1. Probe pass: write all source entities and all eligible native candidates to a temporary probe DWG; close the file.
 2. Verify: reopen the probe file from disk through DwgReadBackVerifier and evaluate its manifest.
-3. Final pass: write the same native candidates and suppress only SourceIds authorized by SuppressionGate; close and atomically move the final DWG.
+3. Final pass: write the same native candidates and suppress only SourceIds authorized by SuppressionGate; close the final DWG.
+4. Final structural sanity: reopen the final file. Its native metadata-entity count must equal the verified probe count, and its emitted-entity count must equal the probe count minus the expected DWG-entity delta of the authorized suppressed sources. Count scope is ModelSpace top-level entities plus nested INSERT attributes. SourceEmissionSummary records each source's emitted DWG-entity contribution in the probe pass; it is not assumed to be one entity per SourceId.
+5. Publish: atomically move the final DWG only after final structural sanity succeeds.
+
+The final pass trusts the verified probe for per-SourceId correspondence. P0 does not add source XData and therefore does not perform full per-source verification on the final file. Final structural sanity detects loss of native entities or an aggregate suppression mismatch, not suppression of a particular wrong source. A final structural mismatch emits SourceSuppressionViolation at Critical severity and fails the complete document without publishing a final DWG.
 
 If a candidate fails verification, it has no suppression authorization and every source it claims is written in the final DWG. A probe serialization or probe read-back failure fails the complete document and produces no final DWG.
 
@@ -139,6 +143,8 @@ The shared-claim policy remains one-pass over the full graph:
 
 A failed verification produces GeometryLost at Critical severity. Any residual produces PASS_WITH_RESIDUALS, not FULL_PASS.
 
+FULL_PASS means every P0 probe-verification and final-structural-sanity check passed, and no residual, GeometryLost, or SourceSuppressionViolation was recorded. It guarantees no detected loss of source geometry and the declared minimum emitted-entity checks. It does not guarantee recognition completeness, visual WYSIWYG fidelity, or engineering-semantic correctness beyond those declared checks.
+
 ## HATCH
 
 The first-ProvenanceId-as-boundary rule is removed.
@@ -162,14 +168,14 @@ P0 uses immutable identity, not document insertion enumeration. The sort key is 
 
 ## Failure policy
 
-A semantic or verification failure on a page preserves its unsafe sources and continues document processing. Overall document status is the worst page status. A serialization or probe read-back failure aborts the complete document and produces no final DWG.
+A semantic or verification failure on a page preserves its unsafe sources and continues document processing. Overall document status is the worst page status. A serialization, probe read-back, or final structural-sanity failure aborts the complete document and produces no final DWG.
 
 ## Required tests
 
 1. Metadata codec: valid flat schema; empty, one, three fields; unknown app; duplicate metadata; case-sensitive CandidateId.
 2. Verifier: missing role; duplicate role; wrong entity type; wrong fingerprint; unexpected metadata; BlockRecord metadata; Level parent/child preservation.
 3. Emitted-entity sanity: dimension geometry-derived measurement; leader vertices; text height/value; level Attribute value; axis scale/length; HATCH area/boundary binding.
-4. Two-pass executor: verified candidate suppresses allowed sources; unverified candidate preserves all sources; probe failure emits no final DWG; no spatial fallback.
+4. Two-pass executor: verified candidate suppresses allowed sources; unverified candidate preserves all sources; probe failure emits no final DWG; final native-count or expected emitted-entity-delta mismatch emits SourceSuppressionViolation and publishes no final DWG; no spatial fallback.
 5. Shared claims: chain and cycle yield identical deferred candidates despite recognizer enumeration order.
 6. HATCH: confident explicit roles; uncertain emits no native HATCH and preserves all sources.
 7. Paint order: input enumeration changes do not change immutable ordering.
@@ -177,4 +183,4 @@ A semantic or verification failure on a page preserves its unsafe sources and co
 
 ## Acceptance
 
-P0 is complete only when CI proves source suppression comes from on-disk read-back verification, not writer counters, and every required test passes. It is not a claim of visual WYSIWYG acceptance.
+P0 is complete only when CI proves source suppression comes from on-disk read-back verification, final structural sanity uses the correct emitted-DWG-entity delta rather than SourceId count, no writer counter grants suppression, and every required test passes. It is not a claim of visual WYSIWYG acceptance or recognition completeness.
