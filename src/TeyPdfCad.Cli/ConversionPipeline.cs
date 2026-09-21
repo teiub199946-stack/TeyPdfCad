@@ -119,6 +119,7 @@ public sealed class ConversionPipeline
             IReadOnlyDictionary<int, SuppressionDecision> suppressionDecisions;
             HashSet<PageSourceRef> authorizedSuppressedSources;
             DwgStructuralInventory probeInventory;
+            SourceEmissionSummary closedProbeSourceEmissions;
             DwgStructuralInventory finalInventory;
             ACadSharp.CadDocument finalReadBack;
 
@@ -162,14 +163,29 @@ public sealed class ConversionPipeline
                     .ToHashSet();
 
                 probeInventory = verifier.ReadStructuralInventory(probePath);
+                try
+                {
+                    DwgStructuralSanity.ValidateDeclaredSourceEmissionParity(
+                        probeInventory,
+                        probeWrite.SourceEmissionSummary);
+                    closedProbeSourceEmissions =
+                        DwgStructuralSanity.GetClosedProbeSourceEmissions(
+                            probeInventory);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: closed-probe source inventory mismatch: {exception.Message}",
+                        exception);
+                }
 
-                // Validate every requested removal against the actual closed probe
-                // before the final writer is allowed to suppress a source.
+                // Validate every requested removal against source identity rebuilt
+                // independently from the closed probe, never writer memory.
                 try
                 {
                     _ = DwgStructuralSanity.BuildExpectedFinalFingerprintMultiset(
                         probeInventory,
-                        probeWrite.SourceEmissionSummary,
+                        closedProbeSourceEmissions,
                         authorizedSuppressedSources);
                 }
                 catch (InvalidDataException exception)
@@ -215,7 +231,7 @@ public sealed class ConversionPipeline
                     DwgStructuralSanity.ValidateFinal(
                         probeInventory,
                         finalInventory,
-                        probeWrite.SourceEmissionSummary,
+                        closedProbeSourceEmissions,
                         authorizedSuppressedSources);
                 }
                 catch (InvalidDataException exception)
