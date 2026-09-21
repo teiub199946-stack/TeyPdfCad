@@ -21,7 +21,9 @@
 - Residual severities are fixed: DeferredShared High; DeferredUnresolvedClaims High; DeferredUncertainHatch Medium; CandidateNotVerified, SourceIdentityViolation, CandidateIdentityViolation, SourceSuppressionViolation Critical.
 - Candidate identity is built from page + semantic type + normalized declared source set + normalized geometry fingerprint. Claims never supply missing identity inputs.
 - The normalized declared source set must exactly equal the distinct union of explicit recognizer claims; mismatch is fail-closed.
-- Unknown/default role, EvidenceOnly, Unresolved, partial claim, or one SourceId carrying multiple distinct roles defers the whole candidate.
+- Unknown/default role, EvidenceOnly, Unresolved, partial claim, unexpected role for the semantic type, or one SourceId carrying multiple distinct roles defers the whole candidate.
+- Semantic role contracts are closed: unknown semantic type is fail-closed; exact duplicate identical claims are deterministically deduplicated.
+- Shared-overlap analysis is computed from the complete claim graph before eligibility. Deferred candidates remain claimants; no source is released by an earlier deferral.
 - Exact duplicate candidate descriptors may be deduplicated; same CandidateId with differing descriptor data is Critical CandidateIdentityViolation.
 - Warning provenance is EvidenceOnly: preserve its source; overlap with a candidate defers that candidate.
 - The document is written twice as a whole; per-page semantic failures preserve source and continue, but serialization/probe-read-back/final-sanity failures publish no DWG.
