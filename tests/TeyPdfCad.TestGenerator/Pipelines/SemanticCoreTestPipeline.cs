@@ -159,7 +159,8 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             DrawingScale = drawingScale,
             ConfidenceClass = MapConfidence(confidence),
             IsDimensionTypeAmbiguous = isDimensionTypeAmbiguous,
-            SuppressionEvidenceEligible = dimensions.Any(HasP0SuppressionEvidence),
+            SuppressionEvidenceEligible = EvaluateP0SuppressionEvidence(dimensions).Eligible,
+            SuppressionBlockers = EvaluateP0SuppressionEvidence(dimensions).Blockers.ToList(),
             Diagnostics = diagnostics
         };
 
@@ -242,47 +243,86 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
         return cosine >= Math.Cos(Math.PI / 180.0);
     }
 
-    private static bool HasP0SuppressionEvidence(DimensionCandidate candidate)
+    private static SuppressionEvidenceAssessment EvaluateP0SuppressionEvidence(
+        IReadOnlyList<DimensionCandidate> dimensions)
     {
-        var declaredSourceIds = candidate.ProvenanceIds
-            .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
-            .ToArray();
-        if (declaredSourceIds.Length == 0)
-            return false;
+        if (dimensions.Count == 0)
+        {
+            return new SuppressionEvidenceAssessment(
+                false,
+                ["NoRecognizedDimension"]);
+        }
 
-        // Use the real production planner as the authority for claim/role
-        // readiness. Synthetic source geometry is sufficient here because
-        // this TEST-003 metric asks whether the candidate's identity/claim
-        // contract could reach planner eligibility, not whether source/native
-        // appearance equivalence is complete.
-        var sources = declaredSourceIds
-            .Select((sourceId, index) => (VectorEntity)new VectorLine(
-                sourceId,
-                new Point2(index * 10d, 0d),
-                new Point2(index * 10d + 1d, 0d),
-                new VectorStyle()))
-            .ToArray();
-        var semantics = new SemanticReconstructionResult(
-            [candidate],
-            [],
-            candidate.DrawingScale,
-            candidate.Confidence);
-        var plan = new SourceReplacementPlanner().BuildPlan(
-            sources,
-            semantics,
-            hatchRecognition: null,
-            pageNumber: 1);
-        var candidateId = SourceReplacementPlanner.GetCandidateKey(
-            candidate,
-            pageNumber: 1);
+        var eligibleAny = false;
+        var blockers = new HashSet<string>(StringComparer.Ordinal);
 
-        return !plan.DeferredCandidateKeys.Contains(candidateId)
-            && plan.SourceCoverageMap.Values.Any(candidateIds =>
-                candidateIds.Contains(candidateId, StringComparer.Ordinal))
-            && plan.EligibleSourceIds.Count > 0;
+        foreach (var candidate in dimensions)
+        {
+            var declaredSourceIds = candidate.ProvenanceIds
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
+                .ToArray();
+            if (declaredSourceIds.Length == 0)
+            {
+                blockers.Add("NoDeclaredSources");
+                continue;
+            }
+
+            var sources = declaredSourceIds
+                .Select((sourceId, index) => (VectorEntity)new VectorLine(
+                    sourceId,
+                    new Point2(index * 10d, 0d),
+                    new Point2(index * 10d + 1d, 0d),
+                    new VectorStyle()))
+                .ToArray();
+            var semantics = new SemanticReconstructionResult(
+                [candidate],
+                [],
+                candidate.DrawingScale,
+                candidate.Confidence);
+            var plan = new SourceReplacementPlanner().BuildPlan(
+                sources,
+                semantics,
+                hatchRecognition: null,
+                pageNumber: 1);
+            var candidateId = SourceReplacementPlanner.GetCandidateKey(
+                candidate,
+                pageNumber: 1);
+
+            var candidateEligible = !plan.DeferredCandidateKeys.Contains(candidateId)
+                && plan.SourceCoverageMap.Values.Any(candidateIds =>
+                    candidateIds.Contains(candidateId, StringComparer.Ordinal))
+                && plan.EligibleSourceIds.Count > 0;
+            eligibleAny |= candidateEligible;
+
+            foreach (var conflict in plan.Conflicts.Where(conflict =>
+                         conflict.CandidateKeys.Contains(candidateId, StringComparer.Ordinal)))
+            {
+                blockers.Add("Conflict:" + conflict.Reason);
+            }
+
+            foreach (var residual in plan.Residuals.Where(residual =>
+                         string.Equals(
+                             residual.CandidateKey,
+                             candidateId,
+                             StringComparison.Ordinal)))
+            {
+                blockers.Add("Residual:" + residual.Kind);
+            }
+
+            if (!candidateEligible && !plan.DeferredCandidateKeys.Contains(candidateId))
+                blockers.Add("NoEligibleSourceCoverage");
+        }
+
+        return new SuppressionEvidenceAssessment(
+            eligibleAny,
+            blockers.OrderBy(value => value, StringComparer.Ordinal).ToArray());
     }
+
+    private sealed record SuppressionEvidenceAssessment(
+        bool Eligible,
+        IReadOnlyList<string> Blockers);
 
     private static DimensionType MapType(DimensionCandidate candidate)
         => candidate.Kind == DimensionKind.Aligned ? DimensionType.Aligned : DimensionType.Linear;
