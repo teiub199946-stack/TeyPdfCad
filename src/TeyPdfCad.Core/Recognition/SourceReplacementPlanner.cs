@@ -160,27 +160,32 @@ public sealed class SourceReplacementPlanner
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "DIMENSION",
-                candidate.SourceClaims));
+                candidate.SourceClaims,
+                NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.Leaders)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "LEADER",
-                candidate.SourceClaims));
+                candidate.SourceClaims,
+                NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.Axes)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "AXIS",
-                candidate.SourceClaims));
+                candidate.SourceClaims,
+                NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.Levels)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "LEVEL",
-                candidate.SourceClaims));
+                candidate.SourceClaims,
+                NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
         foreach (var candidate in semantics.ArcDimensions)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "ARC_DIMENSION",
-                candidate.SourceClaims));
+                candidate.SourceClaims,
+                NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
     }
 
     private static void AddHatchCandidates(
@@ -206,6 +211,12 @@ public sealed class SourceReplacementPlanner
                 hatch.CandidateId,
                 "HATCH",
                 claims,
+                hatch.BoundarySourceIds
+                    .Concat(hatch.PatternSourceIds)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(id => id, StringComparer.Ordinal)
+                    .ToArray(),
                 hatch.Classification));
         }
     }
@@ -234,19 +245,39 @@ public sealed class SourceReplacementPlanner
             .GroupBy(candidate => candidate.CandidateId, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .ToArray();
-        foreach (var collision in candidateGroups.Where(group => group.Count() > 1))
+        var uniqueCandidates = new List<CandidateDescriptor>();
+        foreach (var group in candidateGroups)
         {
-            deferred.Add(collision.Key);
+            var first = group.First();
+            if (group.All(candidate => EquivalentCandidateDescriptor(first, candidate)))
+            {
+                uniqueCandidates.Add(first);
+                continue;
+            }
+
+            deferred.Add(group.Key);
+            foreach (var sourceId in group
+                         .SelectMany(candidate => candidate.DeclaredSourceIds.Concat(candidate.Claims.Select(claim => claim.SourceId)))
+                         .Where(id => !string.IsNullOrWhiteSpace(id))
+                         .Distinct(StringComparer.Ordinal))
+            {
+                preserved.Add(sourceId);
+            }
+            conflicts.Add(new ReplacementConflict(
+                "(candidate)",
+                ReplacementConflictReason.CandidateIdentityViolation,
+                "Different candidate descriptors produced the same page-local CandidateId.",
+                [group.Key]));
             AddResidual(
                 residuals,
                 "(candidate)",
-                collision.Key,
-                ReplacementResidualKind.DeferredUnresolvedClaims,
-                ReplacementResidualSeverity.High,
-                "Page-local CandidateId collision was rejected before native emission.");
+                group.Key,
+                ReplacementResidualKind.CandidateIdentityViolation,
+                ReplacementResidualSeverity.Critical,
+                "CandidateId collision was rejected before native emission.");
         }
 
-        foreach (var candidate in candidates.OrderBy(candidate => candidate.CandidateId, StringComparer.Ordinal))
+        foreach (var candidate in uniqueCandidates.OrderBy(candidate => candidate.CandidateId, StringComparer.Ordinal))
         {
             if (candidate.HatchClassification == HatchClassification.Uncertain)
             {
@@ -263,7 +294,7 @@ public sealed class SourceReplacementPlanner
                 continue;
             }
 
-            if (candidate.Claims.Count == 0)
+            if (candidate.Claims.Count == 0 || candidate.DeclaredSourceIds.Count == 0)
             {
                 deferred.Add(candidate.CandidateId);
                 AddResidual(
@@ -272,7 +303,67 @@ public sealed class SourceReplacementPlanner
                     candidate.CandidateId,
                     ReplacementResidualKind.DeferredUnresolvedClaims,
                     ReplacementResidualSeverity.High,
-                    "Recognizer did not provide explicit source-role claims.");
+                    "Recognizer did not provide a non-empty explicit source-role claim set.");
+                continue;
+            }
+
+            var claimSourceIds = candidate.Claims
+                .Select(claim => claim.SourceId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToArray();
+            if (!candidate.DeclaredSourceIds.SequenceEqual(claimSourceIds, StringComparer.Ordinal))
+            {
+                deferred.Add(candidate.CandidateId);
+                foreach (var sourceId in candidate.DeclaredSourceIds.Concat(claimSourceIds).Distinct(StringComparer.Ordinal))
+                    preserved.Add(sourceId);
+                AddResidual(
+                    residuals,
+                    candidate.DeclaredSourceIds.FirstOrDefault() ?? "(candidate)",
+                    candidate.CandidateId,
+                    ReplacementResidualKind.DeferredUnresolvedClaims,
+                    ReplacementResidualSeverity.High,
+                    "Declared candidate source set does not equal the union of explicit recognizer claims.");
+                continue;
+            }
+
+            var roleConflict = candidate.Claims
+                .GroupBy(claim => claim.SourceId, StringComparer.Ordinal)
+                .FirstOrDefault(group => group.Select(claim => claim.Role).Distinct().Count() > 1);
+            if (roleConflict is not null)
+            {
+                deferred.Add(candidate.CandidateId);
+                foreach (var sourceId in candidate.DeclaredSourceIds)
+                    preserved.Add(sourceId);
+                conflicts.Add(new ReplacementConflict(
+                    roleConflict.Key,
+                    ReplacementConflictReason.ClaimRoleConflict,
+                    "The same SourceId has multiple roles inside one candidate; whole-source P0 cannot resolve the ambiguity.",
+                    [candidate.CandidateId]));
+                AddResidual(
+                    residuals,
+                    roleConflict.Key,
+                    candidate.CandidateId,
+                    ReplacementResidualKind.DeferredUnresolvedClaims,
+                    ReplacementResidualSeverity.High,
+                    "Ambiguous source role prevents whole-source replacement.");
+                continue;
+            }
+
+            var requiredRoles = RequiredRoles(candidate.SemanticType);
+            if (requiredRoles.Any(required => candidate.Claims.All(claim => claim.Role != required)))
+            {
+                deferred.Add(candidate.CandidateId);
+                foreach (var sourceId in candidate.DeclaredSourceIds)
+                    preserved.Add(sourceId);
+                AddResidual(
+                    residuals,
+                    candidate.DeclaredSourceIds.First(),
+                    candidate.CandidateId,
+                    ReplacementResidualKind.DeferredUnresolvedClaims,
+                    ReplacementResidualSeverity.High,
+                    "Candidate is missing one or more minimum required source roles for its semantic type.");
                 continue;
             }
 
@@ -307,7 +398,9 @@ public sealed class SourceReplacementPlanner
             var unresolved = candidate.Claims.Any(claim =>
                 claim.State == SourceClaimState.Unresolved
                 || claim.IsPartial
-                || claim.Role is SourceUsageRole.EvidenceOnly or SourceUsageRole.PrimaryGeometry);
+                || claim.Role is SourceUsageRole.Unknown
+                    or SourceUsageRole.EvidenceOnly
+                    or SourceUsageRole.PrimaryGeometry);
             var hasSuppressible = candidate.Claims.Any(claim => IsSuppressible(claim.Role));
             var protectedOverlap = candidate.Claims
                 .GroupBy(claim => claim.SourceId, StringComparer.Ordinal)
@@ -339,7 +432,7 @@ public sealed class SourceReplacementPlanner
             }
         }
 
-        var claimsBySource = candidates
+        var claimsBySource = uniqueCandidates
             .SelectMany(candidate => candidate.Claims
                 .Where(claim => claim.State == SourceClaimState.Valid && !claim.IsPartial)
                 .Select(claim => (candidate, claim)))
@@ -378,7 +471,7 @@ public sealed class SourceReplacementPlanner
             }
         }
 
-        foreach (var candidate in candidates.Where(candidate => deferred.Contains(candidate.CandidateId)))
+        foreach (var candidate in uniqueCandidates.Where(candidate => deferred.Contains(candidate.CandidateId)))
         {
             foreach (var sourceId in candidate.Claims.Select(claim => claim.SourceId).Where(id => !string.IsNullOrWhiteSpace(id)))
                 preserved.Add(sourceId);
@@ -463,6 +556,46 @@ public sealed class SourceReplacementPlanner
     private static IEnumerable<string> ClaimSourceIds(IEnumerable<RecognizerSourceClaim> claims)
         => claims.Select(claim => claim.SourceId);
 
+    private static IReadOnlyList<string> NormalizeDeclaredSourceIds(IEnumerable<string> sourceIds)
+        => sourceIds
+            .Select(sourceId =>
+            {
+                if (string.IsNullOrWhiteSpace(sourceId)) return string.Empty;
+                var marker = sourceId.IndexOf('#');
+                return marker < 0 ? sourceId : sourceId[..marker];
+            })
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToArray();
+
+    private static IReadOnlyList<SourceUsageRole> RequiredRoles(string semanticType)
+        => semanticType switch
+        {
+            "DIMENSION" => [SourceUsageRole.DimensionLine, SourceUsageRole.ExtensionLine, SourceUsageRole.Text],
+            "LEADER" => [SourceUsageRole.LeaderShaft, SourceUsageRole.LeaderArrow, SourceUsageRole.Text],
+            "AXIS" => [SourceUsageRole.AxisGeometry],
+            "LEVEL" => [SourceUsageRole.LevelMarker, SourceUsageRole.Text],
+            "ARC_DIMENSION" => [SourceUsageRole.DimensionLine, SourceUsageRole.Text],
+            "HATCH" => [SourceUsageRole.HatchBoundary, SourceUsageRole.HatchPattern],
+            _ => []
+        };
+
+    private static bool EquivalentCandidateDescriptor(CandidateDescriptor first, CandidateDescriptor second)
+        => string.Equals(first.SemanticType, second.SemanticType, StringComparison.Ordinal)
+            && first.HatchClassification == second.HatchClassification
+            && first.DeclaredSourceIds.SequenceEqual(second.DeclaredSourceIds, StringComparer.Ordinal)
+            && first.Claims
+                .OrderBy(claim => claim.SourceId, StringComparer.Ordinal)
+                .ThenBy(claim => claim.Role)
+                .ThenBy(claim => claim.State)
+                .ThenBy(claim => claim.IsPartial)
+                .SequenceEqual(second.Claims
+                    .OrderBy(claim => claim.SourceId, StringComparer.Ordinal)
+                    .ThenBy(claim => claim.Role)
+                    .ThenBy(claim => claim.State)
+                    .ThenBy(claim => claim.IsPartial));
+
     private static void AddWarningResiduals(
         ICollection<ReplacementResidual> residuals,
         IEnumerable<SemanticWarning> warnings,
@@ -540,5 +673,6 @@ public sealed class SourceReplacementPlanner
         string CandidateId,
         string SemanticType,
         IReadOnlyList<RecognizerSourceClaim> Claims,
+        IReadOnlyList<string> DeclaredSourceIds,
         HatchClassification? HatchClassification = null);
 }
