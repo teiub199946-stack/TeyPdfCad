@@ -8,13 +8,28 @@ namespace TeyPdfCad.Tests.Recognition;
 public sealed class HatchRecognizerTests
 {
     [Fact]
-    public void Three_regular_parallel_lines_inside_closed_boundary_form_pattern_candidate()
+    public void Three_regular_parallel_lines_need_strong_evidence_before_native_pattern_hatch()
     {
         var result = new HatchRecognizer().Recognize(RectangleWithHorizontalLines([4, 8, 12]));
+
+        Assert.DoesNotContain(result.NativeHatches, candidate => !candidate.IsSolid);
+        var claim = Assert.Single(result.Claims);
+        Assert.Equal(HatchClassification.Uncertain, claim.Classification);
+        Assert.Contains(result.Warnings, warning => warning.Code == "hatch-uncertain");
+    }
+
+    [Fact]
+    public void Strong_hatch_layer_evidence_allows_confident_pattern_candidate()
+    {
+        var result = new HatchRecognizer().Recognize(RectangleWithHorizontalLines([4, 8, 12], "ШТРИХОВКА"));
 
         var hatch = Assert.Single(result.NativeHatches, candidate => !candidate.IsSolid);
         Assert.Equal(0d, hatch.PatternAngleRadians!.Value, 6);
         Assert.Equal(4d, hatch.PatternSpacingMillimetres!.Value, 6);
+        var claim = Assert.Single(result.Claims);
+        Assert.Equal(HatchClassification.Confident, claim.Classification);
+        Assert.Equal("boundary", Assert.Single(claim.BoundarySourceIds));
+        Assert.Equal(3, claim.PatternSourceIds.Count);
     }
 
     [Fact]
@@ -101,7 +116,7 @@ public sealed class HatchRecognizerTests
     {
         var result = new HatchRecognizer().Recognize([
             new VectorPolyline("outer", [new(0, 0), new(30, 0), new(30, 30), new(0, 30)], true, new VectorStyle()),
-            new VectorPolyline("inner", [new(5, 5), new(25, 5), new(25, 25), new(5, 25)], true, new VectorStyle()),
+            new VectorPolyline("inner", [new(5, 5), new(25, 5), new(25, 25), new(5, 25)], true, new VectorStyle("ШТРИХОВКА")),
             new VectorLine("line-1", new(6, 10), new(24, 10), new VectorStyle()),
             new VectorLine("line-2", new(6, 15), new(24, 15), new VectorStyle()),
             new VectorLine("line-3", new(6, 20), new(24, 20), new VectorStyle())
@@ -111,13 +126,15 @@ public sealed class HatchRecognizerTests
         Assert.Contains(result.NativeHatches, candidate => candidate.ProvenanceIds[0] == "inner");
     }
 
-    private static VectorEntity[] RectangleWithHorizontalLines(IReadOnlyList<double> yCoordinates)
+    private static VectorEntity[] RectangleWithHorizontalLines(
+        IReadOnlyList<double> yCoordinates,
+        string? sourceLayer = null)
         => [
             new VectorPolyline(
                 "boundary",
                 [new Point2(0, 0), new Point2(20, 0), new Point2(20, 20), new Point2(0, 20)],
                 true,
-                new VectorStyle()),
+                new VectorStyle(sourceLayer)),
             ..yCoordinates.Select((y, index) => new VectorLine(
                 $"hatch-line-{index}",
                 new Point2(1, y),
