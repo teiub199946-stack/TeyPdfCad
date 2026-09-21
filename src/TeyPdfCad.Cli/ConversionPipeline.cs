@@ -27,18 +27,34 @@ public sealed class ConversionPipeline
 {
     private readonly IDwgDocumentWriter _dwgWriter;
     private readonly IDwgReadBackVerifier _dwgVerifier;
+    private readonly bool _destructiveSuppressionEnabled;
 
     public ConversionPipeline()
-        : this(new ProductionDwgDocumentWriter(), new ProductionDwgReadBackVerifier())
+        : this(
+            new ProductionDwgDocumentWriter(),
+            new ProductionDwgReadBackVerifier(),
+            destructiveSuppressionEnabled: false)
     {
     }
 
     internal ConversionPipeline(
         IDwgDocumentWriter dwgWriter,
         IDwgReadBackVerifier dwgVerifier)
+        : this(
+            dwgWriter,
+            dwgVerifier,
+            destructiveSuppressionEnabled: true)
+    {
+    }
+
+    internal ConversionPipeline(
+        IDwgDocumentWriter dwgWriter,
+        IDwgReadBackVerifier dwgVerifier,
+        bool destructiveSuppressionEnabled)
     {
         _dwgWriter = dwgWriter ?? throw new ArgumentNullException(nameof(dwgWriter));
         _dwgVerifier = dwgVerifier ?? throw new ArgumentNullException(nameof(dwgVerifier));
+        _destructiveSuppressionEnabled = destructiveSuppressionEnabled;
     }
 
     public async Task<ConversionResult> ConvertAsync(
@@ -130,6 +146,15 @@ public sealed class ConversionPipeline
                     page => new SuppressionGate().Evaluate(
                         replacementPlans[page.Number],
                         probeVerification));
+
+                if (!_destructiveSuppressionEnabled)
+                {
+                    suppressionDecisions = suppressionDecisions.ToDictionary(
+                        pair => pair.Key,
+                        pair => DisableDestructiveSuppression(
+                            replacementPlans[pair.Key],
+                            pair.Value));
+                }
 
                 authorizedSuppressedSources = suppressionDecisions
                     .SelectMany(pair => pair.Value.SuppressSourceIds.Select(
@@ -257,6 +282,13 @@ public sealed class ConversionPipeline
             warnings.AddRange(document.Pages.SelectMany(page =>
                 executionReports[page.Number].CandidateNotVerifiedSourceIds.Select(sourceId =>
                     $"Page {page.Number}: native candidate is not read-back verified for source {sourceId}; source is preserved.")));
+            if (!_destructiveSuppressionEnabled
+                && suppressionDecisions.Values.Any(decision =>
+                    decision.Residuals.Any(residual =>
+                        residual.Kind == ReplacementResidualKind.DestructiveSuppressionDisabled)))
+            {
+                warnings.Add("Production destructive source suppression is disabled until independent source-equivalence and current-branch 10k semantic quality gates pass; verified native candidates are emitted while source geometry is preserved.");
+            }
             warnings = warnings.Distinct(StringComparer.Ordinal).ToList();
 
             var complete = warnings.Count == 0
@@ -274,6 +306,48 @@ public sealed class ConversionPipeline
             await TryWriteFailureReportAsync(reportPath, exception.Message, cancellationToken);
             return new ConversionResult(ConversionOutcome.InvalidArgumentsOrIo, reportPath, null);
         }
+    }
+
+    private static SuppressionDecision DisableDestructiveSuppression(
+        SourceReplacementPlan plan,
+        SuppressionDecision decision)
+    {
+        if (decision.SuppressSourceIds.Count == 0)
+            return decision;
+
+        var preserved = decision.PreserveSourceIds
+            .Concat(decision.SuppressSourceIds)
+            .ToHashSet(StringComparer.Ordinal);
+        var residuals = decision.Residuals.ToList();
+
+        foreach (var sourceId in decision.SuppressSourceIds.OrderBy(value => value, StringComparer.Ordinal))
+        {
+            var candidateId = plan.SourceCoverageMap.TryGetValue(sourceId, out var candidates)
+                && candidates.Count == 1
+                    ? candidates[0]
+                    : null;
+
+            if (!residuals.Any(existing =>
+                    string.Equals(existing.SourceId, sourceId, StringComparison.Ordinal)
+                    && existing.Kind == ReplacementResidualKind.DestructiveSuppressionDisabled))
+            {
+                residuals.Add(new ReplacementResidual(
+                    sourceId,
+                    candidateId,
+                    ReplacementResidualKind.DestructiveSuppressionDisabled,
+                    ReplacementResidualSeverity.Critical,
+                    "Production destructive source suppression is disabled until independent source-equivalence and current-branch 10k semantic quality gates pass."));
+            }
+        }
+
+        return new SuppressionDecision(
+            new HashSet<string>(StringComparer.Ordinal),
+            preserved,
+            residuals
+                .OrderBy(residual => residual.SourceId, StringComparer.Ordinal)
+                .ThenBy(residual => residual.CandidateKey, StringComparer.Ordinal)
+                .ThenBy(residual => residual.Kind)
+                .ToArray());
     }
 
     private static void ValidatePaths(string inputPdfPath, string outputDwgPath, string reportPath)
