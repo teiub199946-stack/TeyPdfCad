@@ -34,7 +34,7 @@ public sealed class PaintOrderEngineTests
         };
 
         var first = PaintOrderEngine.OrderBottomToTop(items).Select(item => item.Item).ToArray();
-        var second = PaintOrderEngine.OrderBottomToTop<string>(items.Reverse()).Select(item => item.Item).ToArray();
+        var second = PaintOrderEngine.OrderBottomToTop<string>(items.AsEnumerable().Reverse()).Select(item => item.Item).ToArray();
 
         Assert.Equal(first, second);
     }
