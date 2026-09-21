@@ -31,6 +31,10 @@ After DWG writing, `ReplacementExecutionReport` compares this map with the
 candidate keys that were actually created. A suppressed source without an
 actually-created covering candidate is `GeometryLost` and forces `PARTIAL`.
 
+This is structural/provenance coverage evidence, not pixel-level proof that the
+native object renders identically to the suppressed PDF geometry. Visual
+equivalence remains a separate AutoCAD render gate.
+
 ## Residual severity
 
 Residual severity is deterministic:
