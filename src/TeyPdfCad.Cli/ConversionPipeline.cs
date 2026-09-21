@@ -567,6 +567,9 @@ public sealed class ConversionPipeline
                 && hatchRecognition[page.Number].Warnings.Count == 0
                 && semanticRecognition[page.Number].Warnings.Count == 0
                 && replacementPlans[page.Number].IsFullPassEligible
+                && (suppressionDecisions is null
+                    || !suppressionDecisions.TryGetValue(page.Number, out var completionSuppressionDecision)
+                    || completionSuppressionDecision.Residuals.Count == 0)
                 && (templateSelections is null
                     || !templateSelections.TryGetValue(page.Number, out var completionTemplateSelection)
                     || !string.Equals(
