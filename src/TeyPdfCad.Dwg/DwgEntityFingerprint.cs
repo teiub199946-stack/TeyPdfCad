@@ -42,12 +42,6 @@ public static class DwgEntityFingerprint
                 string.Join(";", leader.Vertices.Select(Point)),
                 Number(leader.TextHeight),
                 leader.ArrowHeadEnabled ? "1" : "0"),
-            TextEntity text => Join(
-                "Text",
-                Point(text.InsertPoint),
-                Number(text.Height),
-                Number(text.Rotation),
-                text.Value ?? string.Empty),
             AttributeEntity attribute => Join(
                 "Attribute",
                 Point(attribute.InsertPoint),
@@ -55,6 +49,12 @@ public static class DwgEntityFingerprint
                 Number(attribute.Rotation),
                 attribute.Tag ?? string.Empty,
                 attribute.Value ?? string.Empty),
+            TextEntity text => Join(
+                "Text",
+                Point(text.InsertPoint),
+                Number(text.Height),
+                Number(text.Rotation),
+                text.Value ?? string.Empty),
             Insert insert => Join(
                 "Insert",
                 insert.Block?.Name ?? string.Empty,
