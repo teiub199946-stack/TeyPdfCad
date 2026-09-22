@@ -203,9 +203,12 @@ public sealed class RegressionRunner
             return false;
         }
 
-        return (expected.DimensionType == DimensionType.Rotated && actual.DimensionType == DimensionType.Aligned)
-            || (expected.DimensionType == DimensionType.Aligned && actual.DimensionType == DimensionType.Rotated);
+        return IsLinearFamily(expected.DimensionType)
+            && IsLinearFamily(actual.DimensionType.Value);
     }
+
+    private static bool IsLinearFamily(DimensionType type)
+        => type is DimensionType.Linear or DimensionType.Rotated or DimensionType.Aligned;
 
     private static CaseComparison Pass(
         string caseId,
