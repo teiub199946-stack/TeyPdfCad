@@ -254,7 +254,10 @@ public sealed class SourceReplacementPlannerTests
                 new("shared-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
             ]
         };
-        var semantics = new SemanticReconstructionResult([first, second], [], 100, 0.955);
+        var semantics = new SemanticReconstructionResult([first], [], 100, 0.95)
+        {
+            DimensionClaimants = [first, second]
+        };
 
         var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, pageNumber: 7);
 
