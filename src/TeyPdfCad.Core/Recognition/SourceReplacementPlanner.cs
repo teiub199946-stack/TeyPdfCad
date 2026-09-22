@@ -183,7 +183,10 @@ public sealed class SourceReplacementPlanner
         SemanticReconstructionResult semantics,
         int pageNumber)
     {
-        foreach (var candidate in semantics.Dimensions)
+        var dimensionClaimants = semantics.DimensionClaimants.Count > 0
+            ? semantics.DimensionClaimants
+            : semantics.Dimensions;
+        foreach (var candidate in dimensionClaimants)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
                 "DIMENSION",
