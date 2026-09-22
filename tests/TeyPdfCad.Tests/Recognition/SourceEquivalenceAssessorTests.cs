@@ -54,6 +54,93 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_with_captured_source_appearance_stays_fail_closed_until_native_mapping_is_proven()
+    {
+        var candidate = new DimensionCandidate(
+            DimensionKind.Aligned,
+            new(0, 0),
+            new(10, 0),
+            new(0, 5),
+            10,
+            10,
+            1,
+            0.95,
+            "10",
+            1,
+            ["d-line", "d-ext", "d-arrow", "d-text"])
+        {
+            SourceClaims =
+            [
+                new("d-line", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("d-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("d-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ],
+            SourceAppearance = new DimensionSourceAppearance(
+                new DimensionSourceTextAppearance(
+                    "10",
+                    new(5, 5),
+                    2.5,
+                    0,
+                    "DIM",
+                    0,
+                    ["d-text"]),
+                new DimensionSourceLineAppearance(
+                    new(0, 0),
+                    new(10, 0),
+                    "DIM",
+                    0,
+                    0.25,
+                    [],
+                    ["d-line"]),
+                [
+                    new DimensionSourceLineAppearance(
+                        new(0, 0),
+                        new(0, 5),
+                        "DIM",
+                        0,
+                        0.25,
+                        [],
+                        ["d-ext"])
+                ],
+                [
+                    new DimensionSourceLineAppearance(
+                        new(-1, -1),
+                        new(1, 1),
+                        "DIM",
+                        0,
+                        0.25,
+                        [],
+                        ["d-arrow"])
+                ])
+        };
+        var page = new VectorPdfPage(
+            1,
+            100,
+            100,
+            0,
+            [
+                new VectorLine("d-line", new(0, 0), new(10, 0), new VectorStyle()),
+                new VectorLine("d-ext", new(0, 0), new(0, 5), new VectorStyle()),
+                new VectorLine("d-arrow", new(-1, -1), new(1, 1), new VectorStyle()),
+                new VectorText("d-text", "10", new(5, 5), 7.0866, new VectorStyle())
+            ]);
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("captured before DWG emission", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not yet independently proven equivalent", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Every_current_destructive_semantic_type_is_incomplete_until_source_appearance_contract_exists()
     {
         var dimension = new DimensionCandidate(
