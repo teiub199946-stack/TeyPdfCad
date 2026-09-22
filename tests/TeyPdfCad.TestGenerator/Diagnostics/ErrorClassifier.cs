@@ -175,10 +175,14 @@ public sealed class ErrorClassifier
             snapshot.DimensionLinePointPaper,
             snapshot.DimensionLinePointWorld,
             expected.DrawingScale,
-            trace.ExpectedRotationDegrees));
+            trace.ExpectedRotationDegrees,
+            snapshot.DimensionLineRotationDegrees));
 
         checks.Add(Unavailable("text anchor", "DimensionCandidate does not expose a reconstructed text anchor."));
-        checks.Add(Unavailable("rotation/orientation", "DimensionCandidate does not expose reconstructed text orientation."));
+        checks.Add(CheckDimensionLineRotation(
+            trace.ExpectedRotationDegrees,
+            trace.InjectedNoise.AngularSkewDegrees,
+            snapshot.DimensionLineRotationDegrees));
 
         if (snapshot.BrokenDimensionLine is null)
         {
@@ -223,29 +227,63 @@ public sealed class ErrorClassifier
         Point2D? actualPaper,
         Point2D? actualWorld,
         double drawingScale,
-        double rotationDegrees)
+        double expectedRotationDegrees,
+        double? actualRotationDegrees)
     {
-        if (expected.CoreInputPaper is null || actualPaper is null || actualWorld is null)
-            return WrongUnavailable("dimension-line location", "Required Core/input dimension-line point is missing.");
+        if (expected.CoreInputPaper is null
+            || actualPaper is null
+            || actualWorld is null
+            || actualRotationDegrees is null)
+        {
+            return WrongUnavailable(
+                "dimension-line location",
+                "Required Core/input dimension-line point or rotation is missing.");
+        }
 
-        var radians = rotationDegrees * Math.PI / 180.0;
-        var normalX = -Math.Sin(radians);
-        var normalY = Math.Cos(radians);
+        var expectedRadians = expectedRotationDegrees * Math.PI / 180.0;
+        var actualRadians = actualRotationDegrees.Value * Math.PI / 180.0;
 
-        static Point2D ProjectNormal(Point2D point, double nx, double ny)
-            => new(point.X * nx + point.Y * ny, 0);
+        var expectedNormalX = -Math.Sin(expectedRadians);
+        var expectedNormalY = Math.Cos(expectedRadians);
+        var actualNormalX = -Math.Sin(actualRadians);
+        var actualNormalY = Math.Cos(actualRadians);
 
-        // For AutoCAD linear/aligned dimensions, DimLinePoint defines the
-        // perpendicular offset of the dimension line. Moving that point along
-        // the same dimension line is geometrically equivalent and must not be
-        // reported as a Core defect.
+        // Orient the actual normal consistently with the expected normal so
+        // signed offsets remain comparable modulo 180 degrees.
+        if (expectedNormalX * actualNormalX + expectedNormalY * actualNormalY < 0)
+        {
+            actualNormalX = -actualNormalX;
+            actualNormalY = -actualNormalY;
+        }
+
+        static double SignedOffset(
+            Point2D point,
+            Point2D origin,
+            double normalX,
+            double normalY)
+            => (point.X - origin.X) * normalX
+               + (point.Y - origin.Y) * normalY;
+
+        var injectedOffset = SignedOffset(
+            expected.CoreInputPaper.Value,
+            expected.CleanPaper,
+            actualNormalX,
+            actualNormalY);
+        var actualOffset = SignedOffset(
+            actualPaper.Value,
+            expected.CleanPaper,
+            actualNormalX,
+            actualNormalY);
+
+        // Compare infinite-line offset, not an arbitrary representative point.
+        // A different point on the same line is semantically identical.
         var error = GeometryTolerance.Calculate(new PointDiagnosticInput
         {
-            ExpectedWorld = ProjectNormal(expected.ExpectedWorld, normalX, normalY),
-            ActualWorld = ProjectNormal(actualWorld.Value, normalX, normalY),
-            CleanPaper = ProjectNormal(expected.CleanPaper, normalX, normalY),
-            CoreInputPaper = ProjectNormal(expected.CoreInputPaper.Value, normalX, normalY),
-            ActualCorePaper = ProjectNormal(actualPaper.Value, normalX, normalY),
+            ExpectedWorld = new Point2D(0, 0),
+            ActualWorld = new Point2D(actualOffset * drawingScale, 0),
+            CleanPaper = new Point2D(0, 0),
+            CoreInputPaper = new Point2D(injectedOffset, 0),
+            ActualCorePaper = new Point2D(actualOffset, 0),
             DrawingScale = drawingScale
         });
 
@@ -265,13 +303,53 @@ public sealed class ErrorClassifier
             Explanation = status switch
             {
                 GeometryCheckStatus.Correct =>
-                    "Perpendicular dimension-line offset matches; along-line translation is semantically equivalent.",
+                    "Infinite dimension-line offset matches; along-line translation is semantically equivalent.",
                 GeometryCheckStatus.ExpectedNoisePropagation =>
-                    $"Perpendicular paper offset error {error.ActualPaperError:0.########} is inside injected envelope {error.InjectedPaperError:0.########}.",
+                    $"Perpendicular line-offset error {error.ActualPaperError:0.########} is inside injected envelope {error.InjectedPaperError:0.########}.",
                 GeometryCheckStatus.NumericTolerance =>
-                    $"Perpendicular paper offset error {error.ActualPaperError:0.########} exceeds injected envelope only within fixed numeric epsilon.",
+                    $"Perpendicular line-offset error {error.ActualPaperError:0.########} exceeds injected envelope only within fixed numeric epsilon.",
                 _ =>
-                    $"Perpendicular paper offset error {error.ActualPaperError:0.########} exceeds allowed {error.AllowedPaperError:0.########}."
+                    $"Perpendicular line-offset error {error.ActualPaperError:0.########} exceeds allowed {error.AllowedPaperError:0.########}."
+            }
+        };
+    }
+
+    private static GeometrySubcheck CheckDimensionLineRotation(
+        double expectedRotationDegrees,
+        double injectedSkewDegrees,
+        double? actualRotationDegrees)
+    {
+        if (actualRotationDegrees is null)
+            return WrongUnavailable("rotation/orientation", "Core dimension-line rotation is missing.");
+
+        var actualError = ParallelAngleDifferenceDegrees(
+            expectedRotationDegrees,
+            actualRotationDegrees.Value);
+        var injectedError = Math.Abs(injectedSkewDegrees);
+        const double numericAngleEpsilon = 1e-6;
+
+        var status = actualError <= injectedError + 1e-12
+            ? injectedError > 1e-12
+                ? GeometryCheckStatus.ExpectedNoisePropagation
+                : GeometryCheckStatus.Correct
+            : actualError <= injectedError + numericAngleEpsilon + 1e-12
+                ? GeometryCheckStatus.NumericTolerance
+                : GeometryCheckStatus.Wrong;
+
+        return new GeometrySubcheck
+        {
+            Component = "rotation/orientation",
+            Status = status,
+            Explanation = status switch
+            {
+                GeometryCheckStatus.Correct =>
+                    "Dimension-line rotation matches.",
+                GeometryCheckStatus.ExpectedNoisePropagation =>
+                    $"Angular error {actualError:0.########}° is inside injected skew {injectedError:0.########}°.",
+                GeometryCheckStatus.NumericTolerance =>
+                    $"Angular error {actualError:0.########}° exceeds injected skew only within numeric epsilon.",
+                _ =>
+                    $"Angular error {actualError:0.########}° exceeds allowed injected skew {injectedError:0.########}°."
             }
         };
     }
@@ -387,6 +465,12 @@ public sealed class ErrorClassifier
         var endpoints = Math.Min(direct, swapped);
         var dimline = expected.DimensionLinePoint.DistanceTo(actual.DimensionLinePoint.Value);
         return endpoints > 0.05 || dimline > 0.05;
+    }
+
+    private static double ParallelAngleDifferenceDegrees(double first, double second)
+    {
+        var difference = Math.Abs(first - second) % 180.0;
+        return Math.Min(difference, 180.0 - difference);
     }
 
     private static bool TypesEquivalent(DimensionCase expected, ActualDimensionResult actual)
