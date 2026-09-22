@@ -89,6 +89,12 @@ public sealed class LinearDimensionRecognizer
                 if (probe is null)
                     continue;
 
+                // Ambiguity diagnostics keep the historical text-rotation
+                // constraint. The structural rotation override is reserved for
+                // fully recognized candidates with two-sided arrow evidence.
+                if (!probe.Value.TextRotationCompatible)
+                    continue;
+
                 // Zero-arrow evidence is an ordinary negative/lookalike. Full
                 // two-sided evidence is handled by normal recognition. Exactly
                 // partial evidence is the fail-closed ambiguity state.
@@ -255,7 +261,10 @@ public sealed class LinearDimensionRecognizer
             foreach (var dimensionLine in DimensionGeometryAnalysis.DimensionLineCandidates(scene.Lines, text))
             {
                 var probe = TryAnalyzeGeometry(scene, text, dimensionLine, options);
-                if (probe is null || probe.Value.ProjectedDistance <= 1e-9) continue;
+                if (probe is null
+                    || !probe.Value.TextRotationCompatible
+                    || probe.Value.ProjectedDistance <= 1e-9)
+                    continue;
 
                 var rawScale = displayedValue / probe.Value.ProjectedDistance;
                 if (!NumericCompat.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9) continue;
@@ -335,11 +344,13 @@ public sealed class LinearDimensionRecognizer
             ? measurementScore
             : DimensionGeometryAnalysis.CanonicalScaleScore(rawScale, scale.Value);
 
+        var textRotationPenalty = probe.Value.TextRotationCompatible ? 0d : 0.05d;
         var confidence = 0.50
             + 0.10 * probe.Value.TextScore
             + 0.15 * scaleScore
             + 0.15 * measurementScore
-            + 0.10 * probe.Value.ArrowEvidence;
+            + 0.10 * probe.Value.ArrowEvidence
+            - textRotationPenalty;
 
         return new DimensionCandidate(
             probe.Value.Kind,
@@ -370,9 +381,9 @@ public sealed class LinearDimensionRecognizer
         var dimLength = GeometryMath.Length(dimVector);
         if (dimLength <= 1e-9) return null;
         var dimensionAngle = Math.Atan2(dimVector.Y, dimVector.X) * 180.0 / Math.PI;
-        if (ParallelAngleDifferenceDegrees(dimensionAngle, text.Rotation)
-            > options.TextRotationToleranceDegrees)
-            return null;
+        var textRotationCompatible = ParallelAngleDifferenceDegrees(
+            dimensionAngle,
+            text.Rotation) <= options.TextRotationToleranceDegrees;
 
         var textTolerance = Math.Max(text.Height * options.TextDistanceHeightMultiplier, 1e-6);
         var textDistance = GeometryMath.DistancePointToInfiniteLine(text.Position, dimensionLine.Start, dimensionLine.End);
@@ -489,6 +500,7 @@ public sealed class LinearDimensionRecognizer
             GeometryMath.Midpoint(dimensionLine.Start, dimensionLine.End),
             projectedDistance,
             textScore,
+            textRotationCompatible,
             arrows,
             provenanceIds,
             sourceClaims,
@@ -582,6 +594,7 @@ public sealed class LinearDimensionRecognizer
         Point2 DimensionLinePoint,
         double ProjectedDistance,
         double TextScore,
+        bool TextRotationCompatible,
         double ArrowEvidence,
         IReadOnlyList<string> SourcePrimitiveIds,
         IReadOnlyList<RecognizerSourceClaim> SourceClaims,
