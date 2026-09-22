@@ -83,12 +83,26 @@ public sealed class DiagnosticClassifierTests
         Assert.Equal(category, Classify(expected, actual).Category);
     }
 
-    [Fact]
-    public void AlignedRotatedVisualAmbiguity_DoesNotBecomeWrongType()
+    [Theory]
+    [InlineData(DimensionType.Rotated, DimensionType.Aligned)]
+    [InlineData(DimensionType.Aligned, DimensionType.Rotated)]
+    [InlineData(DimensionType.Aligned, DimensionType.Linear)]
+    [InlineData(DimensionType.Rotated, DimensionType.Linear)]
+    [InlineData(DimensionType.Linear, DimensionType.Aligned)]
+    public void LinearFamilyVisualAmbiguity_DoesNotBecomeWrongType(
+        DimensionType expectedType,
+        DimensionType actualType)
     {
-        var expected = Case(ExpectedResult.Recognized) with { DimensionType = DimensionType.Rotated };
-        var actual = Actual(expected) with { DimensionType = DimensionType.Aligned, IsDimensionTypeAmbiguous = true };
-        Assert.NotEqual(DiagnosticCategory.WrongDimensionType, Classify(expected, actual).Category);
+        var expected = Case(ExpectedResult.Recognized) with { DimensionType = expectedType };
+        var actual = Actual(expected) with
+        {
+            DimensionType = actualType,
+            IsDimensionTypeAmbiguous = true
+        };
+
+        Assert.NotEqual(
+            DiagnosticCategory.WrongDimensionType,
+            Classify(expected, actual).Category);
     }
 
     [Fact]
