@@ -135,11 +135,14 @@ public sealed class LinearDimensionRecognizer
             .GroupBy(candidate => string.Concat(
                 TextSourceKey(candidate),
                 "\u001F",
-                GeometryKey(candidate)), StringComparer.Ordinal)
+                GeometryKey(candidate),
+                "\u001F",
+                SourceClaimSetKey(candidate)), StringComparer.Ordinal)
             .Select(group => group
                 .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
                 .ThenByDescending(candidate => candidate.Confidence)
                 .ThenByDescending(candidate => candidate.ArrowEvidence)
+                .ThenBy(CandidateTieBreakKey, StringComparer.Ordinal)
                 .First())
             .ToArray();
 
@@ -176,12 +179,14 @@ public sealed class LinearDimensionRecognizer
                 .ThenByDescending(candidate => candidate.Confidence)
                 .ThenByDescending(candidate => candidate.ArrowEvidence)
                 .ThenBy(GeometryKey, StringComparer.Ordinal)
+                .ThenBy(CandidateTieBreakKey, StringComparer.Ordinal)
                 .First())
             .GroupBy(GeometryKey, StringComparer.Ordinal)
             .Select(group => group
                 .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
                 .ThenByDescending(candidate => candidate.Confidence)
                 .ThenBy(TextSourceKey, StringComparer.Ordinal)
+                .ThenBy(CandidateTieBreakKey, StringComparer.Ordinal)
                 .First())
             .OrderBy(candidate => candidate.DimensionLinePoint.Y)
             .ThenBy(candidate => candidate.DimensionLinePoint.X)
@@ -212,6 +217,33 @@ public sealed class LinearDimensionRecognizer
                + "|" + Math.Round(candidate.DimensionLinePoint.X, 4)
                + "|" + Math.Round(candidate.DimensionLinePoint.Y, 4);
     }
+
+    private static string SourceClaimSetKey(DimensionCandidate candidate)
+        => string.Join(
+            "\u001E",
+            candidate.SourceClaims
+                .OrderBy(claim => claim.SourceId, StringComparer.Ordinal)
+                .ThenBy(claim => claim.Role)
+                .ThenBy(claim => claim.State)
+                .ThenBy(claim => claim.IsPartial)
+                .Select(claim => string.Concat(
+                    claim.SourceId,
+                    "\u001F",
+                    ((int)claim.Role).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "\u001F",
+                    ((int)claim.State).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "\u001F",
+                    claim.IsPartial ? "1" : "0")));
+
+    private static string CandidateTieBreakKey(DimensionCandidate candidate)
+        => string.Concat(
+            SourceClaimSetKey(candidate),
+            "\u001D",
+            candidate.SourceText,
+            "\u001D",
+            candidate.DrawingScale.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            "\u001D",
+            GeometryKey(candidate));
 
     private static int ScaleRank(double scale, IReadOnlyList<ScaleRankEntry> ranks)
     {
@@ -524,20 +556,30 @@ public sealed class LinearDimensionRecognizer
 
     private static void AddOrReplaceEquivalent(List<DimensionCandidate> dimensions, DimensionCandidate candidate)
     {
-        var index = dimensions.FindIndex(existing => SameDimensionGeometry(existing, candidate));
+        var index = dimensions.FindIndex(existing => SameDimensionHypothesis(existing, candidate));
         if (index < 0)
         {
             dimensions.Add(candidate);
             return;
         }
 
-        if (candidate.Confidence > dimensions[index].Confidence)
+        if (candidate.Confidence > dimensions[index].Confidence
+            || (Math.Abs(candidate.Confidence - dimensions[index].Confidence) <= 1e-12
+                && string.CompareOrdinal(
+                    CandidateTieBreakKey(candidate),
+                    CandidateTieBreakKey(dimensions[index])) < 0))
+        {
             dimensions[index] = candidate;
+        }
     }
 
-    private static bool SameDimensionGeometry(DimensionCandidate a, DimensionCandidate b)
+    private static bool SameDimensionHypothesis(DimensionCandidate a, DimensionCandidate b)
     {
-        if (!string.Equals(a.SourceText, b.SourceText, StringComparison.Ordinal)) return false;
+        if (!string.Equals(a.SourceText, b.SourceText, StringComparison.Ordinal)
+            || !string.Equals(SourceClaimSetKey(a), SourceClaimSetKey(b), StringComparison.Ordinal))
+        {
+            return false;
+        }
 
         const double tolerance = 1e-5;
         var direct = GeometryMath.Distance(a.DefinitionPoint1, b.DefinitionPoint1) <= tolerance
