@@ -25,7 +25,8 @@ public static class Program
                 "self-check" => await SelfCheckAsync(cli, config),
                 "core-run" => await CoreRunAsync(cli, config),
                 "diagnose-core" => await DiagnoseCoreAsync(cli, config),
-                "p0-quality-gate" => await P0QualityGateAsync(cli, config),
+                "p0-suppression-safety-gate" => await P0SuppressionSafetyGateAsync(cli, config),
+                "reconstruction-quality-gate" => await ReconstructionQualityGateAsync(cli, config),
                 "compare" => await CompareAsync(cli, config),
                 "baseline" => await BaselineAsync(cli),
                 "verify" => await VerifyAsync(cli, config),
@@ -140,7 +141,7 @@ public static class Program
         return 0;
     }
 
-    private static async Task<int> P0QualityGateAsync(
+    private static async Task<int> P0SuppressionSafetyGateAsync(
         CliArgs cli,
         TestConfig config)
     {
@@ -149,7 +150,7 @@ public static class Program
         var outputPath = cli.Get("--output")
             ?? Path.Combine(
                 Path.GetDirectoryName(coreReportPath) ?? ".",
-                "p0_gate.json");
+                "p0_suppression_safety_gate.json");
         var expectedCount = cli.GetInt("--expected-count", 10000);
 
         var core = JsonSerializer.Deserialize<RegressionReport>(
@@ -265,13 +266,110 @@ public static class Program
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 }));
 
-        Console.WriteLine($"P0 semantic quality gate: {gate.status}");
+        Console.WriteLine($"P0 suppression safety gate: {gate.status}");
         Console.WriteLine(
             $"TEST-002/003 cases: {core.Total}/{diagnostic.Total}; seed: {core.Seed}");
         Console.WriteLine(
             $"Diagnostic FPR: {diagnosticFalsePositiveRate:P3}; forced ambiguous recognition: {forcedAmbiguousRecognition}");
         Console.WriteLine(
             $"Suppression-evidence FP: {suppressionEligibleFalsePositive}; suppression-evidence ambiguous: {suppressionEligibleAmbiguous}");
+        foreach (var reason in reasons)
+            Console.WriteLine("FAIL: " + reason);
+        Console.WriteLine($"Gate report: {Path.GetFullPath(outputPath)}");
+
+        return reasons.Count == 0 ? 0 : 2;
+    }
+
+    private static async Task<int> ReconstructionQualityGateAsync(
+        CliArgs cli,
+        TestConfig config)
+    {
+        var coreReportPath = cli.Require("--core-report");
+        var outputPath = cli.Get("--output")
+            ?? Path.Combine(
+                Path.GetDirectoryName(coreReportPath) ?? ".",
+                "reconstruction_quality_gate.json");
+        var expectedCount = cli.GetInt("--expected-count", 10000);
+
+        var core = JsonSerializer.Deserialize<RegressionReport>(
+            await File.ReadAllTextAsync(coreReportPath),
+            JsonDefaults.Options)
+            ?? throw new InvalidDataException("Unable to deserialize TEST-002 report.");
+
+        var reasons = new List<string>();
+
+        if (core.Total != expectedCount)
+        {
+            reasons.Add(
+                $"TEST-002 case count {core.Total} != required {expectedCount}.");
+        }
+
+        if (!string.Equals(
+                core.ReleaseGate.Status,
+                "PASS",
+                StringComparison.Ordinal))
+        {
+            reasons.AddRange(
+                core.ReleaseGate.Reasons.Count == 0
+                    ? ["TEST-002 base release gate failed."]
+                    : core.ReleaseGate.Reasons.Select(reason =>
+                        "TEST-002: " + reason));
+        }
+
+        if (core.Recall < config.MinReconstructionRecall)
+        {
+            reasons.Add(
+                $"Recall {core.Recall:P3} is below absolute reconstruction floor {config.MinReconstructionRecall:P3}.");
+        }
+
+        if (core.F1 < config.MinReconstructionF1)
+        {
+            reasons.Add(
+                $"F1 {core.F1:P3} is below absolute reconstruction floor {config.MinReconstructionF1:P3}.");
+        }
+
+        if (core.PassRate < config.MinFullSemanticPassRate)
+        {
+            reasons.Add(
+                $"Full semantic pass rate {core.PassRate:P3} is below absolute reconstruction floor {config.MinFullSemanticPassRate:P3}.");
+        }
+
+        var gate = new
+        {
+            schemaVersion = "1.0",
+            gateType = "reconstruction-quality",
+            status = reasons.Count == 0 ? "PASS" : "FAIL",
+            expectedCount,
+            coreTotal = core.Total,
+            seed = core.Seed,
+            precision = core.Precision,
+            recall = core.Recall,
+            f1 = core.F1,
+            fullSemanticPassRate = core.PassRate,
+            minReconstructionRecall = config.MinReconstructionRecall,
+            minReconstructionF1 = config.MinReconstructionF1,
+            minFullSemanticPassRate = config.MinFullSemanticPassRate,
+            coreReleaseGate = core.ReleaseGate,
+            reasons
+        };
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        await File.WriteAllTextAsync(
+            outputPath,
+            JsonSerializer.Serialize(
+                gate,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                }));
+
+        Console.WriteLine($"Reconstruction quality gate: {gate.status}");
+        Console.WriteLine(
+            $"Recall: {core.Recall:P3} (min {config.MinReconstructionRecall:P3}); F1: {core.F1:P3} (min {config.MinReconstructionF1:P3}); full pass: {core.PassRate:P3} (min {config.MinFullSemanticPassRate:P3})");
         foreach (var reason in reasons)
             Console.WriteLine("FAIL: " + reason);
         Console.WriteLine($"Gate report: {Path.GetFullPath(outputPath)}");
@@ -405,7 +503,8 @@ public static class Program
               self-check    --count N --seed N --output DIR [--baseline FILE]
               core-run      --count N --seed N --output DIR [--baseline FILE] [--split] [--enforce-gate]
               diagnose-core --count N --seed N --output DIR
-              p0-quality-gate --core-report FILE --diagnostic-report FILE [--expected-count N] [--output FILE]
+              p0-suppression-safety-gate --core-report FILE --diagnostic-report FILE [--expected-count N] [--output FILE]
+              reconstruction-quality-gate --core-report FILE [--expected-count N] [--output FILE]
               compare       --cases FILE --actual FILE --output DIR [--baseline FILE]
               baseline      --report FILE --output FILE
               verify        --output DIR
