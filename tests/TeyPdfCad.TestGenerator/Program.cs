@@ -25,6 +25,7 @@ public static class Program
                 "self-check" => await SelfCheckAsync(cli, config),
                 "core-run" => await CoreRunAsync(cli, config),
                 "diagnose-core" => await DiagnoseCoreAsync(cli, config),
+                "preflight-geometry" => await PreflightGeometryAsync(cli, config),
                 "p0-suppression-safety-gate" => await P0SuppressionSafetyGateAsync(cli, config),
                 "reconstruction-quality-gate" => await ReconstructionQualityGateAsync(cli, config),
                 "compare" => await CompareAsync(cli, config),
@@ -154,6 +155,81 @@ public static class Program
         }
         Console.WriteLine($"Worst real Core defects written: {worst.Count}");
         Console.WriteLine($"Report: {Path.GetFullPath(Path.Combine(output, "report.json"))}");
+        return 0;
+    }
+
+    private static async Task<int> PreflightGeometryAsync(CliArgs cli, TestConfig config)
+    {
+        var count = cli.GetInt("--count", config.DefaultCount);
+        var seed = cli.GetInt("--seed", config.DefaultSeed);
+        var output = cli.Get("--output") ?? "artifacts/test-003/preflight-geometry";
+
+        var corpus = new DimensionCaseGenerator().Generate(count, seed);
+        var assessments = corpus.Cases
+            .Select(testCase => new
+            {
+                testCase.Id,
+                testCase.Family,
+                Assessment = PreRecognitionGeometryAnalyzer.Analyze(testCase)
+            })
+            .ToArray();
+
+        var chainAssessments = assessments
+            .Where(item => item.Family == DimensionFamily.Chain)
+            .ToArray();
+
+        var report = new
+        {
+            schemaVersion = "1.0",
+            diagnosticType = "pre-recognition-geometry",
+            seed,
+            total = assessments.Length,
+            valid = assessments.Count(item =>
+                item.Assessment.Status == PreRecognitionGeometryStatus.Valid),
+            degenerate = assessments.Count(item =>
+                item.Assessment.Status == PreRecognitionGeometryStatus.Degenerate),
+            crowded = assessments.Count(item =>
+                item.Assessment.Status == PreRecognitionGeometryStatus.Crowded),
+            chain = new
+            {
+                total = chainAssessments.Length,
+                valid = chainAssessments.Count(item =>
+                    item.Assessment.Status == PreRecognitionGeometryStatus.Valid),
+                degenerate = chainAssessments.Count(item =>
+                    item.Assessment.Status == PreRecognitionGeometryStatus.Degenerate),
+                crowded = chainAssessments.Count(item =>
+                    item.Assessment.Status == PreRecognitionGeometryStatus.Crowded)
+            },
+            degenerateCases = assessments
+                .Where(item =>
+                    item.Assessment.Status == PreRecognitionGeometryStatus.Degenerate)
+                .Select(item => new
+                {
+                    item.Id,
+                    item.Family,
+                    item.Assessment.DegenerateSegments
+                })
+                .ToArray()
+        };
+
+        Directory.CreateDirectory(output);
+        var reportPath = Path.Combine(output, "preflight_geometry.json");
+        await File.WriteAllTextAsync(
+            reportPath,
+            JsonSerializer.Serialize(
+                report,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                }));
+
+        Console.WriteLine("Pre-recognition geometry diagnostic");
+        Console.WriteLine(
+            $"Cases: {report.total}; valid: {report.valid}; degenerate: {report.degenerate}; crowded: {report.crowded}");
+        Console.WriteLine(
+            $"Chains: {report.chain.total}; valid: {report.chain.valid}; degenerate: {report.chain.degenerate}; crowded: {report.chain.crowded}");
+        Console.WriteLine($"Report: {Path.GetFullPath(reportPath)}");
         return 0;
     }
 
@@ -520,6 +596,7 @@ public static class Program
               self-check    --count N --seed N --output DIR [--baseline FILE]
               core-run      --count N --seed N --output DIR [--baseline FILE] [--split] [--enforce-gate]
               diagnose-core --count N --seed N --output DIR
+              preflight-geometry --count N --seed N --output DIR
               p0-suppression-safety-gate --core-report FILE --diagnostic-report FILE [--expected-count N] [--output FILE]
               reconstruction-quality-gate --core-report FILE [--expected-count N] [--output FILE]
               compare       --cases FILE --actual FILE --output DIR [--baseline FILE]
