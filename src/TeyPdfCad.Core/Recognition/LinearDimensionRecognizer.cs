@@ -283,16 +283,47 @@ public sealed class LinearDimensionRecognizer
         var observations = new List<ScaleObservation>(hypothesesByText.Count);
         for (var textIndex = 0; textIndex < hypothesesByText.Count; textIndex++)
         {
-            var best = hypothesesByText[textIndex]
-                .OrderByDescending(hypothesis =>
-                    CountCrossTextScaleSupport(
-                        hypothesis.Scale,
-                        hypothesesByText,
-                        textIndex,
-                        options.ScaleConsensusRelativeTolerance))
-                .ThenByDescending(hypothesis => hypothesis.Weight)
+            var localBest = hypothesesByText[textIndex]
+                .OrderByDescending(hypothesis => hypothesis.Weight)
                 .ThenBy(hypothesis => hypothesis.Scale)
                 .First();
+            var localSupport = CountCrossTextScaleSupport(
+                localBest.Scale,
+                hypothesesByText,
+                textIndex,
+                options.ScaleConsensusRelativeTolerance);
+
+            // Preserve an already cross-text-supported local observation. Only
+            // rescue a locally best scale when it is an isolated outlier and a
+            // competing hypothesis has enough independent text support to form
+            // the configured consensus. This avoids promoting repeated chain
+            // aliases (for example 1:500 instead of a real 1:50 equal chain).
+            var minimumOtherTextSupport = Math.Max(
+                options.ScaleConsensusMinimumVotes - 1,
+                1);
+            var best = localBest;
+            if (localSupport == 0)
+            {
+                var supportedAlternative = hypothesesByText[textIndex]
+                    .Select(hypothesis => new
+                    {
+                        Observation = hypothesis,
+                        Support = CountCrossTextScaleSupport(
+                            hypothesis.Scale,
+                            hypothesesByText,
+                            textIndex,
+                            options.ScaleConsensusRelativeTolerance)
+                    })
+                    .Where(item => item.Support >= minimumOtherTextSupport)
+                    .OrderByDescending(item => item.Support)
+                    .ThenByDescending(item => item.Observation.Weight)
+                    .ThenBy(item => item.Observation.Scale)
+                    .FirstOrDefault();
+
+                if (supportedAlternative is not null)
+                    best = supportedAlternative.Observation;
+            }
+
             observations.Add(best);
         }
 
