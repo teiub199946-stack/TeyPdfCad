@@ -8,7 +8,8 @@ public sealed record LinePrimitive(
     string? Layer = null,
     IReadOnlyList<string>? SourceIds = null,
     double? StrokeWidthMm = null,
-    IReadOnlyList<double>? DashPatternMm = null)
+    IReadOnlyList<double>? DashPatternMm = null,
+    int? RgbColor = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 
