@@ -170,8 +170,12 @@ public sealed class ErrorClassifier
         var pairing = ChooseEndpointPairing(trace, snapshot);
         checks.Add(CheckPoint("extension-line point 1", pairing.Expected1, pairing.ActualPaper1, pairing.ActualWorld1, expected.DrawingScale));
         checks.Add(CheckPoint("extension-line point 2", pairing.Expected2, pairing.ActualPaper2, pairing.ActualWorld2, expected.DrawingScale));
-        checks.Add(CheckPoint("dimension-line location", trace.DimensionLineLocation,
-            snapshot.DimensionLinePointPaper, snapshot.DimensionLinePointWorld, expected.DrawingScale));
+        checks.Add(CheckDimensionLineLocation(
+            trace.DimensionLineLocation,
+            snapshot.DimensionLinePointPaper,
+            snapshot.DimensionLinePointWorld,
+            expected.DrawingScale,
+            trace.ExpectedRotationDegrees));
 
         checks.Add(Unavailable("text anchor", "DimensionCandidate does not expose a reconstructed text anchor."));
         checks.Add(Unavailable("rotation/orientation", "DimensionCandidate does not expose reconstructed text orientation."));
@@ -212,6 +216,64 @@ public sealed class ErrorClassifier
         }
 
         return checks;
+    }
+
+    private static GeometrySubcheck CheckDimensionLineLocation(
+        GeometryPointTrace expected,
+        Point2D? actualPaper,
+        Point2D? actualWorld,
+        double drawingScale,
+        double rotationDegrees)
+    {
+        if (expected.CoreInputPaper is null || actualPaper is null || actualWorld is null)
+            return WrongUnavailable("dimension-line location", "Required Core/input dimension-line point is missing.");
+
+        var radians = rotationDegrees * Math.PI / 180.0;
+        var normalX = -Math.Sin(radians);
+        var normalY = Math.Cos(radians);
+
+        static Point2D ProjectNormal(Point2D point, double nx, double ny)
+            => new(point.X * nx + point.Y * ny, 0);
+
+        // For AutoCAD linear/aligned dimensions, DimLinePoint defines the
+        // perpendicular offset of the dimension line. Moving that point along
+        // the same dimension line is geometrically equivalent and must not be
+        // reported as a Core defect.
+        var error = GeometryTolerance.Calculate(new PointDiagnosticInput
+        {
+            ExpectedWorld = ProjectNormal(expected.ExpectedWorld, normalX, normalY),
+            ActualWorld = ProjectNormal(actualWorld.Value, normalX, normalY),
+            CleanPaper = ProjectNormal(expected.CleanPaper, normalX, normalY),
+            CoreInputPaper = ProjectNormal(expected.CoreInputPaper.Value, normalX, normalY),
+            ActualCorePaper = ProjectNormal(actualPaper.Value, normalX, normalY),
+            DrawingScale = drawingScale
+        });
+
+        var status = error.Category switch
+        {
+            DiagnosticCategory.Correct => GeometryCheckStatus.Correct,
+            DiagnosticCategory.ExpectedNoisePropagation => GeometryCheckStatus.ExpectedNoisePropagation,
+            DiagnosticCategory.NumericTolerance => GeometryCheckStatus.NumericTolerance,
+            _ => GeometryCheckStatus.Wrong
+        };
+
+        return new GeometrySubcheck
+        {
+            Component = "dimension-line location",
+            Status = status,
+            Error = error,
+            Explanation = status switch
+            {
+                GeometryCheckStatus.Correct =>
+                    "Perpendicular dimension-line offset matches; along-line translation is semantically equivalent.",
+                GeometryCheckStatus.ExpectedNoisePropagation =>
+                    $"Perpendicular paper offset error {error.ActualPaperError:0.########} is inside injected envelope {error.InjectedPaperError:0.########}.",
+                GeometryCheckStatus.NumericTolerance =>
+                    $"Perpendicular paper offset error {error.ActualPaperError:0.########} exceeds injected envelope only within fixed numeric epsilon.",
+                _ =>
+                    $"Perpendicular paper offset error {error.ActualPaperError:0.########} exceeds allowed {error.AllowedPaperError:0.########}."
+            }
+        };
     }
 
     private static GeometrySubcheck CheckPoint(
