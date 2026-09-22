@@ -215,7 +215,8 @@ public sealed class LinearDimensionRecognizer
             probe.Value.SourcePrimitiveIds)
         {
             RotationRadians = probe.Value.RotationRadians,
-            SourceClaims = probe.Value.SourceClaims
+            SourceClaims = probe.Value.SourceClaims,
+            SourceAppearance = probe.Value.SourceAppearance
         };
     }
 
@@ -304,6 +305,12 @@ public sealed class LinearDimensionRecognizer
             .Distinct()
             .ToArray();
 
+        var sourceAppearance = new DimensionSourceAppearance(
+            CaptureSourceText(text),
+            CaptureSourceLine(dimensionLine),
+            extensionLines.Select(CaptureSourceLine).ToArray(),
+            arrowLines.Select(CaptureSourceLine).ToArray());
+
         var angle = Math.Atan2(dimVector.Y, dimVector.X) * 180.0 / Math.PI;
         var normalized = NormalizeAngle(angle);
         var axisAligned = Math.Min(normalized, Math.Abs(90.0 - normalized)) <= 1.0;
@@ -318,8 +325,29 @@ public sealed class LinearDimensionRecognizer
             arrows,
             provenanceIds,
             sourceClaims,
+            sourceAppearance,
             Math.Atan2(dimVector.Y, dimVector.X));
     }
+
+    private static DimensionSourceLineAppearance CaptureSourceLine(LinePrimitive line)
+        => new(
+            line.Start,
+            line.End,
+            line.Layer,
+            line.RgbColor,
+            line.StrokeWidthMm,
+            line.StrokeDashPattern.ToArray(),
+            line.ProvenanceIds.ToArray());
+
+    private static DimensionSourceTextAppearance CaptureSourceText(TextPrimitive text)
+        => new(
+            text.Value,
+            text.Position,
+            text.Height,
+            text.Rotation,
+            text.Layer,
+            text.RgbColor,
+            text.ProvenanceIds.ToArray());
 
     private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
         => groups
@@ -390,6 +418,7 @@ public sealed class LinearDimensionRecognizer
         double ArrowEvidence,
         IReadOnlyList<string> SourcePrimitiveIds,
         IReadOnlyList<RecognizerSourceClaim> SourceClaims,
+        DimensionSourceAppearance SourceAppearance,
         double RotationRadians);
 
     private readonly record struct ScaleRankEntry(double Scale, int Rank);
