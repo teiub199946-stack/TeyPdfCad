@@ -6,12 +6,24 @@ using TeyPdfCad.Core.Semantics.Dimensions;
 
 namespace TeyPdfCad.Core.Recognition;
 
+public sealed record LinearDimensionRecognitionResult(
+    IReadOnlyList<DimensionCandidate> PrimaryCandidates,
+    IReadOnlyList<DimensionCandidate> Claimants);
+
 public sealed class LinearDimensionRecognizer
 {
     public const string AmbiguousEvidenceWarningCode = "DIMENSION_AMBIGUOUS_PARTIAL_ARROW";
 
-    public IReadOnlyList<DimensionCandidate> Recognize(PrimitiveScene scene, DimensionRecognitionOptions? options = null)
+    public IReadOnlyList<DimensionCandidate> Recognize(
+        PrimitiveScene scene,
+        DimensionRecognitionOptions? options = null)
+        => RecognizeDetailed(scene, options).Claimants;
+
+    public LinearDimensionRecognitionResult RecognizeDetailed(
+        PrimitiveScene scene,
+        DimensionRecognitionOptions? options = null)
     {
+        ArgumentNullException.ThrowIfNull(scene);
         options ??= new DimensionRecognitionOptions();
 
         if (!options.DrawingScale.HasValue)
@@ -43,12 +55,18 @@ public sealed class LinearDimensionRecognizer
 
                 if (combined.Count > 0)
                 {
-                    return SelectUniqueCandidates(combined, clusters);
+                    var claimants = SelectUniqueCandidates(combined, clusters);
+                    return new LinearDimensionRecognitionResult(
+                        SelectPrimaryCandidates(claimants, clusters),
+                        claimants);
                 }
             }
         }
 
-        return RecognizeWithResolvedScale(scene, options);
+        var resolved = RecognizeWithResolvedScale(scene, options);
+        return new LinearDimensionRecognitionResult(
+            SelectPrimaryCandidates(resolved, []),
+            resolved);
     }
 
     public IReadOnlyList<SemanticWarning> DetectAmbiguities(
@@ -138,6 +156,36 @@ public sealed class LinearDimensionRecognizer
                 .First())
             .OrderBy(x => x.DimensionLinePoint.Y)
             .ThenBy(x => x.DimensionLinePoint.X)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<DimensionCandidate> SelectPrimaryCandidates(
+        IReadOnlyList<DimensionCandidate> candidates,
+        IReadOnlyList<ScaleConsensus> clusters)
+    {
+        if (candidates.Count <= 1)
+            return candidates;
+
+        var scaleRank = clusters
+            .Select((cluster, index) => new ScaleRankEntry(cluster.Scale, index))
+            .ToArray();
+
+        return candidates
+            .GroupBy(TextSourceKey, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
+                .ThenByDescending(candidate => candidate.Confidence)
+                .ThenByDescending(candidate => candidate.ArrowEvidence)
+                .ThenBy(GeometryKey, StringComparer.Ordinal)
+                .First())
+            .GroupBy(GeometryKey, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
+                .ThenByDescending(candidate => candidate.Confidence)
+                .ThenBy(TextSourceKey, StringComparer.Ordinal)
+                .First())
+            .OrderBy(candidate => candidate.DimensionLinePoint.Y)
+            .ThenBy(candidate => candidate.DimensionLinePoint.X)
             .ToArray();
     }
 
