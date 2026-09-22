@@ -192,6 +192,53 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Recognizes_long_outside_text_dimension_with_micro_break()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(254.9, 0),
+            SourceIds: ["dim-left"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(255.1, 0),
+            new Point2(300, 0),
+            SourceIds: ["dim-right"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, -12),
+            new Point2(0, 1),
+            SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(300, -12),
+            new Point2(300, 1),
+            SourceIds: ["ext-2"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-1, -1),
+            new Point2(1, 1),
+            SourceIds: ["arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(299, -1),
+            new Point2(301, 1),
+            SourceIds: ["arrow-2"]));
+        scene.Texts.Add(new TextPrimitive(
+            "30000",
+            new Point2(345, 0),
+            2.5,
+            0,
+            SourceIds: ["text"]));
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+
+        Assert.Equal(30000, dimension.DisplayedValue, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+        Assert.True(dimension.SourceAppearance!.DimensionLine.IsCompositeObservation);
+        Assert.Equal(
+            ["dim-left", "dim-right"],
+            dimension.SourceAppearance.DimensionLine.SourceIds
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToArray());
+    }
+
+    [Fact]
     public void Recognizes_Aligned_Dimension_At_45_Degrees()
     {
         const double component = 36.76955262170047;
