@@ -114,10 +114,7 @@ public sealed class LinearDimensionRecognizer
             .ToArray();
 
         var perText = candidates
-            .GroupBy(candidate => candidate.ProvenanceIds.FirstOrDefault(id =>
-                    id.StartsWith("page-", StringComparison.Ordinal)
-                    && id.IndexOf("-text-", StringComparison.Ordinal) >= 0)
-                ?? candidate.SourceText + "|" + Math.Round(candidate.DimensionLinePoint.X, 4) + "|" + Math.Round(candidate.DimensionLinePoint.Y, 4))
+            .GroupBy(TextSourceKey)
             .Select(group => group
                 .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
                 .ThenByDescending(candidate => candidate.Confidence)
@@ -134,6 +131,31 @@ public sealed class LinearDimensionRecognizer
             .OrderBy(x => x.DimensionLinePoint.Y)
             .ThenBy(x => x.DimensionLinePoint.X)
             .ToArray();
+    }
+
+    private static string TextSourceKey(DimensionCandidate candidate)
+    {
+        var textSourceIds = candidate.SourceClaims
+            .Where(claim =>
+                claim.Role == SourceUsageRole.Text
+                && claim.State == SourceClaimState.Valid
+                && !claim.IsPartial
+                && !string.IsNullOrWhiteSpace(claim.SourceId))
+            .Select(claim => claim.SourceId)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        if (textSourceIds.Length > 0)
+            return "source:" + string.Join("|", textSourceIds);
+
+        return candidate.ProvenanceIds.FirstOrDefault(id =>
+                   id.StartsWith("page-", StringComparison.Ordinal)
+                   && id.IndexOf("-text-", StringComparison.Ordinal) >= 0)
+               ?? "fallback:"
+               + candidate.SourceText
+               + "|" + Math.Round(candidate.DimensionLinePoint.X, 4)
+               + "|" + Math.Round(candidate.DimensionLinePoint.Y, 4);
     }
 
     private static int ScaleRank(double scale, IReadOnlyList<ScaleRankEntry> ranks)
