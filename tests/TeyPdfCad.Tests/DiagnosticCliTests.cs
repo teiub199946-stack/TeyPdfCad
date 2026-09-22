@@ -1,5 +1,7 @@
 using System.Text.Json;
 using TeyPdfCad.TestGenerator.Diagnostics;
+using TeyPdfCad.TestGenerator.Generation;
+using TeyPdfCad.TestGenerator.Pipelines;
 using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Reporting;
 using Xunit;
@@ -274,6 +276,22 @@ public sealed class DiagnosticCliTests
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task GeneratedChainCase_000047_does_not_collapse_to_half_scale()
+    {
+        var testCase = new DimensionCaseGenerator()
+            .Generate(47, 12345)
+            .Cases[46];
+
+        var run = await new SemanticCoreTestPipeline().RunDetailedAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, run.Actual.Result);
+        Assert.Equal(testCase.ExpectedDimensions, run.Actual.DetectedDimensions);
+        Assert.Equal(testCase.ExpectedValue, run.Actual.Value!.Value, 6);
+        Assert.Equal(testCase.DrawingScale, run.Actual.DrawingScale!.Value, 6);
+        Assert.Equal(DimensionType.Chain, run.Actual.DimensionType);
     }
 
     [Fact]
