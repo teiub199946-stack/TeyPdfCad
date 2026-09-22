@@ -120,10 +120,36 @@ public sealed class SourceEquivalenceAssessorTests
             100,
             0,
             [
-                new VectorLine("d-line", new(0, 0), new(10, 0), new VectorStyle()),
-                new VectorLine("d-ext", new(0, 0), new(0, 5), new VectorStyle()),
-                new VectorLine("d-arrow", new(-1, -1), new(1, 1), new VectorStyle()),
-                new VectorText("d-text", "10", new(5, 5), 7.0866, new VectorStyle())
+                new VectorLine(
+                    "d-line",
+                    new(0, 0),
+                    new(10, 0),
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                new VectorLine(
+                    "d-ext",
+                    new(0, 0),
+                    new(0, 5),
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                new VectorLine(
+                    "d-arrow",
+                    new(-1, -1),
+                    new(1, 1),
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                new VectorText(
+                    "d-text",
+                    "10",
+                    new(5, 5),
+                    2.5 / VectorPdfPage.MillimetresPerPoint,
+                    new VectorStyle(SourceLayer: "DIM", RgbColor: 0))
             ]);
         var semantics = EmptySemantics() with { Dimensions = [candidate] };
 
