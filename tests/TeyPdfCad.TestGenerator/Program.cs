@@ -238,6 +238,7 @@ public static class Program
         var gate = new
         {
             schemaVersion = "1.0",
+            gateType = "suppression-safety",
             status = reasons.Count == 0 ? "PASS" : "FAIL",
             expectedCount,
             coreTotal = core.Total,
