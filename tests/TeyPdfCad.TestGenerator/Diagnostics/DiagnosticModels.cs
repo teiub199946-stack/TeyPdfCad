@@ -66,6 +66,7 @@ public sealed record CoreGeometrySnapshot
     public Point2D? DefinitionPoint2World { get; init; }
     public Point2D? DimensionLinePointWorld { get; init; }
     public Point2D? TextAnchorWorld { get; init; }
+    public double? DimensionLineRotationDegrees { get; init; }
     public double? TextRotationDegrees { get; init; }
     public bool? BrokenDimensionLine { get; init; }
     public List<string> ProvenanceIds { get; init; } = new();
