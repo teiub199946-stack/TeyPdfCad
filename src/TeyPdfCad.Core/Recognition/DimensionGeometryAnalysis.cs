@@ -15,7 +15,39 @@ internal static class DimensionGeometryAnalysis
             .Where(line => GeometryMath.DistancePointToSegment(text.Position, line.Start, line.End) <= localRadius)
             .ToArray();
 
-        foreach (var line in localFragments) yield return line;
+        foreach (var line in localFragments)
+            yield return line;
+
+        // Dimension text is legitimately placed outside the measured span in
+        // many drawings. A pure point-to-segment radius misses long dimensions
+        // even though the text still lies on the dimension-line extension.
+        // Admit only extrapolated candidates that are close to the infinite
+        // line and still inside the same conservative projection envelope used
+        // by TryAnalyzeGeometry. Arrow + extension evidence remains mandatory.
+        foreach (var line in lines)
+        {
+            if (localFragments.Any(local => ReferenceEquals(local, line)))
+                continue;
+
+            var vector = GeometryMath.Subtract(line.End, line.Start);
+            if (GeometryMath.Length(vector) <= 1e-9)
+                continue;
+
+            if (GeometryMath.DistancePointToInfiniteLine(
+                    text.Position,
+                    line.Start,
+                    line.End) > localRadius)
+                continue;
+
+            var projection = ProjectionParameter(
+                text.Position,
+                line.Start,
+                line.End);
+            if (projection is < -0.25 or > 1.25)
+                continue;
+
+            yield return line;
+        }
 
         for (var i = 0; i < localFragments.Length; i++)
         for (var j = i + 1; j < localFragments.Length; j++)
