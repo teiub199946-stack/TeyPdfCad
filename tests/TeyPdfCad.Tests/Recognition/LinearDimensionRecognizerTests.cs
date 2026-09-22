@@ -349,6 +349,22 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Shared_text_source_across_distinct_geometry_is_not_ranked_away()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimensionWithSources(scene, y: 0, importedLength: 100, displayedValue: "5000", prefix: "a", textSourceId: "shared-text");
+        AddHorizontalDimensionWithSources(scene, y: 30, importedLength: 100, displayedValue: "5000", prefix: "b", textSourceId: "shared-text");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(2, dimensions.Count);
+        Assert.All(dimensions, dimension =>
+            Assert.Contains(dimension.SourceClaims, claim =>
+                claim.SourceId == "shared-text"
+                && claim.State == TeyPdfCad.Core.Semantics.SourceClaimState.Valid));
+    }
+
+    [Fact]
     public void One_sided_arrow_evidence_is_abstained_as_ambiguous()
     {
         var scene = new PrimitiveScene();
@@ -473,6 +489,22 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(52, 100), new Point2(52, 120)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
         Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    private static void AddHorizontalDimensionWithSources(
+        PrimitiveScene scene,
+        double y,
+        double importedLength,
+        string displayedValue,
+        string prefix,
+        string textSourceId)
+    {
+        scene.Lines.Add(new LinePrimitive(new Point2(0, y), new Point2(importedLength, y), SourceIds: [$"{prefix}-dim"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, y - 12), new Point2(0, y + 1), SourceIds: [$"{prefix}-ext-1"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(importedLength, y - 12), new Point2(importedLength, y + 1), SourceIds: [$"{prefix}-ext-2"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1, y - 1), new Point2(1, y + 1), SourceIds: [$"{prefix}-arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(importedLength - 1, y - 1), new Point2(importedLength + 1, y + 1), SourceIds: [$"{prefix}-arrow-2"]));
+        scene.Texts.Add(new TextPrimitive(displayedValue, new Point2(importedLength / 2.0, y + 3), 2.5, 0, SourceIds: [textSourceId]));
     }
 
     private static void AddHorizontalDimension(
