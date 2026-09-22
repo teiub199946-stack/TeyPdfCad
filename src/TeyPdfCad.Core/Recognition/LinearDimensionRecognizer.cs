@@ -327,6 +327,9 @@ public sealed class LinearDimensionRecognizer
         // semantic replacement candidate.
         if (probe.Value.ArrowEvidence < 1d)
             return null;
+        if (!probe.Value.TextRotationCompatible
+            && !probe.Value.HorizontalTextOnInclinedDimension)
+            return null;
 
         var rawScale = displayedValue / probe.Value.ProjectedDistance;
         var scale = DimensionGeometryAnalysis.ResolveScale(
@@ -384,6 +387,11 @@ public sealed class LinearDimensionRecognizer
         var textRotationCompatible = ParallelAngleDifferenceDegrees(
             dimensionAngle,
             text.Rotation) <= options.TextRotationToleranceDegrees;
+        var normalizedDimensionAngle = NormalizeAngle(dimensionAngle);
+        var horizontalTextOnInclinedDimension =
+            ParallelAngleDifferenceDegrees(text.Rotation, 0d) <= options.TextRotationToleranceDegrees
+            && normalizedDimensionAngle > options.TextRotationToleranceDegrees
+            && Math.Abs(90d - normalizedDimensionAngle) > options.TextRotationToleranceDegrees;
 
         var textTolerance = Math.Max(text.Height * options.TextDistanceHeightMultiplier, 1e-6);
         var textDistance = GeometryMath.DistancePointToInfiniteLine(text.Position, dimensionLine.Start, dimensionLine.End);
@@ -501,6 +509,7 @@ public sealed class LinearDimensionRecognizer
             projectedDistance,
             textScore,
             textRotationCompatible,
+            horizontalTextOnInclinedDimension,
             arrows,
             provenanceIds,
             sourceClaims,
@@ -595,6 +604,7 @@ public sealed class LinearDimensionRecognizer
         double ProjectedDistance,
         double TextScore,
         bool TextRotationCompatible,
+        bool HorizontalTextOnInclinedDimension,
         double ArrowEvidence,
         IReadOnlyList<string> SourcePrimitiveIds,
         IReadOnlyList<RecognizerSourceClaim> SourceClaims,
