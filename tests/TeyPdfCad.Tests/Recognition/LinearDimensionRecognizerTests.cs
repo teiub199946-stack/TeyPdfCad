@@ -273,6 +273,19 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Canonical_scale_consensus_snaps_back_to_exact_scale()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimension(scene, y: 0, importedLength: 100.10, displayedValue: "2500");
+        AddHorizontalDimension(scene, y: 30, importedLength: 99.95, displayedValue: "2500");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(2, dimensions.Count);
+        Assert.All(dimensions, dimension => Assert.Equal(25, dimension.DrawingScale, 6));
+    }
+
+    [Fact]
     public void Recognizes_NonCanonical_Scale_From_Two_Dimension_Consensus()
     {
         var scene = new PrimitiveScene();
