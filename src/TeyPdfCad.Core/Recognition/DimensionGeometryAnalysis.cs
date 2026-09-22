@@ -73,7 +73,12 @@ internal static class DimensionGeometryAnalysis
                     microMergeFragments[i],
                     microMergeFragments[j],
                     text,
-                    out var merged))
+                    out var merged)
+                && !MicroGapContainsAnotherCollinearFragment(
+                    microMergeFragments,
+                    microMergeFragments[i],
+                    microMergeFragments[j],
+                    text))
                 yield return merged;
     }
 
@@ -244,6 +249,97 @@ internal static class DimensionGeometryAnalysis
 
         merged = BuildMergedLine(first, second, leftPoint, rightPoint);
         return true;
+    }
+
+    private static bool MicroGapContainsAnotherCollinearFragment(
+        IReadOnlyList<LinePrimitive> candidates,
+        LinePrimitive first,
+        LinePrimitive second,
+        TextPrimitive text)
+    {
+        var vector = GeometryMath.Subtract(first.End, first.Start);
+        if (GeometryMath.Length(vector) <= 1e-9)
+            return false;
+
+        var unit = GeometryMath.Normalize(vector);
+        var origin = first.Start;
+        var firstScalars = new[]
+        {
+            0d,
+            GeometryMath.Dot(GeometryMath.Subtract(first.End, origin), unit)
+        };
+        var secondScalars = new[]
+        {
+            GeometryMath.Dot(GeometryMath.Subtract(second.Start, origin), unit),
+            GeometryMath.Dot(GeometryMath.Subtract(second.End, origin), unit)
+        };
+
+        var firstMin = firstScalars.Min();
+        var firstMax = firstScalars.Max();
+        var secondMin = secondScalars.Min();
+        var secondMax = secondScalars.Max();
+        double gapMin;
+        double gapMax;
+
+        if (firstMax < secondMin)
+        {
+            gapMin = firstMax;
+            gapMax = secondMin;
+        }
+        else if (secondMax < firstMin)
+        {
+            gapMin = secondMax;
+            gapMax = firstMin;
+        }
+        else
+        {
+            return false;
+        }
+
+        var gapLength = gapMax - gapMin;
+        if (gapLength <= 1e-9)
+            return false;
+
+        var sameLineTolerance = Math.Max(text.Height * 0.10, 0.05);
+        foreach (var other in candidates)
+        {
+            if (ReferenceEquals(other, first) || ReferenceEquals(other, second))
+                continue;
+
+            var otherVector = GeometryMath.Subtract(other.End, other.Start);
+            var otherLength = GeometryMath.Length(otherVector);
+            if (otherLength <= 1e-9)
+                continue;
+
+            if (Math.Abs(GeometryMath.Dot(unit, GeometryMath.Normalize(otherVector)))
+                < Math.Cos(2.0 * Math.PI / 180.0))
+                continue;
+
+            if (GeometryMath.DistancePointToInfiniteLine(
+                    GeometryMath.Midpoint(other.Start, other.End),
+                    first.Start,
+                    first.End) > sameLineTolerance)
+                continue;
+
+            var otherStart = GeometryMath.Dot(
+                GeometryMath.Subtract(other.Start, origin),
+                unit);
+            var otherEnd = GeometryMath.Dot(
+                GeometryMath.Subtract(other.End, origin),
+                unit);
+            var otherMin = Math.Min(otherStart, otherEnd);
+            var otherMax = Math.Max(otherStart, otherEnd);
+            var overlap = Math.Min(gapMax, otherMax) - Math.Max(gapMin, otherMin);
+
+            // If another near-collinear source fragment materially occupies the
+            // supposed gap, first+second are not an isolated broken line. This
+            // is the common adjacent-chain case; merging across it fabricates a
+            // longer dimension line and corrupts scale consensus.
+            if (overlap > Math.Max(gapLength * 0.05, 1e-6))
+                return true;
+        }
+
+        return false;
     }
 
     private static LinePrimitive BuildMergedLine(
