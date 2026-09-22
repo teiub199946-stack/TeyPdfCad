@@ -29,6 +29,114 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Captures_source_appearance_before_native_emission()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(52, 0),
+            "DIM",
+            ["dim-line"],
+            0.35,
+            [4.0, 1.0],
+            0x112233));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, -12),
+            new Point2(0, 1),
+            "DIM",
+            ["ext-1"],
+            0.25,
+            [],
+            0x223344));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(52, -12),
+            new Point2(52, 1),
+            "DIM",
+            ["ext-2"],
+            0.25,
+            [],
+            0x223344));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-1, -1),
+            new Point2(1, 1),
+            "DIM",
+            ["arrow-1"],
+            0.30,
+            [],
+            0x334455));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(51, -1),
+            new Point2(53, 1),
+            "DIM",
+            ["arrow-2"],
+            0.30,
+            [],
+            0x334455));
+        scene.Texts.Add(new TextPrimitive(
+            "5200",
+            new Point2(26, 3),
+            2.4,
+            0,
+            "DIM",
+            ["text"],
+            0x445566));
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+        var appearance = Assert.IsType<DimensionSourceAppearance>(dimension.SourceAppearance);
+
+        Assert.Equal("5200", appearance.Text.Value);
+        Assert.Equal(2.4, appearance.Text.HeightMm, 6);
+        Assert.Equal("DIM", appearance.Text.Layer);
+        Assert.Equal(0x445566, appearance.Text.RgbColor);
+        Assert.Equal(["text"], appearance.Text.SourceIds);
+
+        Assert.Equal(0.35, appearance.DimensionLine.StrokeWidthMm!.Value, 6);
+        Assert.Equal([4.0, 1.0], appearance.DimensionLine.DashPatternMm);
+        Assert.Equal(0x112233, appearance.DimensionLine.RgbColor);
+        Assert.Equal(["dim-line"], appearance.DimensionLine.SourceIds);
+        Assert.False(appearance.DimensionLine.IsCompositeObservation);
+
+        Assert.Equal(2, appearance.ExtensionLines.Count);
+        Assert.Equal(2, appearance.ArrowLines.Count);
+        Assert.All(appearance.ExtensionLines, line => Assert.Equal(0.25, line.StrokeWidthMm!.Value, 6));
+        Assert.All(appearance.ArrowLines, line => Assert.Equal(0.30, line.StrokeWidthMm!.Value, 6));
+    }
+
+    [Fact]
+    public void Split_dimension_line_is_marked_as_composite_source_observation()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(22, 0),
+            SourceIds: ["dim-left"],
+            StrokeWidthMm: 0.25,
+            DashPatternMm: [],
+            RgbColor: 0));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(30, 0),
+            new Point2(52, 0),
+            SourceIds: ["dim-right"],
+            StrokeWidthMm: 0.25,
+            DashPatternMm: [],
+            RgbColor: 0));
+        scene.Lines.Add(new LinePrimitive(new Point2(0, -12), new Point2(0, 1), SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(52, -12), new Point2(52, 1), SourceIds: ["ext-2"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1, -1), new Point2(1, 1), SourceIds: ["arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(51, -1), new Point2(53, 1), SourceIds: ["arrow-2"]));
+        scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0, SourceIds: ["text"]));
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+        var appearance = Assert.IsType<DimensionSourceAppearance>(dimension.SourceAppearance);
+
+        Assert.True(appearance.DimensionLine.IsCompositeObservation);
+        Assert.Equal(
+            ["dim-left", "dim-right"],
+            appearance.DimensionLine.SourceIds.OrderBy(value => value, StringComparer.Ordinal).ToArray());
+        Assert.Equal(0.25, appearance.DimensionLine.StrokeWidthMm!.Value, 6);
+    }
+
+    [Fact]
     public void Recognizes_Dimension_Line_Split_Around_Text()
     {
         var scene = new PrimitiveScene();
