@@ -1,6 +1,7 @@
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
+using TeyPdfCad.Core.Semantics.Dimensions;
 using Xunit;
 
 namespace TeyPdfCad.Tests.Recognition;
@@ -214,6 +215,70 @@ public sealed class SourceReplacementPlannerTests
         Assert.Equal(first.DeferredCandidateKeys, second.DeferredCandidateKeys);
         Assert.Equal(first.PreservedSourceIds, second.PreservedSourceIds);
         Assert.Equal(first.EligibleSourceIds, second.EligibleSourceIds);
+    }
+
+    [Fact]
+    public void Shared_dimension_text_claim_reaches_planner_and_defers_every_claimant()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("a-dim", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorLine("a-ext", new(0, -5), new(0, 0), new VectorStyle()),
+            new VectorLine("a-arrow", new(-1, -1), new(1, 1), new VectorStyle()),
+            new VectorLine("b-dim", new(0, 20), new(10, 20), new VectorStyle()),
+            new VectorLine("b-ext", new(0, 15), new(0, 20), new VectorStyle()),
+            new VectorLine("b-arrow", new(-1, 19), new(1, 21), new VectorStyle()),
+            new VectorText("shared-text", "1000", new(5, 3), 2.5, new VectorStyle())
+        };
+        var first = new DimensionCandidate(
+            DimensionKind.Rotated, new(0, -5), new(10, -5), new(5, 0),
+            1000, 1000, 100, 0.95, "1000", 1, ["a-dim", "a-ext", "a-arrow", "shared-text"])
+        {
+            SourceClaims =
+            [
+                new("a-dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("a-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("a-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("shared-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var second = new DimensionCandidate(
+            DimensionKind.Rotated, new(0, 15), new(10, 15), new(5, 20),
+            1000, 1000, 100, 0.96, "1000", 1, ["b-dim", "b-ext", "b-arrow", "shared-text"])
+        {
+            SourceClaims =
+            [
+                new("b-dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("b-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("b-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("shared-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = new SemanticReconstructionResult([first, second], [], 100, 0.955);
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, pageNumber: 7);
+
+        Assert.Equal(2, plan.DeferredCandidateKeys.Count);
+        Assert.Empty(plan.EligibleSourceIds);
+        Assert.Contains("shared-text", plan.PreservedSourceIds);
+        Assert.Contains(plan.Conflicts, conflict =>
+            conflict.SourceId == "shared-text"
+            && conflict.Reason == ReplacementConflictReason.MultipleCandidates
+            && conflict.CandidateKeys.Count == 2);
+    }
+
+    [Fact]
+    public void Candidate_identity_is_page_scoped_for_repeated_raw_source_ids()
+    {
+        var candidate = new AxisCandidate(new(0, 0), new(10, 0), 0.95, ["same-source"])
+        {
+            SourceClaims = [new("same-source", SourceUsageRole.AxisGeometry, SourceClaimState.Valid, false)]
+        };
+
+        var pageOne = SourceReplacementPlanner.GetCandidateKey(candidate, 1);
+        var pageTwo = SourceReplacementPlanner.GetCandidateKey(candidate, 2);
+
+        Assert.NotEqual(pageOne, pageTwo);
     }
 
     [Fact]
