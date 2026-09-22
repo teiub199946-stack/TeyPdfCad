@@ -200,6 +200,15 @@ public static class Program
                 crowded = chainAssessments.Count(item =>
                     item.Assessment.Status == PreRecognitionGeometryStatus.Crowded)
             },
+            cases = assessments
+                .Select(item => new
+                {
+                    item.Id,
+                    item.DimensionType,
+                    Status = item.Assessment.Status.ToString()
+                })
+                .OrderBy(item => item.Id, StringComparer.Ordinal)
+                .ToArray(),
             degenerateCases = assessments
                 .Where(item =>
                     item.Assessment.Status == PreRecognitionGeometryStatus.Degenerate)
