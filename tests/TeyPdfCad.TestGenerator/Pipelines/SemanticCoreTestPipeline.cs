@@ -191,6 +191,9 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             DefinitionPoint2World = p2,
             DimensionLinePointWorld = dimensionLinePoint,
             TextAnchorWorld = textWorld,
+            DimensionLineRotationDegrees = representative.RotationRadians is null
+                ? null
+                : representative.RotationRadians.Value * 180.0 / Math.PI,
             TextRotationDegrees = coreText?.Rotation,
             BrokenDimensionLine = broken,
             ProvenanceIds = provenance
