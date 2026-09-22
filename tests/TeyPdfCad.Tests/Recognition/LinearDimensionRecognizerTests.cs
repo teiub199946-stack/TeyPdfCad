@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using Xunit;
 using TeyPdfCad.Core.Geometry;
@@ -877,5 +878,93 @@ public sealed class LinearDimensionRecognizerTests
         method!.Invoke(null, [candidates, reordered]);
 
         Assert.Single(candidates);
+    }
+
+
+    [Fact]
+    public void Source_claim_set_key_is_culture_invariant_and_ordinal()
+    {
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new Point2(0, 0),
+            new Point2(10, 0),
+            new Point2(5, 2),
+            1000,
+            1000,
+            100,
+            0.95,
+            "1000",
+            1,
+            ["I", "i", "ı", "İ", "ß", "Ж"])
+        {
+            SourceClaims =
+            [
+                new("I", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("i", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("ı", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("İ", SourceUsageRole.Text, SourceClaimState.Valid, false),
+                new("ß", SourceUsageRole.Text, SourceClaimState.Valid, false),
+                new("Ж", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var method = typeof(LinearDimensionRecognizer).GetMethod(
+            "SourceClaimSetKey",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            var keys = new[] { "en-US", "tr-TR", "de-DE", "ru-RU" }
+                .Select(cultureName =>
+                {
+                    CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+                    return Assert.IsType<string>(method!.Invoke(null, [candidate]));
+                })
+                .ToArray();
+
+            Assert.All(keys, key => Assert.Equal(keys[0], key));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Fact]
+    public void Source_claim_set_key_cannot_collide_when_a_source_id_contains_old_delimiters()
+    {
+        DimensionCandidate CandidateFor(params RecognizerSourceClaim[] claims)
+            => new(
+                DimensionKind.Rotated,
+                new Point2(0, 0),
+                new Point2(10, 0),
+                new Point2(5, 2),
+                1000,
+                1000,
+                100,
+                0.95,
+                "1000",
+                1,
+                claims.Select(claim => claim.SourceId).ToArray())
+            {
+                SourceClaims = claims
+            };
+
+        var splitClaims = CandidateFor(
+            new("a", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+            new("b", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false));
+        var embeddedDelimiter = CandidateFor(
+            new("a\u001f1\u001f0\u001f0\u001eb", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false));
+
+        var method = typeof(LinearDimensionRecognizer).GetMethod(
+            "SourceClaimSetKey",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var splitKey = Assert.IsType<string>(method!.Invoke(null, [splitClaims]));
+        var embeddedKey = Assert.IsType<string>(method!.Invoke(null, [embeddedDelimiter]));
+
+        Assert.NotEqual(splitKey, embeddedKey);
     }
 }
