@@ -193,6 +193,35 @@ public sealed class DiagnosticClassifierTests
     }
 
     [Fact]
+    public void DimensionLineRotation_MatchingNoisyCoreInput_IsExpectedNoise()
+    {
+        var expected = Case(ExpectedResult.Recognized) with
+        {
+            DrawingScale = 100,
+            Rotation = 0
+        };
+        var trace = Trace(expected) with
+        {
+            CoreInputDimensionLineRotationDegrees = 0.5,
+            CoreResult = Snapshot(expected, expected.P1, expected.P2) with
+            {
+                DimensionLineRotationDegrees = 0.5
+            }
+        };
+
+        var diagnostic = new ErrorClassifier().Classify(
+            expected,
+            Actual(expected),
+            trace);
+
+        Assert.NotEqual(DiagnosticCategory.WrongGeometry, diagnostic.Category);
+        Assert.Contains(
+            diagnostic.GeometryChecks,
+            check => check.Component == "rotation/orientation"
+                     && check.Status == GeometryCheckStatus.ExpectedNoisePropagation);
+    }
+
+    [Fact]
     public void DimensionLineRotation_BeyondInjectedSkew_RemainsWrongGeometry()
     {
         var expected = Case(ExpectedResult.Recognized) with
@@ -203,6 +232,7 @@ public sealed class DiagnosticClassifierTests
         };
         var trace = Trace(expected) with
         {
+            CoreInputDimensionLineRotationDegrees = 0.05,
             CoreResult = Snapshot(expected, expected.P1, expected.P2) with
             {
                 DimensionLineRotationDegrees = 0.5
@@ -296,6 +326,7 @@ public sealed class DiagnosticClassifierTests
         DimensionLineLocation = PointTrace(expected.DimensionLinePoint, expected.DrawingScale),
         TextAnchor = PointTrace(expected.TextPosition, expected.DrawingScale),
         ExpectedRotationDegrees = expected.Rotation,
+        CoreInputDimensionLineRotationDegrees = expected.Rotation,
         CoreResult = Snapshot(expected, expected.P1, expected.P2)
     };
 
