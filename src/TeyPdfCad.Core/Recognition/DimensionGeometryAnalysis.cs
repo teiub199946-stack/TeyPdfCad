@@ -14,6 +14,9 @@ internal static class DimensionGeometryAnalysis
         var localFragments = lines
             .Where(line => GeometryMath.DistancePointToSegment(text.Position, line.Start, line.End) <= localRadius)
             .ToArray();
+        var localSet = new HashSet<LinePrimitive>(
+            localFragments,
+            ReferenceEqualityComparer.Instance);
 
         foreach (var line in localFragments)
             yield return line;
@@ -26,7 +29,7 @@ internal static class DimensionGeometryAnalysis
         // by TryAnalyzeGeometry. Arrow + extension evidence remains mandatory.
         foreach (var line in lines)
         {
-            if (localFragments.Any(local => ReferenceEquals(local, line)))
+            if (localSet.Contains(line))
                 continue;
 
             var vector = GeometryMath.Subtract(line.End, line.Start);
@@ -52,6 +55,25 @@ internal static class DimensionGeometryAnalysis
         for (var i = 0; i < localFragments.Length; i++)
         for (var j = i + 1; j < localFragments.Length; j++)
             if (TryMergeAcrossText(localFragments[i], localFragments[j], text, out var merged))
+                yield return merged;
+
+        // A PDF path can contain a tiny numerical break away from the text.
+        // The older merge path intentionally required the two fragments to
+        // straddle the text, so outside-text dimensions with a micro-break
+        // stayed invisible. Search only text-parallel, near-collinear
+        // fragments and only bridge a very small gap; the normal recognizer
+        // still requires both extension lines and both arrow/tick endpoints.
+        var microMergeFragments = lines
+            .Where(line => IsMicroMergeSearchFragment(line, text, localRadius))
+            .ToArray();
+
+        for (var i = 0; i < microMergeFragments.Length; i++)
+        for (var j = i + 1; j < microMergeFragments.Length; j++)
+            if (TryMergeMicroGap(
+                    microMergeFragments[i],
+                    microMergeFragments[j],
+                    text,
+                    out var merged))
                 yield return merged;
     }
 
@@ -87,6 +109,125 @@ internal static class DimensionGeometryAnalysis
         var rightPoint = points[Array.IndexOf(scalars, right)];
         if (GeometryMath.Distance(leftPoint, rightPoint) <= Math.Max(GeometryMath.Length(v1), GeometryMath.Length(v2))) return false;
 
+        merged = BuildMergedLine(first, second, leftPoint, rightPoint);
+        return true;
+    }
+
+    private static bool IsMicroMergeSearchFragment(
+        LinePrimitive line,
+        TextPrimitive text,
+        double localRadius)
+    {
+        var vector = GeometryMath.Subtract(line.End, line.Start);
+        var length = GeometryMath.Length(vector);
+        if (length <= 1e-9)
+            return false;
+
+        var lineAngle = Math.Atan2(vector.Y, vector.X) * 180.0 / Math.PI;
+        if (ParallelAngleDifferenceDegrees(lineAngle, text.Rotation) > 15.0)
+            return false;
+
+        if (GeometryMath.DistancePointToInfiniteLine(
+                text.Position,
+                line.Start,
+                line.End) > localRadius)
+            return false;
+
+        var segmentDistance = GeometryMath.DistancePointToSegment(
+            text.Position,
+            line.Start,
+            line.End);
+        return segmentDistance <= Math.Max(localRadius, length * 2.0);
+    }
+
+    private static bool TryMergeMicroGap(
+        LinePrimitive first,
+        LinePrimitive second,
+        TextPrimitive text,
+        out LinePrimitive merged)
+    {
+        merged = first;
+
+        var v1 = GeometryMath.Subtract(first.End, first.Start);
+        var v2 = GeometryMath.Subtract(second.End, second.Start);
+        var length1 = GeometryMath.Length(v1);
+        var length2 = GeometryMath.Length(v2);
+        if (length1 <= 1e-9 || length2 <= 1e-9)
+            return false;
+
+        var u1 = GeometryMath.Normalize(v1);
+        var u2 = GeometryMath.Normalize(v2);
+        if (Math.Abs(GeometryMath.Dot(u1, u2))
+            < Math.Cos(2.0 * Math.PI / 180.0))
+            return false;
+
+        var sameLineTolerance = Math.Max(text.Height * 0.10, 0.05);
+        if (GeometryMath.DistancePointToInfiniteLine(
+                GeometryMath.Midpoint(second.Start, second.End),
+                first.Start,
+                first.End) > sameLineTolerance)
+            return false;
+
+        var origin = first.Start;
+        var firstScalars = new[]
+        {
+            0d,
+            GeometryMath.Dot(
+                GeometryMath.Subtract(first.End, origin),
+                u1)
+        };
+        var secondScalars = new[]
+        {
+            GeometryMath.Dot(
+                GeometryMath.Subtract(second.Start, origin),
+                u1),
+            GeometryMath.Dot(
+                GeometryMath.Subtract(second.End, origin),
+                u1)
+        };
+
+        var firstMin = firstScalars.Min();
+        var firstMax = firstScalars.Max();
+        var secondMin = secondScalars.Min();
+        var secondMax = secondScalars.Max();
+
+        var gap = firstMax < secondMin
+            ? secondMin - firstMax
+            : secondMax < firstMin
+                ? firstMin - secondMax
+                : 0d;
+        if (gap <= 1e-9
+            || gap > Math.Max(text.Height * 0.5, 0.5))
+            return false;
+
+        var points = new[] { first.Start, first.End, second.Start, second.End };
+        var scalars = points
+            .Select(point => GeometryMath.Dot(
+                GeometryMath.Subtract(point, origin),
+                u1))
+            .ToArray();
+        var leftIndex = Array.IndexOf(scalars, scalars.Min());
+        var rightIndex = Array.IndexOf(scalars, scalars.Max());
+        var leftPoint = points[leftIndex];
+        var rightPoint = points[rightIndex];
+
+        var textProjection = ProjectionParameter(
+            text.Position,
+            leftPoint,
+            rightPoint);
+        if (textProjection is < -0.25 or > 1.25)
+            return false;
+
+        merged = BuildMergedLine(first, second, leftPoint, rightPoint);
+        return true;
+    }
+
+    private static LinePrimitive BuildMergedLine(
+        LinePrimitive first,
+        LinePrimitive second,
+        Point2 start,
+        Point2 end)
+    {
         var sourceIds = first.ProvenanceIds
             .Concat(second.ProvenanceIds)
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -103,15 +244,22 @@ internal static class DimensionGeometryAnalysis
             ? first.RgbColor
             : null;
 
-        merged = new LinePrimitive(
-            leftPoint,
-            rightPoint,
+        return new LinePrimitive(
+            start,
+            end,
             first.Layer == second.Layer ? first.Layer : null,
             sourceIds,
             strokeWidthMm,
             dashPatternMm,
             rgbColor);
-        return true;
+    }
+
+    private static double ParallelAngleDifferenceDegrees(
+        double first,
+        double second)
+    {
+        var difference = Math.Abs(first - second) % 180.0;
+        return Math.Min(difference, 180.0 - difference);
     }
 
     public static double ProjectionParameter(Point2 point, Point2 a, Point2 b)
