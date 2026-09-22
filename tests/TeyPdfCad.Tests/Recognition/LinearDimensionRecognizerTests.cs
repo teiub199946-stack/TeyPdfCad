@@ -365,6 +365,23 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Rotated_distinct_dimensions_sharing_text_source_are_both_retained_for_fail_closed_planning()
+    {
+        var scene = new PrimitiveScene();
+        AddAlignedDimensionWithSources(scene, 0, 0, "a", "shared-rotated-text");
+        AddAlignedDimensionWithSources(scene, 80, 60, "b", "shared-rotated-text");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Equal(2, dimensions.Count);
+        Assert.All(dimensions, dimension => Assert.Equal(DimensionKind.Aligned, dimension.Kind));
+        Assert.All(dimensions, dimension =>
+            Assert.Contains(dimension.SourceClaims, claim =>
+                claim.SourceId == "shared-rotated-text"
+                && claim.State == SourceClaimState.Valid));
+    }
+
+    [Fact]
     public void One_sided_arrow_evidence_is_abstained_as_ambiguous()
     {
         var scene = new PrimitiveScene();
@@ -489,6 +506,42 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(52, 100), new Point2(52, 120)));
         scene.Texts.Add(new TextPrimitive("5200", new Point2(26, 3), 2.5, 0));
         Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
+    }
+
+    private static void AddAlignedDimensionWithSources(
+        PrimitiveScene scene,
+        double originX,
+        double originY,
+        string prefix,
+        string textSourceId)
+    {
+        const double component = 36.76955262170047;
+        var start = new Point2(originX, originY);
+        var end = new Point2(originX + component, originY + component);
+
+        scene.Lines.Add(new LinePrimitive(start, end, SourceIds: [$"{prefix}-dim"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(originX + 8.485281374, originY - 8.485281374),
+            new Point2(originX - 0.707106781, originY + 0.707106781),
+            SourceIds: [$"{prefix}-ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(end.X + 8.485281374, end.Y - 8.485281374),
+            new Point2(end.X - 0.707106781, end.Y + 0.707106781),
+            SourceIds: [$"{prefix}-ext-2"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(originX - 1, originY),
+            new Point2(originX + 1, originY),
+            SourceIds: [$"{prefix}-arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(end.X - 1, end.Y),
+            new Point2(end.X + 1, end.Y),
+            SourceIds: [$"{prefix}-arrow-2"]));
+        scene.Texts.Add(new TextPrimitive(
+            "5200",
+            new Point2(originX + 16.263455967, originY + 20.506096654),
+            2.5,
+            45,
+            SourceIds: [textSourceId]));
     }
 
     private static void AddHorizontalDimensionWithSources(
