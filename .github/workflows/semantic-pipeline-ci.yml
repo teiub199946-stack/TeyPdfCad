@@ -51,6 +51,12 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Restore semantic test generator
         run: dotnet restore tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+      - name: Diagnose pre-recognition geometry
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          preflight-geometry --count 10000 --seed 12345
+          --output artifacts/p0-preflight-geometry
       - name: TEST-002 current-branch 10k core run
         run: >
           dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
@@ -90,6 +96,7 @@ jobs:
         with:
           name: semantic-release-evidence-current-branch
           path: |
+            artifacts/p0-preflight-geometry
             artifacts/p0-test-002-current
             artifacts/p0-test-003-current
             artifacts/p0-suppression-safety-gate.json
