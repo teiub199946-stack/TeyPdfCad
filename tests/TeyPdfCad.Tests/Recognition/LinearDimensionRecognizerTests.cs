@@ -1,3 +1,4 @@
+using System.Reflection;
 using Xunit;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
@@ -346,6 +347,47 @@ public sealed class LinearDimensionRecognizerTests
         Assert.Equal(3, dimensions.Count);
         Assert.All(dimensions, dimension => Assert.Equal(50, dimension.DrawingScale, 6));
         Assert.DoesNotContain(dimensions, dimension => dimension.SourceText == "500");
+    }
+
+    [Fact]
+    public void Equivalent_geometry_with_distinct_source_claim_sets_is_not_collapsed_before_planning()
+    {
+        var first = new DimensionCandidate(
+            DimensionKind.Aligned,
+            new Point2(0, 0),
+            new Point2(100, 0),
+            new Point2(50, 3),
+            5000,
+            5000,
+            50,
+            0.95,
+            "5000",
+            1)
+        {
+            SourceClaims =
+            [
+                new("shared-text", SourceUsageRole.Text, SourceClaimState.Valid, false),
+                new("a-dimension-line", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false)
+            ]
+        };
+        var second = first with
+        {
+            Confidence = 0.96,
+            SourceClaims =
+            [
+                new("shared-text", SourceUsageRole.Text, SourceClaimState.Valid, false),
+                new("b-dimension-line", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false)
+            ]
+        };
+        var candidates = new List<DimensionCandidate> { first };
+        var method = typeof(LinearDimensionRecognizer).GetMethod(
+            "AddOrReplaceEquivalent",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        method!.Invoke(null, [candidates, second]);
+
+        Assert.Equal(2, candidates.Count);
     }
 
     [Fact]
