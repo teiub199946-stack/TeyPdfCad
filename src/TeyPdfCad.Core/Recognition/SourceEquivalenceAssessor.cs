@@ -145,17 +145,176 @@ public static class SourceEquivalenceAssessor
                 "Dimension source-appearance evidence references a SourceId absent from the source page.");
         }
 
+        var rawEvidenceMismatch = ValidateDimensionSourceAppearance(page, appearance);
+        if (rawEvidenceMismatch is not null)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                rawEvidenceMismatch);
+        }
+
         if (appearance.DimensionLine.IsCompositeObservation)
         {
             return new SourceEquivalenceAssessmentResult(
                 false,
-                "Dimension source appearance is captured, but the dimension-line observation is composite (for example split around text); raw source segments must be compared independently before suppression.");
+                "Dimension source appearance is captured and source-linked, but the dimension-line observation is composite (for example split around text); raw source segments must be compared independently before suppression.");
         }
 
         return new SourceEquivalenceAssessmentResult(
             false,
             "Dimension source appearance is captured before DWG emission (text metrics/color and line geometry/stroke/dash/color), but native DIMENSION font metrics, arrow topology/type and dimension/extension line style mapping are not yet independently proven equivalent.");
     }
+
+    private static string? ValidateDimensionSourceAppearance(
+        VectorPdfPage page,
+        TeyPdfCad.Core.Semantics.Dimensions.DimensionSourceAppearance appearance)
+    {
+        if (appearance.Text.SourceIds.Count != 1)
+            return "Dimension source text appearance is not bound to exactly one raw source entity.";
+
+        var textSource = page.Entities.SingleOrDefault(entity =>
+            string.Equals(entity.SourceId, appearance.Text.SourceIds[0], StringComparison.Ordinal));
+        if (textSource is not VectorText sourceText)
+            return "Dimension source text appearance is not independently traceable to a raw VectorText entity.";
+
+        if (!string.Equals(sourceText.Value, appearance.Text.Value, StringComparison.Ordinal)
+            || !PointEqual(sourceText.InsertionPoint, appearance.Text.Position)
+            || !AlmostEqual(
+                sourceText.HeightPoints * VectorPdfPage.MillimetresPerPoint,
+                appearance.Text.HeightMm)
+            || !AlmostEqual(
+                sourceText.RotationRadians * 180d / Math.PI,
+                appearance.Text.RotationDegrees)
+            || !string.Equals(sourceText.Style.SourceLayer, appearance.Text.Layer, StringComparison.Ordinal)
+            || sourceText.Style.RgbColor != appearance.Text.RgbColor)
+        {
+            return "Dimension source text appearance differs from the raw VectorPdfPage evidence.";
+        }
+
+        var lineAppearances = new[]
+            {
+                appearance.DimensionLine
+            }
+            .Concat(appearance.ExtensionLines)
+            .Concat(appearance.ArrowLines);
+
+        foreach (var lineAppearance in lineAppearances)
+        {
+            if (lineAppearance.SourceIds.Count != 1)
+            {
+                // A composite dimension-line observation is handled explicitly
+                // by the caller. Other composite line observations cannot yet
+                // be tied to one raw source segment without sub-entity identity.
+                if (ReferenceEquals(lineAppearance, appearance.DimensionLine)
+                    && appearance.DimensionLine.IsCompositeObservation)
+                    continue;
+
+                return "Dimension source line appearance is not bound to exactly one raw source entity.";
+            }
+
+            var source = page.Entities.SingleOrDefault(entity =>
+                string.Equals(entity.SourceId, lineAppearance.SourceIds[0], StringComparison.Ordinal));
+            if (source is null)
+                return "Dimension source line appearance references a raw source entity that is missing.";
+
+            if (!LineGeometryMatches(source, lineAppearance)
+                || !LineStyleMatches(source.Style, lineAppearance))
+            {
+                return "Dimension source line appearance differs from the raw VectorPdfPage evidence.";
+            }
+        }
+
+        return null;
+    }
+
+    private static bool LineGeometryMatches(
+        VectorEntity source,
+        TeyPdfCad.Core.Semantics.Dimensions.DimensionSourceLineAppearance appearance)
+        => source switch
+        {
+            VectorLine line => SegmentEqual(
+                line.Start,
+                line.End,
+                appearance.Start,
+                appearance.End),
+            VectorPolyline polyline => PolylineContainsSegment(
+                polyline,
+                appearance.Start,
+                appearance.End),
+            _ => false
+        };
+
+    private static bool LineStyleMatches(
+        VectorStyle source,
+        TeyPdfCad.Core.Semantics.Dimensions.DimensionSourceLineAppearance appearance)
+    {
+        if (!string.Equals(source.SourceLayer, appearance.Layer, StringComparison.Ordinal)
+            || source.RgbColor != appearance.RgbColor)
+            return false;
+
+        var sourceStrokeWidth = source.StrokeWidthPoints.HasValue
+            ? source.StrokeWidthPoints.Value * VectorPdfPage.MillimetresPerPoint
+            : (double?)null;
+        if (!NullableAlmostEqual(sourceStrokeWidth, appearance.StrokeWidthMm))
+            return false;
+
+        var sourceDash = source.DashPatternPoints?
+            .Select(value => value * VectorPdfPage.MillimetresPerPoint)
+            .ToArray() ?? [];
+        if (sourceDash.Length != appearance.DashPatternMm.Count)
+            return false;
+
+        for (var index = 0; index < sourceDash.Length; index++)
+            if (!AlmostEqual(sourceDash[index], appearance.DashPatternMm[index]))
+                return false;
+
+        return true;
+    }
+
+    private static bool PolylineContainsSegment(
+        VectorPolyline polyline,
+        TeyPdfCad.Core.Geometry.Point2 start,
+        TeyPdfCad.Core.Geometry.Point2 end)
+    {
+        for (var index = 1; index < polyline.Vertices.Count; index++)
+        {
+            if (SegmentEqual(
+                    polyline.Vertices[index - 1],
+                    polyline.Vertices[index],
+                    start,
+                    end))
+                return true;
+        }
+
+        return polyline.IsClosed
+            && polyline.Vertices.Count > 2
+            && SegmentEqual(
+                polyline.Vertices[^1],
+                polyline.Vertices[0],
+                start,
+                end);
+    }
+
+    private static bool SegmentEqual(
+        TeyPdfCad.Core.Geometry.Point2 firstStart,
+        TeyPdfCad.Core.Geometry.Point2 firstEnd,
+        TeyPdfCad.Core.Geometry.Point2 secondStart,
+        TeyPdfCad.Core.Geometry.Point2 secondEnd)
+        => (PointEqual(firstStart, secondStart) && PointEqual(firstEnd, secondEnd))
+            || (PointEqual(firstStart, secondEnd) && PointEqual(firstEnd, secondStart));
+
+    private static bool PointEqual(
+        TeyPdfCad.Core.Geometry.Point2 first,
+        TeyPdfCad.Core.Geometry.Point2 second)
+        => AlmostEqual(first.X, second.X)
+            && AlmostEqual(first.Y, second.Y);
+
+    private static bool NullableAlmostEqual(double? first, double? second)
+        => first.HasValue == second.HasValue
+            && (!first.HasValue || AlmostEqual(first.Value, second!.Value));
+
+    private static bool AlmostEqual(double first, double second)
+        => Math.Abs(first - second) <= 1e-6;
 
     private readonly record struct SourceEquivalenceAssessmentResult(
         bool IsComplete,
