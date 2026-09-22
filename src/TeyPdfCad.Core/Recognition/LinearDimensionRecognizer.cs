@@ -244,127 +244,33 @@ public sealed class LinearDimensionRecognizer
         PrimitiveScene scene,
         DimensionRecognitionOptions options)
     {
-        var hypothesesByText = new List<IReadOnlyList<ScaleObservation>>();
+        var observations = new List<ScaleObservation>();
 
         foreach (var text in scene.Texts)
         {
             if (!TryGetLinearDimensionValue(text.Value, out var displayedValue))
                 continue;
 
-            var hypotheses = new List<ScaleObservation>();
+            ScaleObservation? best = null;
             foreach (var dimensionLine in DimensionGeometryAnalysis.DimensionLineCandidates(scene.Lines, text))
             {
                 var probe = TryAnalyzeGeometry(scene, text, dimensionLine, options);
-                if (probe is null
-                    || probe.Value.ProjectedDistance <= 1e-9
-                    || probe.Value.ArrowEvidence < 1d)
-                    continue;
+                if (probe is null || probe.Value.ProjectedDistance <= 1e-9) continue;
 
                 var rawScale = displayedValue / probe.Value.ProjectedDistance;
-                if (!NumericCompat.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9)
-                    continue;
+                if (!NumericCompat.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9) continue;
 
-                var structuralWeight = 0.60
-                    + 0.25 * probe.Value.TextScore
-                    + 0.15 * probe.Value.ArrowEvidence;
-                hypotheses.Add(new ScaleObservation(rawScale, structuralWeight));
+                var structuralWeight = 0.60 + 0.25 * probe.Value.TextScore + 0.15 * probe.Value.ArrowEvidence;
+                var observation = new ScaleObservation(rawScale, structuralWeight);
+                if (best is null || observation.Weight > best.Value.Weight)
+                    best = observation;
             }
 
-            if (hypotheses.Count > 0)
-                hypothesesByText.Add(hypotheses);
-        }
-
-        // Do not let a locally closer neighbouring dimension line monopolize a
-        // text's scale vote before consensus is known. Chain members can be much
-        // shorter than the arrow/text search radius, so one text may have several
-        // structurally valid raw-scale hypotheses. Pick the hypothesis supported
-        // by the greatest number of *other text objects*; a single text still
-        // contributes at most one vote to ScaleConsensusEstimator.
-        var observations = new List<ScaleObservation>(hypothesesByText.Count);
-        for (var textIndex = 0; textIndex < hypothesesByText.Count; textIndex++)
-        {
-            var localBest = hypothesesByText[textIndex]
-                .OrderByDescending(hypothesis => hypothesis.Weight)
-                .ThenBy(hypothesis => hypothesis.Scale)
-                .First();
-            var localSupport = CountCrossTextScaleSupport(
-                localBest.Scale,
-                hypothesesByText,
-                textIndex,
-                options.ScaleConsensusRelativeTolerance);
-
-            // Preserve an already cross-text-supported local observation. Only
-            // rescue a locally best scale when it is an isolated outlier and a
-            // competing hypothesis has enough independent text support to form
-            // the configured consensus. This avoids promoting repeated chain
-            // aliases (for example 1:500 instead of a real 1:50 equal chain).
-            var minimumOtherTextSupport = Math.Max(
-                options.ScaleConsensusMinimumVotes - 1,
-                1);
-            var best = localBest;
-            var localCanonicalScale = DimensionGeometryAnalysis.ResolveScale(
-                localBest.Scale,
-                fixedScale: null,
-                options.CanonicalScaleRelativeTolerance);
-            if (localSupport == 0 && localCanonicalScale is null)
-            {
-                var supportedAlternative = hypothesesByText[textIndex]
-                    .Select(hypothesis => new
-                    {
-                        Observation = hypothesis,
-                        CanonicalScale = DimensionGeometryAnalysis.ResolveScale(
-                            hypothesis.Scale,
-                            fixedScale: null,
-                            options.CanonicalScaleRelativeTolerance),
-                        Support = CountCrossTextScaleSupport(
-                            hypothesis.Scale,
-                            hypothesesByText,
-                            textIndex,
-                            options.ScaleConsensusRelativeTolerance)
-                    })
-                    .Where(item =>
-                        item.CanonicalScale.HasValue
-                        && item.Support >= minimumOtherTextSupport)
-                    .OrderByDescending(item => item.Support)
-                    .ThenByDescending(item => item.Observation.Weight)
-                    .ThenBy(item => item.Observation.Scale)
-                    .FirstOrDefault();
-
-                if (supportedAlternative is not null)
-                    best = supportedAlternative.Observation;
-            }
-
-            observations.Add(best);
+            if (best.HasValue) observations.Add(best.Value);
         }
 
         return observations;
     }
-
-    private static int CountCrossTextScaleSupport(
-        double scale,
-        IReadOnlyList<IReadOnlyList<ScaleObservation>> hypothesesByText,
-        int excludedTextIndex,
-        double relativeTolerance)
-    {
-        var support = 0;
-        for (var index = 0; index < hypothesesByText.Count; index++)
-        {
-            if (index == excludedTextIndex)
-                continue;
-
-            if (hypothesesByText[index].Any(hypothesis =>
-                    RelativeScaleDifference(scale, hypothesis.Scale) <= relativeTolerance))
-            {
-                support++;
-            }
-        }
-
-        return support;
-    }
-
-    private static double RelativeScaleDifference(double first, double second)
-        => Math.Abs(first - second)
-            / Math.Max(Math.Max(Math.Abs(first), Math.Abs(second)), 1e-9);
 
     private static IReadOnlyList<DimensionCandidate> RecognizeWithResolvedScale(
         PrimitiveScene scene,
