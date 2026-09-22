@@ -452,7 +452,8 @@ public sealed class ConversionPipeline
             text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
-            [text.SourceId])));
+            [text.SourceId],
+            text.Style.RgbColor)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -815,7 +816,8 @@ public sealed class ConversionPipeline
             line.Style.SourceLayer,
             [line.SourceId],
             line.Style.StrokeWidthPoints * VectorPdfPage.MillimetresPerPoint,
-            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray())));
+            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray(),
+            line.Style.RgbColor)));
         var scene = new PrimitiveScene();
         scene.Lines.AddRange(semanticLines.Select(line => new LinePrimitive(
             line.Start,
@@ -823,7 +825,8 @@ public sealed class ConversionPipeline
             line.Style.SourceLayer,
             [line.SourceId],
             line.Style.StrokeWidthPoints * VectorPdfPage.MillimetresPerPoint,
-            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray())));
+            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray(),
+            line.Style.RgbColor)));
         foreach (var polyline in semanticPolylines.Where(polyline => !polyline.IsClosed && polyline.Vertices.Count >= 5))
         {
             if (CircularArcDetector.TryFit(polyline.Vertices, out var arc))
@@ -843,7 +846,8 @@ public sealed class ConversionPipeline
             text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
-            [text.SourceId])).ToArray();
+            [text.SourceId],
+            text.Style.RgbColor)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
