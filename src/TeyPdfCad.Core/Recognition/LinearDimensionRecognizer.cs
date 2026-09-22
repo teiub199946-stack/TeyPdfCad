@@ -1,12 +1,15 @@
 using TeyPdfCad.Core.Compatibility;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Primitives;
+using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Semantics.Dimensions;
 
 namespace TeyPdfCad.Core.Recognition;
 
 public sealed class LinearDimensionRecognizer
 {
+    public const string AmbiguousEvidenceWarningCode = "DIMENSION_AMBIGUOUS_PARTIAL_ARROW";
+
     public IReadOnlyList<DimensionCandidate> Recognize(PrimitiveScene scene, DimensionRecognitionOptions? options = null)
     {
         options ??= new DimensionRecognitionOptions();
@@ -41,6 +44,60 @@ public sealed class LinearDimensionRecognizer
         }
 
         return RecognizeWithResolvedScale(scene, options);
+    }
+
+    public IReadOnlyList<SemanticWarning> DetectAmbiguities(
+        PrimitiveScene scene,
+        DimensionRecognitionOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        options ??= new DimensionRecognitionOptions();
+
+        var warnings = new List<SemanticWarning>();
+
+        foreach (var text in scene.Texts)
+        {
+            if (!TryGetLinearDimensionValue(text.Value, out var displayedValue))
+                continue;
+
+            foreach (var dimensionLine in DimensionGeometryAnalysis.DimensionLineCandidates(scene.Lines, text))
+            {
+                var probe = TryAnalyzeGeometry(scene, text, dimensionLine, options);
+                if (probe is null)
+                    continue;
+
+                // Zero-arrow evidence is an ordinary negative/lookalike. Full
+                // two-sided evidence is handled by normal recognition. Exactly
+                // partial evidence is the fail-closed ambiguity state.
+                if (probe.Value.ArrowEvidence <= 0d || probe.Value.ArrowEvidence >= 1d)
+                    continue;
+
+                var rawScale = displayedValue / probe.Value.ProjectedDistance;
+                if (!NumericCompat.IsFinite(rawScale) || rawScale <= 1e-9 || rawScale > 1e9)
+                    continue;
+
+                var scale = DimensionGeometryAnalysis.ResolveScale(
+                    rawScale,
+                    options.DrawingScale,
+                    options.CanonicalScaleRelativeTolerance);
+                if (scale is null)
+                    continue;
+
+                var reconstructed = probe.Value.ProjectedDistance * scale.Value;
+                var relativeError = Math.Abs(reconstructed - displayedValue)
+                    / Math.Max(displayedValue, 1.0);
+                if (relativeError > options.MeasurementRelativeTolerance)
+                    continue;
+
+                warnings.Add(new SemanticWarning(
+                    AmbiguousEvidenceWarningCode,
+                    "Dimension-like evidence is structurally plausible but has only one-sided arrow/tick evidence; preserve source and abstain.",
+                    probe.Value.SourcePrimitiveIds));
+                break;
+            }
+        }
+
+        return warnings;
     }
 
     private static IReadOnlyList<DimensionCandidate> SelectUniqueCandidates(
