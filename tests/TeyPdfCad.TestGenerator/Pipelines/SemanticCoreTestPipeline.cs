@@ -59,20 +59,34 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
 
         if (dimensions.Count == 0)
         {
-            var rejected = new ActualDimensionResult
+            var hasAmbiguousDimensionEvidence = semantic.Warnings.Any(warning =>
+                string.Equals(
+                    warning.Code,
+                    LinearDimensionRecognizer.AmbiguousEvidenceWarningCode,
+                    StringComparison.Ordinal));
+            if (hasAmbiguousDimensionEvidence)
+                diagnostics.Add("Core reported ambiguous one-sided dimension evidence.");
+
+            var abstained = new ActualDimensionResult
             {
                 CaseId = testCase.Id,
-                Result = ExpectedResult.Rejected,
+                Result = hasAmbiguousDimensionEvidence
+                    ? ExpectedResult.Ambiguous
+                    : ExpectedResult.Rejected,
                 DetectedDimensions = 0,
-                ConfidenceClass = ConfidenceClass.None,
+                ConfidenceClass = hasAmbiguousDimensionEvidence
+                    ? ConfidenceClass.Low
+                    : ConfidenceClass.None,
                 SuppressionEvidenceEligible = false,
-                SuppressionBlockers = ["NoRecognizedDimension"],
+                SuppressionBlockers = hasAmbiguousDimensionEvidence
+                    ? ["AmbiguousDimensionEvidence"]
+                    : ["NoRecognizedDimension"],
                 Diagnostics = diagnostics
             };
 
             return ValueTask.FromResult(new SemanticCoreDiagnosticRun
             {
-                Actual = rejected,
+                Actual = abstained,
                 Trace = trace with { CoreResult = new CoreGeometrySnapshot() }
             });
         }
