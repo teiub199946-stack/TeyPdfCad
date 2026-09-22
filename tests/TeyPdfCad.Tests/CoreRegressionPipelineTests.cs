@@ -1,3 +1,4 @@
+using TeyPdfCad.TestGenerator.Generation;
 using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Pipelines;
 using TeyPdfCad.TestGenerator.Reporting;
@@ -72,6 +73,23 @@ public sealed class CoreRegressionPipelineTests
         Assert.Equal(1, report.Passed);
         Assert.Equal(0, report.Failed);
         Assert.Empty(report.Failures);
+    }
+
+    [Fact]
+    public async Task Mixed_short_chain_keeps_all_members_when_scale_hypotheses_compete()
+    {
+        var testCase = new DimensionCaseGenerator()
+            .Generate(1226, 12345)
+            .Cases
+            .Single(testCase => testCase.Id == "case_001226");
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(DimensionType.Chain, actual.DimensionType);
+        Assert.Equal(3, actual.DetectedDimensions);
+        Assert.Equal(85d, actual.Value!.Value, 6);
+        Assert.Equal(25d, actual.DrawingScale!.Value, 6);
     }
 
     [Fact]
