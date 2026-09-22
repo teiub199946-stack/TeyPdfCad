@@ -834,4 +834,48 @@ public sealed class LinearDimensionRecognizerTests
         scene.Lines.Add(new LinePrimitive(new Point2(importedLength - 1, y - 1), new Point2(importedLength + 1, y + 1)));
         scene.Texts.Add(new TextPrimitive(displayedValue, new Point2(importedLength / 2.0, y + 3), 2.5, 0));
     }
+
+
+    [Fact]
+    public void Equivalent_source_claim_sets_are_canonical_across_claim_enumeration_order()
+    {
+        var first = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new Point2(0, 0),
+            new Point2(10, 0),
+            new Point2(5, 2),
+            1000,
+            1000,
+            100,
+            0.95,
+            "1000",
+            1,
+            ["dim", "ext-1", "text"])
+        {
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var reordered = first with
+        {
+            SourceClaims =
+            [
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false),
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false)
+            ]
+        };
+        var candidates = new List<DimensionCandidate> { first };
+        var method = typeof(LinearDimensionRecognizer).GetMethod(
+            "AddOrReplaceEquivalent",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        method!.Invoke(null, [candidates, reordered]);
+
+        Assert.Single(candidates);
+    }
 }
