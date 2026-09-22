@@ -172,10 +172,15 @@ public static class SourceEquivalenceAssessor
         if (appearance.Text.SourceIds.Count != 1)
             return "Dimension source text appearance is not bound to exactly one raw source entity.";
 
-        var textSource = page.Entities.SingleOrDefault(entity =>
-            string.Equals(entity.SourceId, appearance.Text.SourceIds[0], StringComparison.Ordinal));
-        if (textSource is not VectorText sourceText)
-            return "Dimension source text appearance is not independently traceable to a raw VectorText entity.";
+        var textSources = page.Entities
+            .Where(entity => string.Equals(
+                entity.SourceId,
+                appearance.Text.SourceIds[0],
+                StringComparison.Ordinal))
+            .Take(2)
+            .ToArray();
+        if (textSources.Length != 1 || textSources[0] is not VectorText sourceText)
+            return "Dimension source text appearance is not independently traceable to exactly one raw VectorText entity.";
 
         if (!string.Equals(sourceText.Value, appearance.Text.Value, StringComparison.Ordinal)
             || !PointEqual(sourceText.InsertionPoint, appearance.Text.Position)
@@ -212,11 +217,17 @@ public static class SourceEquivalenceAssessor
                 return "Dimension source line appearance is not bound to exactly one raw source entity.";
             }
 
-            var source = page.Entities.SingleOrDefault(entity =>
-                string.Equals(entity.SourceId, lineAppearance.SourceIds[0], StringComparison.Ordinal));
-            if (source is null)
-                return "Dimension source line appearance references a raw source entity that is missing.";
+            var sourceMatches = page.Entities
+                .Where(entity => string.Equals(
+                    entity.SourceId,
+                    lineAppearance.SourceIds[0],
+                    StringComparison.Ordinal))
+                .Take(2)
+                .ToArray();
+            if (sourceMatches.Length != 1)
+                return "Dimension source line appearance is not independently traceable to exactly one raw source entity.";
 
+            var source = sourceMatches[0];
             if (!LineGeometryMatches(source, lineAppearance)
                 || !LineStyleMatches(source.Style, lineAppearance))
             {
