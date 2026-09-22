@@ -434,6 +434,34 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Horizontal_dimension_text_can_be_structurally_bound_to_inclined_dimension()
+    {
+        var scene = new PrimitiveScene();
+        const double d = 70.71067811865476;
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(d, d), SourceIds: ["dim"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(2.474873734, -2.474873734),
+            new Point2(-0.883883476, 0.883883476),
+            SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(d + 2.474873734, d - 2.474873734),
+            new Point2(d - 0.883883476, d + 0.883883476),
+            SourceIds: ["ext-2"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(-1.2, 0), new Point2(1.2, 0), SourceIds: ["arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(d - 1.2, d), new Point2(d + 1.2, d), SourceIds: ["arrow-2"]));
+        scene.Texts.Add(new TextPrimitive("100", new Point2(d / 2, d / 2), 2.5, 0, SourceIds: ["text"]));
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(
+            scene,
+            new DimensionRecognitionOptions { DrawingScale = 1 });
+
+        var dimension = Assert.Single(dimensions);
+        Assert.Equal(DimensionKind.Aligned, dimension.Kind);
+        Assert.Equal(1d, dimension.ArrowEvidence);
+        Assert.Equal(100d, dimension.ReconstructedMeasurement, 3);
+    }
+
+    [Fact]
     public void One_sided_arrow_evidence_is_abstained_as_ambiguous()
     {
         var scene = new PrimitiveScene();
