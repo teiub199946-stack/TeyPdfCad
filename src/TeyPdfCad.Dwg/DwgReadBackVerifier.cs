@@ -56,6 +56,9 @@ public sealed class DwgReadBackVerifier
             if (!string.Equals(expected.CandidateId, candidateId, StringComparison.Ordinal))
                 invalid.Add("Manifest candidate key does not equal ExpectedCandidate.CandidateId.");
 
+            if (expected.Entities.Count == 0)
+                invalid.Add("Manifest candidate declares no expected native entities; vacuous read-back verification is forbidden.");
+
             invalid.AddRange(globalIssues);
             if (invalidByCandidate.TryGetValue(candidateId, out var candidateInvalid))
                 invalid.AddRange(candidateInvalid);
