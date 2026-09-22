@@ -82,6 +82,7 @@ public sealed record CaseGeometryTrace
     public GeometryPointTrace DimensionLineLocation { get; init; } = new();
     public GeometryPointTrace TextAnchor { get; init; } = new();
     public double ExpectedRotationDegrees { get; init; }
+    public double? CoreInputDimensionLineRotationDegrees { get; init; }
     public double? CoreInputTextRotationDegrees { get; init; }
     public bool ExpectedBrokenDimensionLine { get; init; }
     public bool CoreInputBrokenDimensionLine { get; init; }
