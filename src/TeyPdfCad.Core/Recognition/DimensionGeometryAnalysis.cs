@@ -316,6 +316,62 @@ internal static class DimensionGeometryAnalysis
         return best;
     }
 
+    public static LinePrimitive? FindConnectedExtensionLineFallback(
+        IEnumerable<LinePrimitive> lines,
+        LinePrimitive dimensionLine,
+        Point2 endpoint,
+        Point2 unitDim,
+        double endpointTolerance,
+        LinePrimitive? excluded = null)
+    {
+        // Keep the configured perpendicular-angle tolerance as the primary rule.
+        // This fallback is intentionally narrower in a different dimension: it
+        // only considers a source segment that physically crosses/touches the
+        // dimension endpoint, and only when its direction is still substantially
+        // transverse to the dimension line. Typical arrow wings/ticks remain
+        // outside this envelope and are independently required later.
+        const double maxLongitudinalCosine = 0.55d;
+        var contactTolerance = Math.Min(endpointTolerance, 0.25d);
+
+        LinePrimitive? best = null;
+        var bestLongitudinalCosine = double.MaxValue;
+        var bestDistance = double.MaxValue;
+
+        foreach (var line in lines)
+        {
+            if (ReferenceEquals(line, dimensionLine) || ReferenceEquals(line, excluded))
+                continue;
+
+            var vector = GeometryMath.Subtract(line.End, line.Start);
+            if (GeometryMath.Length(vector) <= 1e-9)
+                continue;
+
+            var longitudinalCosine = Math.Abs(GeometryMath.Dot(
+                unitDim,
+                GeometryMath.Normalize(vector)));
+            if (longitudinalCosine > maxLongitudinalCosine)
+                continue;
+
+            var distance = GeometryMath.DistancePointToSegment(
+                endpoint,
+                line.Start,
+                line.End);
+            if (distance > contactTolerance)
+                continue;
+
+            if (longitudinalCosine < bestLongitudinalCosine - 1e-12
+                || (Math.Abs(longitudinalCosine - bestLongitudinalCosine) <= 1e-12
+                    && distance < bestDistance))
+            {
+                best = line;
+                bestLongitudinalCosine = longitudinalCosine;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
+
     public static Point2 DefinitionPoint(LinePrimitive extension, LinePrimitive dimensionLine)
     {
         var startDistance = GeometryMath.DistancePointToInfiniteLine(extension.Start, dimensionLine.Start, dimensionLine.End);
