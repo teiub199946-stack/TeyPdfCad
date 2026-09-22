@@ -64,13 +64,21 @@ internal static class DimensionGeometryAnalysis
         var strokeWidthMm = first.StrokeWidthMm == second.StrokeWidthMm
             ? first.StrokeWidthMm
             : null;
+        var dashPatternMm = first.StrokeDashPattern.SequenceEqual(second.StrokeDashPattern)
+            ? first.StrokeDashPattern.ToArray()
+            : null;
+        var rgbColor = first.RgbColor == second.RgbColor
+            ? first.RgbColor
+            : null;
 
         merged = new LinePrimitive(
             leftPoint,
             rightPoint,
             first.Layer == second.Layer ? first.Layer : null,
             sourceIds,
-            strokeWidthMm);
+            strokeWidthMm,
+            dashPatternMm,
+            rgbColor);
         return true;
     }
 
