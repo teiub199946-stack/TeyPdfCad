@@ -28,6 +28,7 @@ public sealed class SceneTraceBuilder
         var p1Input = FindDefinitionPoint(scene, testCase, cleanP1, ":ext:1");
         var p2Input = FindDefinitionPoint(scene, testCase, cleanP2, ":ext:2");
         var dimensionLineInput = FindDimensionLineLocation(scene, testCase, cleanDimensionLine);
+        var dimensionLineRotation = FindDimensionLineRotation(scene, testCase, testCase.Rotation);
         var text = FindText(scene, testCase, cleanText);
         Point2D? textInput = text is null ? null : ToPoint(text.Position);
 
@@ -52,6 +53,7 @@ public sealed class SceneTraceBuilder
             DimensionLineLocation = CreatePointTrace(testCase.DimensionLinePoint, cleanDimensionLine, dimensionLineInput),
             TextAnchor = CreatePointTrace(testCase.TextPosition, cleanText, textInput),
             ExpectedRotationDegrees = NormalizeDegrees(testCase.Rotation + (testCase.IsTextFlipped ? 180.0 : 0.0)),
+            CoreInputDimensionLineRotationDegrees = dimensionLineRotation,
             CoreInputTextRotationDegrees = text?.Rotation,
             ExpectedBrokenDimensionLine = testCase.IsDimensionLineBroken || testCase.Noise.MicroBreak,
             CoreInputBrokenDimensionLine = primaryDimensionLineIds.Any(id =>
@@ -112,6 +114,36 @@ public sealed class SceneTraceBuilder
             : candidates.OrderBy(point => point.DistanceTo(expectedClean)).First();
     }
 
+    private static double? FindDimensionLineRotation(
+        PrimitiveScene scene,
+        DimensionCase testCase,
+        double expectedRotationDegrees)
+    {
+        var candidates = scene.Lines
+            .Where(line => line.ProvenanceIds.Any(id =>
+                IsPrimaryEvidence(testCase, id)
+                && id.Contains(":dimline", StringComparison.Ordinal)))
+            .Select(line =>
+            {
+                var dx = line.End.X - line.Start.X;
+                var dy = line.End.Y - line.Start.Y;
+                var lengthSquared = dx * dx + dy * dy;
+                var rotation = Math.Atan2(dy, dx) * 180.0 / Math.PI;
+                return new
+                {
+                    Rotation = rotation,
+                    LengthSquared = lengthSquared,
+                    Error = ParallelAngleDifferenceDegrees(rotation, expectedRotationDegrees)
+                };
+            })
+            .Where(candidate => candidate.LengthSquared > 1e-18)
+            .OrderBy(candidate => candidate.Error)
+            .ThenByDescending(candidate => candidate.LengthSquared)
+            .ToList();
+
+        return candidates.Count == 0 ? null : candidates[0].Rotation;
+    }
+
     private static TextPrimitive? FindText(
         PrimitiveScene scene,
         DimensionCase testCase,
@@ -154,6 +186,12 @@ public sealed class SceneTraceBuilder
 
     private static Point2D ToPoint(Point2 point)
         => new(point.X, point.Y);
+
+    private static double ParallelAngleDifferenceDegrees(double first, double second)
+    {
+        var difference = Math.Abs(first - second) % 180.0;
+        return Math.Min(difference, 180.0 - difference);
+    }
 
     private static double NormalizeDegrees(double degrees)
     {
