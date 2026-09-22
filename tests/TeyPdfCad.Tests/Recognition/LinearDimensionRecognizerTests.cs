@@ -365,6 +365,34 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Distinct_text_sources_claiming_same_geometry_remain_claimants_for_fail_closed_planning()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimensionWithSources(scene, y: 0, importedLength: 100, displayedValue: "5000", prefix: "a", textSourceId: "a-text-5000");
+        scene.Texts.Add(new TextPrimitive("10000", new Point2(50, 3), 2.5, 0, SourceIds: ["a-text-10000"]));
+        AddHorizontalDimensionWithSources(scene, y: 30, importedLength: 100, displayedValue: "5000", prefix: "b", textSourceId: "b-text-5000");
+        scene.Texts.Add(new TextPrimitive("10000", new Point2(50, 33), 2.5, 0, SourceIds: ["b-text-10000"]));
+
+        var result = new LinearDimensionRecognizer().RecognizeDetailed(scene);
+
+        Assert.Equal(2, result.PrimaryCandidates.Count);
+        Assert.Equal(4, result.Claimants.Count);
+        Assert.All(result.Claimants, candidate =>
+            Assert.Contains(candidate.SourceClaims, claim =>
+                claim.Role == SourceUsageRole.Text
+                && claim.State == SourceClaimState.Valid
+                && !claim.IsPartial));
+        Assert.Contains(result.Claimants, candidate =>
+            candidate.SourceClaims.Any(claim => claim.SourceId == "a-text-5000"));
+        Assert.Contains(result.Claimants, candidate =>
+            candidate.SourceClaims.Any(claim => claim.SourceId == "a-text-10000"));
+        Assert.Contains(result.Claimants, candidate =>
+            candidate.SourceClaims.Any(claim => claim.SourceId == "b-text-5000"));
+        Assert.Contains(result.Claimants, candidate =>
+            candidate.SourceClaims.Any(claim => claim.SourceId == "b-text-10000"));
+    }
+
+    [Fact]
     public void Shared_text_source_exposes_one_primary_and_all_safety_claimants()
     {
         var scene = new PrimitiveScene();
