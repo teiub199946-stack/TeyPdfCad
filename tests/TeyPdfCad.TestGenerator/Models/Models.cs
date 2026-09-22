@@ -275,6 +275,9 @@ public sealed record TestConfig
     public double ScaleTolerance { get; init; } = 0.000001;
     public double MaxFalsePositiveRate { get; init; } = 0.005;
     public double MaxWrongMeasurementRate { get; init; } = 0.002;
+    public double MinReconstructionRecall { get; init; } = 0.95;
+    public double MinReconstructionF1 { get; init; } = 0.95;
+    public double MinFullSemanticPassRate { get; init; } = 0.90;
     public double MaxRecallDrop { get; init; } = 0.001;
     public double MaxPrecisionDrop { get; init; } = 0.001;
     public double MaxPassRateDrop { get; init; } = 0.001;
