@@ -361,7 +361,7 @@ public sealed class LinearDimensionRecognizerTests
         Assert.All(dimensions, dimension =>
             Assert.Contains(dimension.SourceClaims, claim =>
                 claim.SourceId == "shared-text"
-                && claim.State == TeyPdfCad.Core.Semantics.SourceClaimState.Valid));
+                && claim.State == SourceClaimState.Valid));
     }
 
     [Fact]
