@@ -28,7 +28,12 @@ public sealed class LinearDimensionRecognizer
 
                 foreach (var cluster in clusters)
                 {
-                    var clusterOptions = options with { DrawingScale = cluster.Scale };
+                    var resolvedClusterScale = DimensionGeometryAnalysis.ResolveScale(
+                        cluster.Scale,
+                        fixedScale: null,
+                        options.CanonicalScaleRelativeTolerance)
+                        ?? cluster.Scale;
+                    var clusterOptions = options with { DrawingScale = resolvedClusterScale };
                     var clusterResult = RecognizeWithResolvedScale(scene, clusterOptions);
                     if (clusterResult.Count < options.ScaleConsensusMinimumVotes) continue;
 
