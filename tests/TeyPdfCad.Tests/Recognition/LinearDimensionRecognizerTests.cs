@@ -365,6 +365,23 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Shared_text_source_exposes_one_primary_and_all_safety_claimants()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimensionWithSources(scene, y: 0, importedLength: 100, displayedValue: "5000", prefix: "a", textSourceId: "shared-primary-text");
+        AddHorizontalDimensionWithSources(scene, y: 30, importedLength: 100, displayedValue: "5000", prefix: "b", textSourceId: "shared-primary-text");
+
+        var result = new LinearDimensionRecognizer().RecognizeDetailed(scene);
+
+        Assert.Single(result.PrimaryCandidates);
+        Assert.Equal(2, result.Claimants.Count);
+        Assert.All(result.Claimants, candidate =>
+            Assert.Contains(candidate.SourceClaims, claim =>
+                claim.SourceId == "shared-primary-text"
+                && claim.State == SourceClaimState.Valid));
+    }
+
+    [Fact]
     public void Rotated_distinct_dimensions_sharing_text_source_are_both_retained_for_fail_closed_planning()
     {
         var scene = new PrimitiveScene();
