@@ -402,6 +402,33 @@ public sealed class LinearDimensionRecognizer
             endpointTolerance,
             cosLimit,
             ext1);
+
+        // Long-span PDFIMPORT skew can rotate the dimension line enough that one
+        // very short extension line is no longer inside the nominal 15°
+        // perpendicular envelope even though it still physically crosses the
+        // endpoint. Recover only that one-missing-extension shape. If both
+        // nominal extensions are missing, remain fail-closed.
+        if (ext1 is null && ext2 is not null)
+        {
+            ext1 = DimensionGeometryAnalysis.FindConnectedExtensionLineFallback(
+                scene.Lines,
+                dimensionLine,
+                dimensionLine.Start,
+                unitDim,
+                endpointTolerance,
+                ext2);
+        }
+        else if (ext2 is null && ext1 is not null)
+        {
+            ext2 = DimensionGeometryAnalysis.FindConnectedExtensionLineFallback(
+                scene.Lines,
+                dimensionLine,
+                dimensionLine.End,
+                unitDim,
+                endpointTolerance,
+                ext1);
+        }
+
         if (ext1 is null || ext2 is null) return null;
 
         var p1 = DimensionGeometryAnalysis.DefinitionPoint(ext1, dimensionLine);
