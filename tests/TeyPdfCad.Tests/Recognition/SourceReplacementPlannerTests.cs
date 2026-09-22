@@ -405,6 +405,44 @@ public sealed class SourceReplacementPlannerTests
 
 
     [Fact]
+    public void Verified_candidate_cannot_authorize_an_unverified_peer_source()
+    {
+        var plan = new SourceReplacementPlan(
+            ["source-a", "source-b"],
+            [],
+            [],
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+            {
+                ["source-a"] = ["candidate-a"],
+                ["source-b"] = ["candidate-b"]
+            },
+            [],
+            []);
+
+        var decision = new SuppressionGate().Evaluate(
+            plan,
+            new NativeReadBackVerification(
+                new Dictionary<string, CandidateVerification>(StringComparer.Ordinal)
+                {
+                    ["candidate-a"] = new("candidate-a", true, [], [], [])
+                    {
+                        SourceEquivalenceComplete = true
+                    }
+                    // candidate-b models a non-primary candidate with no
+                    // independently emitted/read-back native counterpart.
+                }));
+
+        Assert.Equal(new[] { "source-a" }, decision.SuppressSourceIds.OrderBy(value => value));
+        Assert.Contains("source-b", decision.PreserveSourceIds);
+        Assert.Contains(
+            decision.Residuals,
+            residual => residual.SourceId == "source-b"
+                && residual.CandidateKey == "candidate-b"
+                && residual.Kind == ReplacementResidualKind.CandidateNotVerified
+                && residual.Severity == ReplacementResidualSeverity.Critical);
+    }
+
+    [Fact]
     public void ChainDeferral_DeferredCandidateStillCountsForNextSource()
     {
         var sources = new VectorEntity[]
