@@ -155,6 +155,52 @@ public sealed class DiagnosticClassifierTests
         Assert.True(diagnostic.IsRealCoreDefect);
     }
 
+    [Fact]
+    public void DimensionLinePoint_AlongLineTranslation_IsGeometryEquivalent()
+    {
+        var expected = Case(ExpectedResult.Recognized) with { DrawingScale = 100, Rotation = 0 };
+        var shiftedWorld = new Point2D(expected.DimensionLinePoint.X + 1000, expected.DimensionLinePoint.Y);
+        var shiftedPaper = new Point2D(
+            shiftedWorld.X / expected.DrawingScale,
+            shiftedWorld.Y / expected.DrawingScale);
+        var trace = Trace(expected) with
+        {
+            CoreResult = Snapshot(expected, expected.P1, expected.P2) with
+            {
+                DimensionLinePointWorld = shiftedWorld,
+                DimensionLinePointPaper = shiftedPaper
+            }
+        };
+
+        var diagnostic = new ErrorClassifier().Classify(expected, Actual(expected), trace);
+
+        Assert.NotEqual(DiagnosticCategory.WrongGeometry, diagnostic.Category);
+        Assert.True(diagnostic.GeometryCorrect);
+    }
+
+    [Fact]
+    public void DimensionLinePoint_PerpendicularTranslation_RemainsWrongGeometry()
+    {
+        var expected = Case(ExpectedResult.Recognized) with { DrawingScale = 100, Rotation = 0 };
+        var shiftedWorld = new Point2D(expected.DimensionLinePoint.X, expected.DimensionLinePoint.Y + 10);
+        var shiftedPaper = new Point2D(
+            shiftedWorld.X / expected.DrawingScale,
+            shiftedWorld.Y / expected.DrawingScale);
+        var trace = Trace(expected) with
+        {
+            CoreResult = Snapshot(expected, expected.P1, expected.P2) with
+            {
+                DimensionLinePointWorld = shiftedWorld,
+                DimensionLinePointPaper = shiftedPaper
+            }
+        };
+
+        var diagnostic = new ErrorClassifier().Classify(expected, Actual(expected), trace);
+
+        Assert.Equal(DiagnosticCategory.WrongGeometry, diagnostic.Category);
+        Assert.True(diagnostic.IsRealCoreDefect);
+    }
+
     private static CaseDiagnostic Classify(DimensionCase expected, ActualDimensionResult actual)
         => new ErrorClassifier().Classify(expected, actual, Trace(expected));
 
