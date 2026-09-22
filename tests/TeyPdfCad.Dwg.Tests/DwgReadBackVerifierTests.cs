@@ -431,6 +431,26 @@ public sealed class DwgReadBackVerifierTests
     }
 
     [Fact]
+    public void Empty_expected_entity_set_is_not_a_verified_native_candidate()
+    {
+        const string candidateId = "v1:1:DIMENSION:empty";
+        var drawing = new CadDocument();
+        var manifest = Manifest(candidateId, "DIMENSION");
+
+        using var file = WriteDrawing(drawing);
+        var candidate = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.False(candidate.IsVerified);
+        Assert.Contains(
+            candidate.InvalidEntities,
+            value => value.Contains(
+                "no expected native entities",
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Correct_line_candidate_verifies_from_closed_file()
     {
         const string candidateId = "v1:1:LINE:ok";
