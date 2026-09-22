@@ -302,19 +302,29 @@ public sealed class LinearDimensionRecognizer
                 options.ScaleConsensusMinimumVotes - 1,
                 1);
             var best = localBest;
-            if (localSupport == 0)
+            var localCanonicalScale = DimensionGeometryAnalysis.ResolveScale(
+                localBest.Scale,
+                fixedScale: null,
+                options.CanonicalScaleRelativeTolerance);
+            if (localSupport == 0 && localCanonicalScale is null)
             {
                 var supportedAlternative = hypothesesByText[textIndex]
                     .Select(hypothesis => new
                     {
                         Observation = hypothesis,
+                        CanonicalScale = DimensionGeometryAnalysis.ResolveScale(
+                            hypothesis.Scale,
+                            fixedScale: null,
+                            options.CanonicalScaleRelativeTolerance),
                         Support = CountCrossTextScaleSupport(
                             hypothesis.Scale,
                             hypothesesByText,
                             textIndex,
                             options.ScaleConsensusRelativeTolerance)
                     })
-                    .Where(item => item.Support >= minimumOtherTextSupport)
+                    .Where(item =>
+                        item.CanonicalScale.HasValue
+                        && item.Support >= minimumOtherTextSupport)
                     .OrderByDescending(item => item.Support)
                     .ThenByDescending(item => item.Observation.Weight)
                     .ThenBy(item => item.Observation.Scale)
