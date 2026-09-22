@@ -154,6 +154,44 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Recognizes_long_dimension_with_text_outside_right()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(300, 0),
+            SourceIds: ["dim"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, -12),
+            new Point2(0, 1),
+            SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(300, -12),
+            new Point2(300, 1),
+            SourceIds: ["ext-2"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-1, -1),
+            new Point2(1, 1),
+            SourceIds: ["arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(299, -1),
+            new Point2(301, 1),
+            SourceIds: ["arrow-2"]));
+        scene.Texts.Add(new TextPrimitive(
+            "30000",
+            new Point2(345, 0),
+            2.5,
+            0,
+            SourceIds: ["text"]));
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+
+        Assert.Equal(30000, dimension.DisplayedValue, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+        Assert.Equal(["dim"], dimension.SourceAppearance!.DimensionLine.SourceIds);
+    }
+
+    [Fact]
     public void Recognizes_Aligned_Dimension_At_45_Degrees()
     {
         const double component = 36.76955262170047;
