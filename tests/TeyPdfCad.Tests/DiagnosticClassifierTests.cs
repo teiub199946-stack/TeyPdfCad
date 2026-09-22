@@ -193,6 +193,35 @@ public sealed class DiagnosticClassifierTests
     }
 
     [Fact]
+    public void DimensionLineRotation_BeyondInjectedSkew_RemainsWrongGeometry()
+    {
+        var expected = Case(ExpectedResult.Recognized) with
+        {
+            DrawingScale = 100,
+            Rotation = 0,
+            Noise = new NoiseSpec { AngularSkewDegrees = 0.05 }
+        };
+        var trace = Trace(expected) with
+        {
+            CoreResult = Snapshot(expected, expected.P1, expected.P2) with
+            {
+                DimensionLineRotationDegrees = 0.5
+            }
+        };
+
+        var diagnostic = new ErrorClassifier().Classify(
+            expected,
+            Actual(expected),
+            trace);
+
+        Assert.Equal(DiagnosticCategory.WrongGeometry, diagnostic.Category);
+        Assert.Contains(
+            diagnostic.GeometryChecks,
+            check => check.Component == "rotation/orientation"
+                     && check.Status == GeometryCheckStatus.Wrong);
+    }
+
+    [Fact]
     public void DimensionLinePoint_PerpendicularTranslation_RemainsWrongGeometry()
     {
         var expected = Case(ExpectedResult.Recognized) with { DrawingScale = 100, Rotation = 0 };
@@ -286,6 +315,7 @@ public sealed class DiagnosticClassifierTests
         DefinitionPoint1Paper = new Point2D(p1.X / expected.DrawingScale, p1.Y / expected.DrawingScale),
         DefinitionPoint2Paper = new Point2D(p2.X / expected.DrawingScale, p2.Y / expected.DrawingScale),
         DimensionLinePointPaper = new Point2D(expected.DimensionLinePoint.X / expected.DrawingScale, expected.DimensionLinePoint.Y / expected.DrawingScale),
+        DimensionLineRotationDegrees = expected.Rotation,
         ProvenanceIds = new List<string> { expected.Id + ":primary:dimline", expected.Id + ":primary:ext:1", expected.Id + ":primary:ext:2" }
     };
 }
