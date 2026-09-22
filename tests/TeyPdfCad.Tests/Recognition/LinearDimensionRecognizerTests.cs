@@ -560,6 +560,116 @@ public sealed class LinearDimensionRecognizerTests
         Assert.Empty(new LinearDimensionRecognizer().Recognize(scene));
     }
 
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(45, false)]
+    [InlineData(45, true)]
+    [InlineData(90, false)]
+    [InlineData(90, true)]
+    public void Long_outside_text_micro_gap_is_stable_across_rotation_and_endpoint_order(
+        int rotationDegrees,
+        bool reverseEndpoints)
+    {
+        var scene = new PrimitiveScene();
+        AddLongOutsideTextMicroGapDimension(
+            scene,
+            rotationDegrees,
+            reverseEndpoints,
+            includeEquivalentClone: false,
+            includeAdjacentNonBlockingFragment: false);
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+
+        Assert.Equal(30000, dimension.DisplayedValue, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+        Assert.True(dimension.SourceAppearance!.DimensionLine.IsCompositeObservation);
+    }
+
+    [Fact]
+    public void Equivalent_cloned_fragment_does_not_change_micro_gap_recognition()
+    {
+        var scene = new PrimitiveScene();
+        AddLongOutsideTextMicroGapDimension(
+            scene,
+            rotationDegrees: 45,
+            reverseEndpoints: false,
+            includeEquivalentClone: true,
+            includeAdjacentNonBlockingFragment: false);
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+
+        Assert.Equal(30000, dimension.DisplayedValue, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+    }
+
+    [Fact]
+    public void Near_collinear_fragment_outside_micro_gap_does_not_block_legitimate_merge()
+    {
+        var scene = new PrimitiveScene();
+        AddLongOutsideTextMicroGapDimension(
+            scene,
+            rotationDegrees: 0,
+            reverseEndpoints: false,
+            includeEquivalentClone: false,
+            includeAdjacentNonBlockingFragment: true);
+
+        var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
+
+        Assert.Equal(30000, dimension.DisplayedValue, 6);
+        Assert.Equal(100, dimension.DrawingScale, 6);
+    }
+
+
+    private static void AddLongOutsideTextMicroGapDimension(
+        PrimitiveScene scene,
+        int rotationDegrees,
+        bool reverseEndpoints,
+        bool includeEquivalentClone,
+        bool includeAdjacentNonBlockingFragment)
+    {
+        var radians = rotationDegrees * Math.PI / 180.0;
+        var along = new Point2(Math.Cos(radians), Math.Sin(radians));
+        var normal = new Point2(-Math.Sin(radians), Math.Cos(radians));
+
+        Point2 Transform(double x, double y) => new(
+            along.X * x + normal.X * y,
+            along.Y * x + normal.Y * y);
+
+        void AddLine(double x1, double y1, double x2, double y2, string sourceId)
+        {
+            var start = Transform(x1, y1);
+            var end = Transform(x2, y2);
+            scene.Lines.Add(new LinePrimitive(
+                reverseEndpoints ? end : start,
+                reverseEndpoints ? start : end,
+                SourceIds: [sourceId]));
+        }
+
+        AddLine(0, 0, 254.9, 0, "dim-left");
+        AddLine(255.1, 0, 300, 0, "dim-right");
+
+        if (includeEquivalentClone)
+            AddLine(0, 0, 254.9, 0, "dim-left-clone");
+
+        // This fragment is close and collinear with the right source line,
+        // but does not occupy the (254.9, 255.1) micro-gap.
+        if (includeAdjacentNonBlockingFragment)
+            AddLine(255.15, 0, 300, 0, "nearby-nonblocking");
+
+        AddLine(0, -12, 0, 1, "ext-1");
+        AddLine(300, -12, 300, 1, "ext-2");
+        AddLine(-1, -1, 1, 1, "arrow-1");
+        AddLine(299, -1, 301, 1, "arrow-2");
+        scene.Texts.Add(new TextPrimitive(
+            "30000",
+            Transform(345, 0),
+            2.5,
+            rotationDegrees,
+            SourceIds: ["text"]));
+    }
+
     private static void AddAlignedDimensionWithSources(
         PrimitiveScene scene,
         double originX,
