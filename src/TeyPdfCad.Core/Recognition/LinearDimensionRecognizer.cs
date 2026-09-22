@@ -113,8 +113,11 @@ public sealed class LinearDimensionRecognizer
             .Select((cluster, index) => new ScaleRankEntry(cluster.Scale, index))
             .ToArray();
 
-        var perText = candidates
-            .GroupBy(TextSourceKey)
+        var perHypothesis = candidates
+            .GroupBy(candidate => string.Concat(
+                TextSourceKey(candidate),
+                "\u001F",
+                GeometryKey(candidate)), StringComparer.Ordinal)
             .Select(group => group
                 .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
                 .ThenByDescending(candidate => candidate.Confidence)
@@ -122,7 +125,12 @@ public sealed class LinearDimensionRecognizer
                 .First())
             .ToArray();
 
-        return perText
+        // A shared text SourceId is evidence of shared ownership, not permission
+        // to silently choose one geometry. Keep geometrically distinct claimants
+        // so SourceReplacementPlanner can see the complete shared-claim graph and
+        // fail closed. We only deduplicate the same text-source + same-geometry
+        // hypothesis across scale clusters here.
+        return perHypothesis
             .GroupBy(GeometryKey)
             .Select(group => group
                 .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
