@@ -391,6 +391,35 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Claimant_and_primary_selection_are_stable_across_input_permutations()
+    {
+        var original = new PrimitiveScene();
+        AddHorizontalDimensionWithSources(original, y: 0, importedLength: 100, displayedValue: "5000", prefix: "a", textSourceId: "a-text-5000");
+        original.Texts.Add(new TextPrimitive("10000", new Point2(50, 3), 2.5, 0, SourceIds: ["a-text-10000"]));
+        AddHorizontalDimensionWithSources(original, y: 30, importedLength: 100, displayedValue: "5000", prefix: "b", textSourceId: "b-text-5000");
+        original.Texts.Add(new TextPrimitive("10000", new Point2(50, 33), 2.5, 0, SourceIds: ["b-text-10000"]));
+
+        string? expected = null;
+        for (var seed = 1; seed <= 64; seed++)
+        {
+            var random = new Random(seed);
+            var scene = new PrimitiveScene();
+            scene.Lines.AddRange(original.Lines.OrderBy(_ => random.Next()));
+            scene.Texts.AddRange(original.Texts.OrderBy(_ => random.Next()));
+
+            var result = new LinearDimensionRecognizer().RecognizeDetailed(scene);
+            var signature = string.Join(
+                "|",
+                result.PrimaryCandidates
+                    .Concat(result.Claimants)
+                    .Select(candidate => SourceReplacementPlanner.GetCandidateKey(candidate, 1)));
+
+            expected ??= signature;
+            Assert.Equal(expected, signature);
+        }
+    }
+
+    [Fact]
     public void Shared_text_source_across_distinct_geometry_is_not_ranked_away()
     {
         var scene = new PrimitiveScene();
