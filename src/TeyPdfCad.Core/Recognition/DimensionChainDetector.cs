@@ -63,16 +63,53 @@ public sealed class DimensionChainDetector
         var secondUnit = GeometryMath.Normalize(secondVector);
         if (Math.Abs(GeometryMath.Dot(firstUnit, secondUnit)) < Math.Cos(3.0 * Math.PI / 180.0)) return false;
 
-        var lineOffsetTolerance = Math.Max(Math.Min(firstLength, secondLength) * 0.03, 1e-6);
+        var adjacencyTolerance = ChainAdjacencyTolerance(
+            first,
+            second,
+            firstLength,
+            secondLength);
         if (GeometryMath.DistancePointToInfiniteLine(
                 second.DimensionLinePoint,
                 first.DimensionLinePoint,
                 new Point2(first.DimensionLinePoint.X + firstUnit.X, first.DimensionLinePoint.Y + firstUnit.Y))
-            > lineOffsetTolerance)
+            > adjacencyTolerance)
             return false;
 
-        var endpointTolerance = Math.Max(Math.Min(firstLength, secondLength) * 0.03, 1e-6);
-        return EndpointDistance(first, second) <= endpointTolerance;
+        return EndpointDistance(first, second) <= adjacencyTolerance;
+    }
+
+    private static double ChainAdjacencyTolerance(
+        DimensionCandidate first,
+        DimensionCandidate second,
+        double firstLength,
+        double secondLength)
+    {
+        var minimumLength = Math.Min(firstLength, secondLength);
+        var relativeTolerance = minimumLength * 0.03;
+
+        var sourceTextHeights = new[]
+        {
+            first.SourceAppearance?.Text.HeightMm,
+            second.SourceAppearance?.Text.HeightMm
+        }
+            .Where(value => value is > 0 && double.IsFinite(value.Value))
+            .Select(value => value!.Value)
+            .ToArray();
+
+        if (sourceTextHeights.Length == 0)
+            return Math.Max(relativeTolerance, 1e-6);
+
+        // PDFIMPORT coordinate jitter is naturally bounded in paper space,
+        // while the old 3%-of-segment rule collapses toward zero for short
+        // chain members. Use recognizer-captured source text height as a local
+        // paper-space scale, but cap the extra allowance to 10% of the shorter
+        // dimension so nearby independent dimensions cannot be bridged merely
+        // because their text is large.
+        var sourceAwareFloor = Math.Min(
+            sourceTextHeights.Min() * 0.25,
+            minimumLength * 0.10);
+
+        return Math.Max(Math.Max(relativeTolerance, sourceAwareFloor), 1e-6);
     }
 
     private static double EndpointDistance(DimensionCandidate first, DimensionCandidate second)
