@@ -219,31 +219,34 @@ public sealed class LinearDimensionRecognizer
     }
 
     private static string SourceClaimSetKey(DimensionCandidate candidate)
-        => string.Join(
-            "\u001E",
+        // Retain multiplicity deliberately: duplicate claims remain visible to
+        // later explicit normalization/validation rather than being hidden in
+        // recognizer-stage equivalence. Every component is length-prefixed so
+        // even malformed pre-validation SourceIds cannot inject a delimiter.
+        => string.Concat(
             candidate.SourceClaims
                 .OrderBy(claim => claim.SourceId, StringComparer.Ordinal)
                 .ThenBy(claim => claim.Role)
                 .ThenBy(claim => claim.State)
                 .ThenBy(claim => claim.IsPartial)
                 .Select(claim => string.Concat(
-                    claim.SourceId,
-                    "\u001F",
-                    ((int)claim.Role).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    "\u001F",
-                    ((int)claim.State).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    "\u001F",
-                    claim.IsPartial ? "1" : "0")));
+                    CanonicalPart(claim.SourceId),
+                    CanonicalPart(((int)claim.Role).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    CanonicalPart(((int)claim.State).ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    CanonicalPart(claim.IsPartial ? "1" : "0"))));
 
     private static string CandidateTieBreakKey(DimensionCandidate candidate)
         => string.Concat(
-            SourceClaimSetKey(candidate),
-            "\u001D",
-            candidate.SourceText,
-            "\u001D",
-            candidate.DrawingScale.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-            "\u001D",
-            GeometryKey(candidate));
+            CanonicalPart(SourceClaimSetKey(candidate)),
+            CanonicalPart(candidate.SourceText),
+            CanonicalPart(candidate.DrawingScale.ToString("R", System.Globalization.CultureInfo.InvariantCulture)),
+            CanonicalPart(GeometryKey(candidate)));
+
+    private static string CanonicalPart(string value)
+        => string.Concat(
+            value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ":",
+            value);
 
     private static int ScaleRank(double scale, IReadOnlyList<ScaleRankEntry> ranks)
     {
