@@ -10,7 +10,7 @@ public sealed class DiagnosticCliTests
 {
 
     [Fact]
-    public async Task P0QualityGate_PassesCleanCurrentBranchEvidence()
+    public async Task P0SuppressionSafetyGate_PassesCleanCurrentBranchEvidence()
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -61,7 +61,7 @@ public sealed class DiagnosticCliTests
 
             var exitCode = await TestGenerator.Program.Main(
             [
-                "p0-quality-gate",
+                "p0-suppression-safety-gate",
                 "--core-report", corePath,
                 "--diagnostic-report", diagnosticPath,
                 "--expected-count", "1",
@@ -83,7 +83,7 @@ public sealed class DiagnosticCliTests
     }
 
     [Fact]
-    public async Task P0QualityGate_FailsWhenAmbiguousEvidenceIsForcedIntoRecognition()
+    public async Task P0SuppressionSafetyGate_FailsWhenAmbiguousEvidenceIsForcedIntoRecognition()
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -134,7 +134,7 @@ public sealed class DiagnosticCliTests
 
             var exitCode = await TestGenerator.Program.Main(
             [
-                "p0-quality-gate",
+                "p0-suppression-safety-gate",
                 "--core-report", corePath,
                 "--diagnostic-report", diagnosticPath,
                 "--expected-count", "1",
@@ -152,6 +152,122 @@ public sealed class DiagnosticCliTests
                 gate.RootElement
                     .GetProperty("forcedAmbiguousRecognition")
                     .GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReconstructionQualityGate_FailsWhenRecallAndFullPassAreMateriallyDegraded()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "teypdfcad-reconstruction-gate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var corePath = Path.Combine(directory, "core.json");
+            var gatePath = Path.Combine(directory, "gate.json");
+
+            var core = new RegressionReport
+            {
+                Seed = 12345,
+                Total = 100,
+                Precision = 1.0,
+                Recall = 0.80,
+                F1 = 0.888,
+                PassRate = 0.50,
+                ReleaseGate = new ReleaseGateResult
+                {
+                    Status = "PASS"
+                }
+            };
+
+            await File.WriteAllTextAsync(
+                corePath,
+                JsonDefaults.Serialize(core));
+
+            var exitCode = await TestGenerator.Program.Main(
+            [
+                "reconstruction-quality-gate",
+                "--core-report", corePath,
+                "--expected-count", "100",
+                "--output", gatePath
+            ]);
+
+            Assert.Equal(2, exitCode);
+            using var gate = JsonDocument.Parse(
+                await File.ReadAllTextAsync(gatePath));
+            Assert.Equal(
+                "FAIL",
+                gate.RootElement.GetProperty("status").GetString());
+            Assert.Equal(
+                "reconstruction-quality",
+                gate.RootElement.GetProperty("gateType").GetString());
+
+            var reasons = gate.RootElement.GetProperty("reasons")
+                .EnumerateArray()
+                .Select(element => element.GetString() ?? string.Empty)
+                .ToArray();
+            Assert.Contains(reasons, reason =>
+                reason.Contains("Recall", StringComparison.Ordinal));
+            Assert.Contains(reasons, reason =>
+                reason.Contains("Full semantic pass rate", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReconstructionQualityGate_PassesOnlyWhenAbsoluteFloorsAreMet()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "teypdfcad-reconstruction-gate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var corePath = Path.Combine(directory, "core.json");
+            var gatePath = Path.Combine(directory, "gate.json");
+
+            var core = new RegressionReport
+            {
+                Seed = 12345,
+                Total = 100,
+                Precision = 0.999,
+                Recall = 0.96,
+                F1 = 0.97,
+                PassRate = 0.92,
+                ReleaseGate = new ReleaseGateResult
+                {
+                    Status = "PASS"
+                }
+            };
+
+            await File.WriteAllTextAsync(
+                corePath,
+                JsonDefaults.Serialize(core));
+
+            var exitCode = await TestGenerator.Program.Main(
+            [
+                "reconstruction-quality-gate",
+                "--core-report", corePath,
+                "--expected-count", "100",
+                "--output", gatePath
+            ]);
+
+            Assert.Equal(0, exitCode);
+            using var gate = JsonDocument.Parse(
+                await File.ReadAllTextAsync(gatePath));
+            Assert.Equal(
+                "PASS",
+                gate.RootElement.GetProperty("status").GetString());
         }
         finally
         {
