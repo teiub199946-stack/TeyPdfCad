@@ -169,13 +169,13 @@ public static class Program
             .Select(testCase => new
             {
                 testCase.Id,
-                testCase.Family,
+                testCase.DimensionType,
                 Assessment = PreRecognitionGeometryAnalyzer.Analyze(testCase)
             })
             .ToArray();
 
         var chainAssessments = assessments
-            .Where(item => item.Family == DimensionFamily.Chain)
+            .Where(item => item.DimensionType == DimensionType.Chain)
             .ToArray();
 
         var report = new
@@ -206,7 +206,7 @@ public static class Program
                 .Select(item => new
                 {
                     item.Id,
-                    item.Family,
+                    item.DimensionType,
                     item.Assessment.DegenerateSegments
                 })
                 .ToArray()
