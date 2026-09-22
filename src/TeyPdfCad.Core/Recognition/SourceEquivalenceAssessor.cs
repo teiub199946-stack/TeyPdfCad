@@ -36,12 +36,13 @@ public static class SourceEquivalenceAssessor
         {
             foreach (var candidate in semantics.Dimensions)
             {
+                var dimensionAssessment = AssessDimensionSourceEquivalence(page, candidate);
                 Add(
                     assessments,
                     SourceReplacementPlanner.GetCandidateKey(candidate, page.Number),
                     "DIMENSION",
-                    isComplete: false,
-                    "Dimension source appearance is not yet fully represented: source text metrics, arrow geometry/style, extension-line style/offsets and dimension-line appearance are not independently captured before DWG emission.");
+                    dimensionAssessment.IsComplete,
+                    dimensionAssessment.Reason);
             }
 
             foreach (var candidate in semantics.Leaders)
@@ -97,6 +98,68 @@ public static class SourceEquivalenceAssessor
 
         return new SourceEquivalenceAssessmentSet(assessments);
     }
+
+    private static SourceEquivalenceAssessmentResult AssessDimensionSourceEquivalence(
+        VectorPdfPage page,
+        TeyPdfCad.Core.Semantics.Dimensions.DimensionCandidate candidate)
+    {
+        if (candidate.SourceAppearance is null)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                "Dimension has no pre-write source-appearance snapshot; destructive suppression remains blocked.");
+        }
+
+        var appearance = candidate.SourceAppearance;
+        var evidenceIds = appearance.DimensionLine.SourceIds
+            .Concat(appearance.ExtensionLines.SelectMany(line => line.SourceIds))
+            .Concat(appearance.ArrowLines.SelectMany(line => line.SourceIds))
+            .Concat(appearance.Text.SourceIds)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToArray();
+        var claimedIds = candidate.SourceClaims
+            .Where(claim => claim.State == SourceClaimState.Valid && !claim.IsPartial)
+            .Select(claim => claim.SourceId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToArray();
+
+        if (!evidenceIds.SequenceEqual(claimedIds, StringComparer.Ordinal))
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                "Dimension source-appearance evidence does not cover exactly the recognizer-owned source claim set.");
+        }
+
+        var pageSourceIds = page.Entities
+            .Select(entity => entity.SourceId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal);
+        if (evidenceIds.Any(id => !pageSourceIds.Contains(id)))
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                "Dimension source-appearance evidence references a SourceId absent from the source page.");
+        }
+
+        if (appearance.DimensionLine.IsCompositeObservation)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                "Dimension source appearance is captured, but the dimension-line observation is composite (for example split around text); raw source segments must be compared independently before suppression.");
+        }
+
+        return new SourceEquivalenceAssessmentResult(
+            false,
+            "Dimension source appearance is captured before DWG emission (text metrics/color and line geometry/stroke/dash/color), but native DIMENSION font metrics, arrow topology/type and dimension/extension line style mapping are not yet independently proven equivalent.");
+    }
+
+    private readonly record struct SourceEquivalenceAssessmentResult(
+        bool IsComplete,
+        string Reason);
 
     private static void Add(
         IDictionary<string, SourceEquivalenceAssessment> output,
