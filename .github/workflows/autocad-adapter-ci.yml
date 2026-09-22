@@ -2,9 +2,9 @@ name: AutoCAD Adapter CI
 
 on:
   push:
-    branches: [ 'feature/autocad-bridge' ]
+    branches: [ 'codex/**' ]
   pull_request:
-    branches: [ main ]
+    branches: [ 'codex/**', main ]
 
 jobs:
   build-autocad-adapter:
@@ -19,13 +19,13 @@ jobs:
       - run: dotnet test tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj --configuration Release --no-restore
       - name: Stage AutoCAD test package
         run: |
-          mkdir -p artifacts/autocad2026
-          cp src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.dll artifacts/autocad2026/
-          cp src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.Core.dll artifacts/autocad2026/
-          cp src/TeyPdfCad.AutoCAD/bin/Release/net8.0/TeyPdfCad.AutoCAD.deps.json artifacts/autocad2026/
-          cp docs/AUTOCAD_MVP_TEST.md artifacts/autocad2026/
+          mkdir -p artifacts/autocad2022
+          cp src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.AutoCAD.dll artifacts/autocad2022/
+          cp src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.Core.dll artifacts/autocad2022/
+          cp src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.AutoCAD.deps.json artifacts/autocad2022/
+          cp docs/AUTOCAD_MVP_TEST.md artifacts/autocad2022/
       - uses: actions/upload-artifact@v4
         with:
-          name: TeyPdfCad-AutoCAD2026
+          name: TeyPdfCad-AutoCAD2022
           if-no-files-found: error
-          path: artifacts/autocad2026/
+          path: artifacts/autocad2022/
