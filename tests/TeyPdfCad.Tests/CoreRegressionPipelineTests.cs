@@ -188,6 +188,43 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
+    public async Task NearAxis_Rotated_Candidate_Is_Not_Collapsed_To_Linear()
+    {
+        const double angleDegrees = 0.75;
+        var radians = angleDegrees * Math.PI / 180.0;
+        var direction = new Point2D(Math.Cos(radians), Math.Sin(radians));
+        var normal = new Point2D(-direction.Y, direction.X);
+        var p2 = new Point2D(direction.X * 5200.0, direction.Y * 5200.0);
+        var midpoint = new Point2D(p2.X / 2.0, p2.Y / 2.0);
+        var dimPoint = new Point2D(
+            midpoint.X + normal.X * 350.0,
+            midpoint.Y + normal.Y * 350.0);
+
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_contract_rotated_near_axis",
+            DimensionType = DimensionType.Rotated,
+            P2 = p2,
+            DimensionLinePoint = dimPoint,
+            TextPosition = dimPoint,
+            Rotation = angleDegrees,
+            ObservedGeometry = new ObservedGeometry
+            {
+                P1 = new Point2D(0, 0),
+                P2 = p2,
+                DimensionLinePoint = dimPoint,
+                TextPosition = dimPoint
+            }
+        };
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(DimensionType.Rotated, actual.DimensionType);
+        Assert.True(actual.IsDimensionTypeAmbiguous);
+    }
+
+    [Fact]
     public async Task NonAxis_Primitives_With_Parallel_Definition_And_Dimension_Directions_Are_Type_Ambiguous()
     {
         const double component = 3676.955262170047;
