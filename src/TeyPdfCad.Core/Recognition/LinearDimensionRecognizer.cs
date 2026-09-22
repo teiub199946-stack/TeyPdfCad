@@ -143,19 +143,18 @@ public sealed class LinearDimensionRecognizer
                 .First())
             .ToArray();
 
-        // A shared text SourceId is evidence of shared ownership, not permission
-        // to silently choose one geometry. Keep geometrically distinct claimants
-        // so SourceReplacementPlanner can see the complete shared-claim graph and
-        // fail closed. We only deduplicate the same text-source + same-geometry
-        // hypothesis across scale clusters here.
+        // The planner must receive every source-distinct claimant. A geometrically
+        // identical candidate with a different valid text SourceId may represent
+        // conflicting PDF evidence; collapsing it here would hide that conflict
+        // before SourceReplacementPlanner can defer all overlapping claimants.
+        // Only the same text-source + same-geometry hypothesis is deduplicated
+        // above across scale clusters.
         return perHypothesis
-            .GroupBy(GeometryKey)
-            .Select(group => group
-                .OrderBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
-                .ThenByDescending(candidate => candidate.Confidence)
-                .First())
-            .OrderBy(x => x.DimensionLinePoint.Y)
-            .ThenBy(x => x.DimensionLinePoint.X)
+            .OrderBy(candidate => candidate.DimensionLinePoint.Y)
+            .ThenBy(candidate => candidate.DimensionLinePoint.X)
+            .ThenBy(GeometryKey, StringComparer.Ordinal)
+            .ThenBy(TextSourceKey, StringComparer.Ordinal)
+            .ThenBy(candidate => ScaleRank(candidate.DrawingScale, scaleRank))
             .ToArray();
     }
 
