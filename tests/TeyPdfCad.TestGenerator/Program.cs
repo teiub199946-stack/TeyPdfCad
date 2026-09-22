@@ -136,6 +136,22 @@ public static class Program
         Console.WriteLine($"Detection Precision: {report.DetectionPrecision:P4}; Recall: {report.DetectionRecall:P4}; F1: {report.F1:P4}");
         Console.WriteLine($"FP: {report.FalsePositive}; FN: {report.FalseNegative}");
         Console.WriteLine($"Legacy WrongPoints: {report.LegacyWrongPoints.Total}; real Core: {report.LegacyWrongPoints.RealCoreDefects}; noise: {report.LegacyWrongPoints.ExpectedNoisePropagation}; numeric: {report.LegacyWrongPoints.NumericTolerance}; other: {report.LegacyWrongPoints.Other}");
+        Console.WriteLine("Diagnostic categories:");
+        foreach (var category in report.Categories
+                     .Where(item => item.Count > 0)
+                     .OrderByDescending(item => item.Count)
+                     .ThenBy(item => item.Category))
+        {
+            Console.WriteLine($"  {category.Category}: {category.Count}");
+        }
+        Console.WriteLine("Diagnostic cohorts (real defects / FN / total):");
+        foreach (var cohort in report.Cohorts
+                     .OrderByDescending(item => item.FalseNegative)
+                     .ThenByDescending(item => item.RealCoreDefects)
+                     .ThenBy(item => item.Name, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"  {cohort.Name}: {cohort.RealCoreDefects} / {cohort.FalseNegative} / {cohort.Total}");
+        }
         Console.WriteLine($"Worst real Core defects written: {worst.Count}");
         Console.WriteLine($"Report: {Path.GetFullPath(Path.Combine(output, "report.json"))}");
         return 0;
