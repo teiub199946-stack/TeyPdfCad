@@ -132,7 +132,7 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
             if (isDimensionTypeAmbiguous)
             {
                 diagnostics.Add(
-                    "Semantic type ambiguity: exploded non-axis primitives are compatible with both aligned and rotated native dimensions.");
+                    "Semantic type ambiguity: exploded primitives are compatible with multiple linear-family native dimension types.");
             }
         }
 
@@ -216,7 +216,12 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
         PrimitiveScene scene,
         DimensionCandidate candidate)
     {
-        if (candidate.Kind != DimensionKind.Aligned)
+        // Exploded PDF geometry can be visually compatible with more than one
+        // native linear-family type. Preserve that ambiguity for non-exact-axis
+        // Rotated candidates as well as Aligned candidates instead of silently
+        // collapsing every Rotated candidate to Linear.
+        if (candidate.Kind != DimensionKind.Aligned
+            && AxisDistanceDegrees(candidate.RotationRadians) <= 1e-6)
             return false;
 
         var definitionVector = Subtract(candidate.DefinitionPoint2, candidate.DefinitionPoint1);
@@ -328,7 +333,24 @@ public sealed class SemanticCoreTestPipeline : ISemanticTestPipeline
         IReadOnlyList<string> Blockers);
 
     private static DimensionType MapType(DimensionCandidate candidate)
-        => candidate.Kind == DimensionKind.Aligned ? DimensionType.Aligned : DimensionType.Linear;
+    {
+        if (candidate.Kind == DimensionKind.Aligned)
+            return DimensionType.Aligned;
+
+        return AxisDistanceDegrees(candidate.RotationRadians) <= 0.5
+            ? DimensionType.Linear
+            : DimensionType.Rotated;
+    }
+
+    private static double AxisDistanceDegrees(double? rotationRadians)
+    {
+        var degrees = (rotationRadians ?? 0d) * 180.0 / Math.PI;
+        var normalized = Math.Abs(degrees) % 180.0;
+        if (normalized > 90.0)
+            normalized = 180.0 - normalized;
+
+        return Math.Min(normalized, Math.Abs(90.0 - normalized));
+    }
 
     private static ConfidenceClass MapConfidence(double confidence)
     {
