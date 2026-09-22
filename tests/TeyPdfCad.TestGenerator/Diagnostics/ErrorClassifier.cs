@@ -181,7 +181,7 @@ public sealed class ErrorClassifier
         checks.Add(Unavailable("text anchor", "DimensionCandidate does not expose a reconstructed text anchor."));
         checks.Add(CheckDimensionLineRotation(
             trace.ExpectedRotationDegrees,
-            trace.InjectedNoise.AngularSkewDegrees,
+            trace.CoreInputDimensionLineRotationDegrees,
             snapshot.DimensionLineRotationDegrees));
 
         if (snapshot.BrokenDimensionLine is null)
@@ -316,23 +316,29 @@ public sealed class ErrorClassifier
 
     private static GeometrySubcheck CheckDimensionLineRotation(
         double expectedRotationDegrees,
-        double injectedSkewDegrees,
+        double? coreInputRotationDegrees,
         double? actualRotationDegrees)
     {
-        if (actualRotationDegrees is null)
-            return WrongUnavailable("rotation/orientation", "Core dimension-line rotation is missing.");
+        if (coreInputRotationDegrees is null || actualRotationDegrees is null)
+        {
+            return WrongUnavailable(
+                "rotation/orientation",
+                "Core input or reconstructed dimension-line rotation is missing.");
+        }
 
-        var actualError = ParallelAngleDifferenceDegrees(
+        var injectedError = ParallelAngleDifferenceDegrees(
             expectedRotationDegrees,
+            coreInputRotationDegrees.Value);
+        var reconstructionError = ParallelAngleDifferenceDegrees(
+            coreInputRotationDegrees.Value,
             actualRotationDegrees.Value);
-        var injectedError = Math.Abs(injectedSkewDegrees);
         const double numericAngleEpsilon = 1e-6;
 
-        var status = actualError <= injectedError + 1e-12
+        var status = reconstructionError <= 1e-12
             ? injectedError > 1e-12
                 ? GeometryCheckStatus.ExpectedNoisePropagation
                 : GeometryCheckStatus.Correct
-            : actualError <= injectedError + numericAngleEpsilon + 1e-12
+            : reconstructionError <= numericAngleEpsilon + 1e-12
                 ? GeometryCheckStatus.NumericTolerance
                 : GeometryCheckStatus.Wrong;
 
@@ -343,13 +349,13 @@ public sealed class ErrorClassifier
             Explanation = status switch
             {
                 GeometryCheckStatus.Correct =>
-                    "Dimension-line rotation matches.",
+                    "Dimension-line rotation matches the actual Core input.",
                 GeometryCheckStatus.ExpectedNoisePropagation =>
-                    $"Angular error {actualError:0.########}° is inside injected skew {injectedError:0.########}°.",
+                    $"Core preserves the input rotation; clean-to-input angular noise is {injectedError:0.########}°.",
                 GeometryCheckStatus.NumericTolerance =>
-                    $"Angular error {actualError:0.########}° exceeds injected skew only within numeric epsilon.",
+                    $"Core/input angular difference {reconstructionError:0.########}° is within numeric epsilon.",
                 _ =>
-                    $"Angular error {actualError:0.########}° exceeds allowed injected skew {injectedError:0.########}°."
+                    $"Core/input angular difference {reconstructionError:0.########}° exceeds numeric epsilon."
             }
         };
     }
