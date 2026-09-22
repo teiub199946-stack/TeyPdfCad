@@ -100,9 +100,11 @@ public sealed class CoreRegressionPipelineTests
 
         var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
 
-        Assert.Equal(ExpectedResult.Rejected, actual.Result);
+        Assert.Equal(ExpectedResult.Ambiguous, actual.Result);
         Assert.Equal(0, actual.DetectedDimensions);
+        Assert.Equal(ConfidenceClass.Low, actual.ConfidenceClass);
         Assert.False(actual.SuppressionEvidenceEligible);
+        Assert.Contains("AmbiguousDimensionEvidence", actual.SuppressionBlockers);
     }
 
     [Fact]
