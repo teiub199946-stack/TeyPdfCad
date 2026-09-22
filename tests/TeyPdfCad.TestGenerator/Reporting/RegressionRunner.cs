@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using TeyPdfCad.TestGenerator.Diagnostics;
 using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Pipelines;
 
@@ -20,14 +21,28 @@ public sealed class RegressionRunner
         {
             cancellationToken.ThrowIfCancellationRequested();
             var caseStopwatch = Stopwatch.StartNew();
-            var actual = await pipeline.RunAsync(testCase, cancellationToken);
+            ActualDimensionResult actual;
+            CaseGeometryTrace? trace = null;
+
+            if (pipeline is SemanticCoreTestPipeline semanticCore)
+            {
+                var detailed = await semanticCore.RunDetailedAsync(testCase, cancellationToken);
+                actual = detailed.Actual;
+                trace = detailed.Trace;
+            }
+            else
+            {
+                actual = await pipeline.RunAsync(testCase, cancellationToken);
+            }
+
             caseStopwatch.Stop();
 
             comparisons.Add(Compare(
                 testCase,
                 actual,
                 config,
-                caseStopwatch.Elapsed.TotalMilliseconds));
+                caseStopwatch.Elapsed.TotalMilliseconds,
+                trace));
         }
 
         totalStopwatch.Stop();
@@ -38,7 +53,8 @@ public sealed class RegressionRunner
         DimensionCase expected,
         ActualDimensionResult actual,
         TestConfig config,
-        double elapsedMilliseconds)
+        double elapsedMilliseconds,
+        CaseGeometryTrace? trace = null)
     {
         var reasons = new List<string>();
         var semanticTypeAmbiguity = IsAlignedRotatedSemanticAmbiguity(expected, actual);
@@ -138,7 +154,21 @@ public sealed class RegressionRunner
             return Fail(ComparisonOutcome.WrongPoints, "Actual geometry points are incomplete.");
         }
 
-        if (!PointsMatch(expected, actual, config.PointTolerance))
+        if (trace is not null)
+        {
+            var geometryDiagnostic = new ErrorClassifier(config).Classify(
+                expected,
+                actual,
+                trace);
+            if (geometryDiagnostic.GeometryEvaluated && !geometryDiagnostic.GeometryCorrect)
+            {
+                return Fail(
+                    ComparisonOutcome.WrongPoints,
+                    "Semantic geometry exceeds the injected PDF-noise envelope: "
+                    + string.Join(" | ", geometryDiagnostic.Reasons.Take(3)));
+            }
+        }
+        else if (!PointsMatch(expected, actual, config.PointTolerance))
         {
             return Fail(
                 ComparisonOutcome.WrongPoints,
