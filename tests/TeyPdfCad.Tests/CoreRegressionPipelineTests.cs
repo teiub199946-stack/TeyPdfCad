@@ -1,5 +1,6 @@
 using TeyPdfCad.TestGenerator.Models;
 using TeyPdfCad.TestGenerator.Pipelines;
+using TeyPdfCad.TestGenerator.Reporting;
 using Xunit;
 
 namespace TeyPdfCad.Tests;
@@ -37,6 +38,40 @@ public sealed class CoreRegressionPipelineTests
         Assert.Equal(2.5, text.Height, 6);
         Assert.Equal(26.0, text.Position.X, 6);
         Assert.Equal(3.5, text.Position.Y, 6);
+    }
+
+    [Fact]
+    public async Task RegressionRunner_RealCore_AcceptsGeometryInsideInjectedNoiseEnvelope()
+    {
+        var testCase = CleanHorizontalCase() with
+        {
+            Id = "core_noise_envelope",
+            Noise = new NoiseSpec
+            {
+                CoordinateJitter = 0.2
+            },
+            ObservedGeometry = new ObservedGeometry
+            {
+                P1 = new Point2D(0.2, 0),
+                P2 = new Point2D(5200.2, 0),
+                DimensionLinePoint = new Point2D(2600.2, 350),
+                TextPosition = new Point2D(2600.2, 350)
+            }
+        };
+        var corpus = new TestCorpus
+        {
+            Seed = 12345,
+            Cases = [testCase]
+        };
+
+        var report = await new RegressionRunner().RunAsync(
+            corpus,
+            new SemanticCoreTestPipeline(),
+            new TestConfig());
+
+        Assert.Equal(1, report.Passed);
+        Assert.Equal(0, report.Failed);
+        Assert.Empty(report.Failures);
     }
 
     [Fact]
