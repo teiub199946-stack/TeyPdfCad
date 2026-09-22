@@ -399,6 +399,41 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Connected_skewed_short_extension_is_not_dropped_when_two_real_arrows_remain()
+    {
+        var scene = new PrimitiveScene();
+        scene.Lines.Add(new LinePrimitive(new Point2(0, 0), new Point2(100, 0), SourceIds: ["dim"]));
+
+        // This line crosses the first dimension endpoint but is ~27 degrees away
+        // from ideal perpendicularity. It models the long-span PDFIMPORT skew case
+        // where rotating the dimension line around its midpoint nearly collapses
+        // one extension line even though source connectivity remains explicit.
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-1.589, -3.119),
+            new Point2(0.567, 1.114),
+            SourceIds: ["ext-1"]));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(100, -3.5),
+            new Point2(100, 1.25),
+            SourceIds: ["ext-2"]));
+
+        // Independent arrow evidence remains after both extension lines are excluded.
+        scene.Lines.Add(new LinePrimitive(new Point2(-0.875, -0.875), new Point2(0.875, 0.875), SourceIds: ["arrow-1"]));
+        scene.Lines.Add(new LinePrimitive(new Point2(99.125, 0.875), new Point2(100.875, -0.875), SourceIds: ["arrow-2"]));
+        scene.Texts.Add(new TextPrimitive("100", new Point2(50, 0), 2.5, 0, SourceIds: ["text"]));
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(
+            scene,
+            new DimensionRecognitionOptions { DrawingScale = 1 });
+
+        var dimension = Assert.Single(dimensions);
+        Assert.Equal(1d, dimension.ArrowEvidence);
+        Assert.Contains(dimension.SourceClaims, claim => claim.SourceId == "ext-1" && claim.Role == SourceUsageRole.ExtensionLine);
+        Assert.Contains(dimension.SourceClaims, claim => claim.SourceId == "arrow-1" && claim.Role == SourceUsageRole.ArrowGeometry);
+        Assert.Contains(dimension.SourceClaims, claim => claim.SourceId == "arrow-2" && claim.Role == SourceUsageRole.ArrowGeometry);
+    }
+
+    [Fact]
     public void One_sided_arrow_evidence_is_abstained_as_ambiguous()
     {
         var scene = new PrimitiveScene();
