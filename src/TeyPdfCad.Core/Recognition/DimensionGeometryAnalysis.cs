@@ -93,11 +93,35 @@ internal static class DimensionGeometryAnalysis
         if (GeometryMath.DistancePointToInfiniteLine(text.Position, first.Start, first.End) > text.Height * 4.0) return false;
 
         var points = new[] { first.Start, first.End, second.Start, second.End };
-        var scalars = points.Select(p => GeometryMath.Dot(GeometryMath.Subtract(p, text.Position), u1)).ToArray();
-        var firstCenter = GeometryMath.Dot(GeometryMath.Subtract(GeometryMath.Midpoint(first.Start, first.End), text.Position), u1);
-        var secondCenter = GeometryMath.Dot(GeometryMath.Subtract(GeometryMath.Midpoint(second.Start, second.End), text.Position), u1);
+        var firstScalars = new[]
+        {
+            GeometryMath.Dot(GeometryMath.Subtract(first.Start, text.Position), u1),
+            GeometryMath.Dot(GeometryMath.Subtract(first.End, text.Position), u1)
+        };
+        var secondScalars = new[]
+        {
+            GeometryMath.Dot(GeometryMath.Subtract(second.Start, text.Position), u1),
+            GeometryMath.Dot(GeometryMath.Subtract(second.End, text.Position), u1)
+        };
+        var firstCenter = firstScalars.Average();
+        var secondCenter = secondScalars.Average();
         if (firstCenter * secondCenter >= 0) return false;
 
+        // A genuine text break has one fragment on each side of the text.
+        // Adjacent chain segments can have opposite-side centres merely because
+        // the text is slightly jittered around a segment midpoint; in that case
+        // one segment still crosses the text and must not be merged into a
+        // synthetic double-length dimension line (which creates half-scale
+        // hypotheses such as 1:25 for a true 1:50 chain).
+        var sideTolerance = Math.Max(text.Height * 0.05, 1e-6);
+        var firstLeft = firstScalars.Max() <= sideTolerance;
+        var firstRight = firstScalars.Min() >= -sideTolerance;
+        var secondLeft = secondScalars.Max() <= sideTolerance;
+        var secondRight = secondScalars.Min() >= -sideTolerance;
+        if (!((firstLeft && secondRight) || (secondLeft && firstRight)))
+            return false;
+
+        var scalars = firstScalars.Concat(secondScalars).ToArray();
         var left = scalars.Min();
         var right = scalars.Max();
         var nearLeft = scalars.Where(x => x <= 0).DefaultIfEmpty(double.NegativeInfinity).Max();
