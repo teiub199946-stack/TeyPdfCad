@@ -7,6 +7,7 @@ internal sealed record DimensionMetricComparisonReport(
     string SchemaVersion,
     string NativeSchemaVersion,
     string DrawingUnits,
+    IReadOnlyList<string> GlobalBlockers,
     IReadOnlyList<DimensionMetricComparisonCandidate> Candidates);
 
 internal sealed record DimensionMetricComparisonCandidate(
@@ -46,14 +47,17 @@ internal static class DimensionMetricComparator
         using var sourceDocument = JsonDocument.Parse(conversionReportJson);
         using var nativeDocument = JsonDocument.Parse(autoCadMetricsJson);
 
-        var sourceByCandidate = ReadSourceEvidence(sourceDocument.RootElement)
+        var sourceItems = ReadSourceEvidence(sourceDocument.RootElement);
+        var nativeItems = ReadNativeDimensions(nativeDocument.RootElement);
+        var sourceByCandidate = sourceItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.CandidateId))
             .GroupBy(item => item.CandidateId, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
                 group => group.ToArray(),
                 StringComparer.Ordinal);
 
-        var nativeByCandidate = ReadNativeDimensions(nativeDocument.RootElement)
+        var nativeByCandidate = nativeItems
             .Where(item => !string.IsNullOrWhiteSpace(item.CandidateId))
             .GroupBy(item => item.CandidateId, StringComparer.Ordinal)
             .ToDictionary(
@@ -63,6 +67,26 @@ internal static class DimensionMetricComparator
 
         var nativeSchemaVersion = GetString(nativeDocument.RootElement, "schemaVersion") ?? string.Empty;
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
+        var globalBlockers = new List<string>();
+
+        if (!string.Equals(nativeSchemaVersion, "2", StringComparison.Ordinal))
+            globalBlockers.Add("unsupported-native-metrics-schema");
+        if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
+            globalBlockers.Add("source-report-pages-missing");
+        if (!TryGetArray(nativeDocument.RootElement, "dimensions", out _))
+            globalBlockers.Add("native-metrics-dimensions-missing");
+        if (sourceItems.Any(item => string.IsNullOrWhiteSpace(item.CandidateId)))
+            globalBlockers.Add("source-candidate-id-missing");
+        if (nativeItems.Any(item => string.IsNullOrWhiteSpace(item.CandidateId)))
+            globalBlockers.Add("native-candidate-id-missing");
+        if (!string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase))
+            globalBlockers.Add("native-drawing-units-not-millimeters");
+
+        var normalizedGlobalBlockers = globalBlockers
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        var globalMeasurementsUsable = normalizedGlobalBlockers.Length == 0;
 
         var candidateIds = sourceByCandidate.Keys
             .Concat(nativeByCandidate.Keys)
@@ -75,13 +99,15 @@ internal static class DimensionMetricComparator
                 candidateId,
                 sourceByCandidate.TryGetValue(candidateId, out var source) ? source : [],
                 nativeByCandidate.TryGetValue(candidateId, out var native) ? native : [],
-                drawingUnits))
+                drawingUnits,
+                globalMeasurementsUsable))
             .ToArray();
 
         return new DimensionMetricComparisonReport(
             SchemaVersion,
             nativeSchemaVersion,
             drawingUnits,
+            normalizedGlobalBlockers,
             candidates);
     }
 
@@ -89,7 +115,8 @@ internal static class DimensionMetricComparator
         string candidateId,
         IReadOnlyList<SourceEvidence> sources,
         IReadOnlyList<NativeDimensionEvidence> natives,
-        string drawingUnits)
+        string drawingUnits,
+        bool globalMeasurementsUsable)
     {
         var blockers = new List<string>();
 
@@ -189,7 +216,8 @@ internal static class DimensionMetricComparator
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
 
-        var measurementsUsable = sources.Count == 1
+        var measurementsUsable = globalMeasurementsUsable
+            && sources.Count == 1
             && natives.Count == 1
             && native.TextMetrics.Count == 1
             && string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase)
@@ -237,10 +265,7 @@ internal static class DimensionMetricComparator
 
             foreach (var item in evidence.EnumerateArray())
             {
-                var candidateId = GetString(item, "candidateId");
-                if (string.IsNullOrWhiteSpace(candidateId))
-                    continue;
-
+                var candidateId = GetString(item, "candidateId") ?? string.Empty;
                 output.Add(new SourceEvidence(
                     candidateId,
                     GetString(item, "sourceText") ?? string.Empty,
