@@ -196,9 +196,12 @@ internal sealed class AcadSharpStyleCatalog
     }
 
     private static double GetTextHeight(DimensionSourceAppearance? appearance)
-        => appearance?.Text.HeightMm is > 1e-9 and var height
-            ? height
+    {
+        var height = appearance?.Text.HeightMm;
+        return height.HasValue && double.IsFinite(height.Value) && height.Value > 1e-9
+            ? height.Value
             : 2.5d;
+    }
 
     private static double? GetExtensionBeyondDimensionLine(DimensionSourceAppearance? appearance)
     {
@@ -278,7 +281,16 @@ internal sealed class AcadSharpStyleCatalog
                 : "ext-width-unknown",
             appearance.ExtensionLines.Count == 2
                 ? DashToken(appearance.ExtensionLines[0].DashPatternMm)
-                : "ext-dash-unknown",
+                : "ext1-dash-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[1].RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black"
+                : "ext2-color-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[1].StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null"
+                : "ext2-width-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? DashToken(appearance.ExtensionLines[1].DashPatternMm)
+                : "ext2-dash-unknown",
             appearance.Text.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
             appearance.Text.HeightMm.ToString("R", CultureInfo.InvariantCulture),
             (GetExtensionBeyondDimensionLine(appearance) ?? 0d).ToString("R", CultureInfo.InvariantCulture));
