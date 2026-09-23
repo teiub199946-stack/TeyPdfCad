@@ -42,7 +42,13 @@ public sealed class DimensionMetricsReportFormatterTests
                             0, 0, 0,
                             10, 0, 0,
                             string.Empty,
-                            0)
+                            0,
+                            ColorMethod: "ByColor",
+                            RgbColor: 0x112233,
+                            LineWeightMode: "LineWeight025",
+                            LineWeightHundredthsMm: 25,
+                            Linetype: "CONTINUOUS",
+                            Layer: "PDF_РАЗМЕРЫ")
                     ],
                     ExplodedGeometry:
                     [
@@ -73,7 +79,7 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Equal(
             ["A2", "F2"],
             parsed.Dimensions[1].TextMetrics.Select(item => item.EntityHandle).ToArray());
-        Assert.Contains("\"schemaVersion\": \"8\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": \"9\"", first, StringComparison.Ordinal);
         Assert.Contains("\"width\": 8.25", first, StringComparison.Ordinal);
         Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
         Assert.Contains("\"backgroundFill\": false", first, StringComparison.Ordinal);
@@ -83,6 +89,11 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Contains("\"trackingFactor\": 1.0", first, StringComparison.Ordinal);
         Assert.Contains("\"blockGeometry\":", first, StringComparison.Ordinal);
         Assert.Contains("\"geometryKind\": \"line\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"colorMethod\": \"ByColor\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"rgbColor\": 1122867", first, StringComparison.Ordinal);
+        Assert.Contains("\"lineWeightHundredthsMm\": 25", first, StringComparison.Ordinal);
+        Assert.Contains("\"linetype\": \"CONTINUOUS\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"layer\": \"PDF_РАЗМЕРЫ\"", first, StringComparison.Ordinal);
         Assert.Contains("\"explodedTextMetrics\":", first, StringComparison.Ordinal);
     }
 
