@@ -179,11 +179,9 @@ public sealed class DimensionMetricComparatorTests
     public void Comparator_rejects_cross_snapshot_fragment_location_drift()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
-        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
-            .Replace(
-                "\"locationX\": 15,\n                  \"locationY\": 20,\n                  \"locationZ\": 0",
-                "\"locationX\": 16,\n                  \"locationY\": 20,\n                  \"locationZ\": 0",
-                StringComparison.Ordinal);
+        var nativeDimension = ShiftBlockFragmentX(
+            NativeDimension("candidate-1", "100", 7.5),
+            1d);
         var native = $"""
         {
           "schemaVersion": "8",
@@ -1506,6 +1504,18 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains(
             "rendered-glyph-equivalence-not-yet-authorized",
             candidate.Blockers);
+    }
+
+    private static string ShiftBlockFragmentX(
+        string value,
+        double offset)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(value)!.AsObject();
+        var metric = root["textMetrics"]!.AsArray()[0]!.AsObject();
+        var fragment = metric["fragments"]!.AsArray()[0]!.AsObject();
+        fragment["locationX"] =
+            fragment["locationX"]!.GetValue<double>() + offset;
+        return root.ToJsonString();
     }
 
     private static string RotateBlockSnapshotClockwise90(
