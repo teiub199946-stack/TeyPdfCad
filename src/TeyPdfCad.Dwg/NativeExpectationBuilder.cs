@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.Tables;
@@ -378,24 +380,29 @@ internal static class NativeExpectationBuilder
 
     private static DimensionStyle BuildIndependentExpectedDimensionStyle(DimensionCandidate candidate)
     {
+        var appearance = candidate.SourceAppearance;
         var canonicalScale = Math.Round(candidate.DrawingScale, 6);
-        var tickSize = IndependentlyResolveObliqueTickSize(candidate.SourceAppearance);
+        var tickSize = IndependentlyResolveObliqueTickSize(appearance);
         var scaleToken = canonicalScale.ToString("0.######", CultureInfo.InvariantCulture).Replace('.', '_');
         var tickToken = tickSize.HasValue
             ? "_TICK_" + Math.Round(tickSize.Value, 6)
                 .ToString("0.######", CultureInfo.InvariantCulture)
                 .Replace('.', '_')
             : string.Empty;
-        var name = $"TEYPDFCAD_SCALE_{scaleToken}{tickToken}";
-        return new DimensionStyle(name)
+        var appearanceToken = appearance is null
+            ? string.Empty
+            : "_SRC_" + IndependentDimensionAppearanceToken(appearance);
+        var name = $"TEYPDFCAD_SCALE_{scaleToken}{tickToken}{appearanceToken}";
+
+        var style = new DimensionStyle(name)
         {
             LinearScaleFactor = canonicalScale,
-            TextHeight = 2.5d,
+            TextHeight = IndependentTextHeight(appearance),
             ArrowSize = 2.5d,
             TickSize = tickSize ?? 0d,
             DimensionLineExtension = 0d,
-            ExtensionLineOffset = 0.75d,
-            ExtensionLineExtension = 1.25d,
+            ExtensionLineOffset = 0d,
+            ExtensionLineExtension = IndependentExtensionBeyondDimensionLine(appearance) ?? 0d,
             ScaleFactor = 1d,
             Style = new TextStyle("TEYPDFCAD_TEXT")
             {
@@ -404,7 +411,166 @@ internal static class NativeExpectationBuilder
                 Width = 1d
             }
         };
+
+        if (appearance is not null)
+        {
+            style.DimensionLineColor = IndependentPdfColor(appearance.DimensionLine.RgbColor);
+            style.TextColor = IndependentPdfColor(appearance.Text.RgbColor);
+            if (appearance.ExtensionLines.Count == 2)
+                style.ExtensionLineColor = IndependentPdfColor(appearance.ExtensionLines[0].RgbColor);
+
+            if (appearance.DimensionLine.StrokeWidthMm is { } dimensionWidth)
+                style.DimensionLineWeight = IndependentLineWeight(dimensionWidth);
+            if (appearance.ExtensionLines.Count == 2
+                && appearance.ExtensionLines[0].StrokeWidthMm is { } extensionWidth)
+            {
+                style.ExtensionLineWeight = IndependentLineWeight(extensionWidth);
+            }
+
+            style.LineType = IndependentLineType(appearance.DimensionLine.DashPatternMm);
+            if (appearance.ExtensionLines.Count == 2)
+            {
+                style.LineTypeExt1 = IndependentLineType(appearance.ExtensionLines[0].DashPatternMm);
+                style.LineTypeExt2 = IndependentLineType(appearance.ExtensionLines[1].DashPatternMm);
+            }
+        }
+
+        return style;
     }
+
+    private static double IndependentTextHeight(DimensionSourceAppearance? appearance)
+    {
+        var height = appearance?.Text.HeightMm;
+        return height.HasValue && double.IsFinite(height.Value) && height.Value > 1e-9
+            ? height.Value
+            : 2.5d;
+    }
+
+    private static Color IndependentPdfColor(int? rgb)
+        => Color.FromTrueColor((uint)(rgb ?? 0));
+
+    private static LineWeightType IndependentLineWeight(double millimetres)
+    {
+        var targetHundredths = millimetres * 100d;
+        return Enum.GetValues<LineWeightType>()
+            .Where(value => value is not LineWeightType.ByBlock
+                and not LineWeightType.ByLayer
+                and not LineWeightType.ByDIPs
+                and not LineWeightType.Default)
+            .MinBy(value => Math.Abs((int)value - targetHundredths));
+    }
+
+    private static LineType IndependentLineType(IReadOnlyList<double> patternMm)
+    {
+        var normalized = IndependentNormalizeDash(patternMm);
+        if (normalized.Count == 0)
+            return new LineType("Continuous");
+
+        var canonicalPattern = normalized.Select(value =>
+            Math.Abs(value).ToString("0.######", CultureInfo.InvariantCulture));
+        var lineType = new LineType($"PDF_DASH_MM_{string.Join("_", canonicalPattern)}");
+        for (var index = 0; index < normalized.Count; index++)
+        {
+            lineType.AddSegment(new LineType.Segment
+            {
+                Length = index % 2 == 0
+                    ? Math.Abs(normalized[index])
+                    : -Math.Abs(normalized[index])
+            });
+        }
+        return lineType;
+    }
+
+    private static IReadOnlyList<double> IndependentNormalizeDash(IReadOnlyList<double> pattern)
+    {
+        if (pattern.Count == 0)
+            return [];
+
+        var values = pattern.Select(Math.Abs).ToArray();
+        return values.Length % 2 == 0
+            ? values
+            : [..values, ..values];
+    }
+
+    private static double? IndependentExtensionBeyondDimensionLine(DimensionSourceAppearance? appearance)
+    {
+        if (appearance is null || appearance.ExtensionLines.Count != 2)
+            return null;
+
+        var first = IndependentExtensionBeyondDimensionLine(
+            appearance.ExtensionLines[0],
+            appearance.DimensionLine);
+        var second = IndependentExtensionBeyondDimensionLine(
+            appearance.ExtensionLines[1],
+            appearance.DimensionLine);
+        if (!first.HasValue || !second.HasValue)
+            return null;
+        return Math.Abs(first.Value - second.Value) <= 1e-6
+            ? (first.Value + second.Value) / 2d
+            : null;
+    }
+
+    private static double? IndependentExtensionBeyondDimensionLine(
+        DimensionSourceLineAppearance extension,
+        DimensionSourceLineAppearance dimensionLine)
+    {
+        var dim = GeometryMath.Subtract(dimensionLine.End, dimensionLine.Start);
+        var ext = GeometryMath.Subtract(extension.End, extension.Start);
+        var dimLength = GeometryMath.Length(dim);
+        if (dimLength <= 1e-9 || GeometryMath.Length(ext) <= 1e-9)
+            return null;
+
+        static double Signed(Point2 point, DimensionSourceLineAppearance line, Point2 vector, double length)
+        {
+            var relative = GeometryMath.Subtract(point, line.Start);
+            return (vector.X * relative.Y - vector.Y * relative.X) / length;
+        }
+
+        var firstSigned = Signed(extension.Start, dimensionLine, dim, dimLength);
+        var secondSigned = Signed(extension.End, dimensionLine, dim, dimLength);
+        if (Math.Abs(firstSigned) <= 1e-9 || Math.Abs(secondSigned) <= 1e-9)
+            return 0d;
+        if (Math.Sign(firstSigned) == Math.Sign(secondSigned))
+            return null;
+        return Math.Min(Math.Abs(firstSigned), Math.Abs(secondSigned));
+    }
+
+    private static string IndependentDimensionAppearanceToken(DimensionSourceAppearance appearance)
+    {
+        var canonical = string.Join("|",
+            appearance.DimensionLine.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
+            appearance.DimensionLine.StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null",
+            IndependentDashToken(appearance.DimensionLine.DashPatternMm),
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[0].RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black"
+                : "ext1-color-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[0].StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null"
+                : "ext1-width-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? IndependentDashToken(appearance.ExtensionLines[0].DashPatternMm)
+                : "ext1-dash-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[1].RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black"
+                : "ext2-color-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[1].StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null"
+                : "ext2-width-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? IndependentDashToken(appearance.ExtensionLines[1].DashPatternMm)
+                : "ext2-dash-unknown",
+            appearance.Text.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
+            appearance.Text.HeightMm.ToString("R", CultureInfo.InvariantCulture),
+            (IndependentExtensionBeyondDimensionLine(appearance) ?? 0d)
+                .ToString("R", CultureInfo.InvariantCulture));
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        return Convert.ToHexString(hash.AsSpan(0, 8));
+    }
+
+    private static string IndependentDashToken(IReadOnlyList<double> pattern)
+        => string.Join(",", IndependentNormalizeDash(pattern)
+            .Select(value => value.ToString("R", CultureInfo.InvariantCulture)));
 
     private static double? IndependentlyResolveObliqueTickSize(DimensionSourceAppearance? appearance)
     {
