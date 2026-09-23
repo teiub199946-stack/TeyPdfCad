@@ -282,6 +282,7 @@ public sealed class ReconstructionCommands
                     continue;
 
                 var textMetrics = new List<DimensionTextMetric>();
+                var blockGeometry = new List<DimensionBlockGeometryMetric>();
                 string? error = null;
                 var dimBlockHandle = string.Empty;
                 var candidateIdentity = ReadCandidateIdentity(dimension);
@@ -356,6 +357,12 @@ public sealed class ReconstructionCommands
                                     dbText.Height,
                                     dbText.WidthFactor));
                             }
+                            else if (entity is Entity geometryEntity)
+                            {
+                                blockGeometry.Add(ReadDimensionBlockGeometry(
+                                    transaction,
+                                    geometryEntity));
+                            }
                         }
 
                         if (textMetrics.Count == 0)
@@ -378,7 +385,8 @@ public sealed class ReconstructionCommands
                     textMetrics,
                     error,
                     candidateIdentity.CandidateId,
-                    candidateIdentity.Role));
+                    candidateIdentity.Role,
+                    blockGeometry));
             }
 
             // RecomputeDimensionBlock can update the anonymous display block.
@@ -486,6 +494,100 @@ public sealed class ReconstructionCommands
         {
             return (string.Empty, string.Empty);
         }
+    }
+
+    private static DimensionBlockGeometryMetric ReadDimensionBlockGeometry(
+        Transaction transaction,
+        Entity entity)
+    {
+        double? startX = null;
+        double? startY = null;
+        double? startZ = null;
+        double? endX = null;
+        double? endY = null;
+        double? endZ = null;
+        double? minX = null;
+        double? minY = null;
+        double? minZ = null;
+        double? maxX = null;
+        double? maxY = null;
+        double? maxZ = null;
+        var nestedBlockName = string.Empty;
+        var vertexCount = 0;
+        var geometryKind = "other";
+
+        if (entity is Line line)
+        {
+            geometryKind = "line";
+            startX = line.StartPoint.X;
+            startY = line.StartPoint.Y;
+            startZ = line.StartPoint.Z;
+            endX = line.EndPoint.X;
+            endY = line.EndPoint.Y;
+            endZ = line.EndPoint.Z;
+        }
+        else if (entity is Polyline polyline)
+        {
+            geometryKind = "polyline";
+            vertexCount = polyline.NumberOfVertices;
+        }
+        else if (entity is Solid)
+        {
+            geometryKind = "solid";
+            vertexCount = 4;
+        }
+        else if (entity is Arc)
+        {
+            geometryKind = "arc";
+        }
+        else if (entity is BlockReference blockReference)
+        {
+            geometryKind = "block-reference";
+            if (!blockReference.BlockTableRecord.IsNull
+                && transaction.GetObject(
+                    blockReference.BlockTableRecord,
+                    OpenMode.ForRead,
+                    false) is BlockTableRecord nested)
+            {
+                nestedBlockName = nested.Name ?? string.Empty;
+            }
+        }
+
+        try
+        {
+            var extents = entity.GeometricExtents;
+            minX = extents.MinPoint.X;
+            minY = extents.MinPoint.Y;
+            minZ = extents.MinPoint.Z;
+            maxX = extents.MaxPoint.X;
+            maxY = extents.MaxPoint.Y;
+            maxZ = extents.MaxPoint.Z;
+        }
+        catch (System.Exception)
+        {
+            // Some generated entities may not expose valid extents. Keep the
+            // type/handle evidence and leave extents null; the comparator will
+            // fail closed rather than invent geometry.
+        }
+
+        return new DimensionBlockGeometryMetric(
+            entity.GetType().Name,
+            entity.Handle.ToString(),
+            geometryKind,
+            startX,
+            startY,
+            startZ,
+            endX,
+            endY,
+            endZ,
+            minX,
+            minY,
+            minZ,
+            maxX,
+            maxY,
+            maxZ,
+            nestedBlockName,
+            vertexCount);
     }
 
     private static IReadOnlyList<DimensionTextFragmentMetric> ReadMTextFragments(
