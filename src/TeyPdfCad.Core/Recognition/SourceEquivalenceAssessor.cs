@@ -294,6 +294,11 @@ public static class SourceEquivalenceAssessor
             return "Dimension source text advance width is unavailable; native text-metric equivalence cannot be proven.";
         }
 
+        if (!appearance.Text.VisualCenter.HasValue)
+        {
+            return "Dimension source visual text center is unavailable; native text-placement equivalence cannot be proven.";
+        }
+
         if (!DimensionTextParser.TryParse(appearance.Text.Value, out var parsed)
             || parsed is null
             || parsed.Kind != DimensionTextKind.Linear
@@ -441,7 +446,8 @@ public static class SourceEquivalenceAssessor
                 sourceText.AdvanceWidthPoints > 0d
                     ? sourceText.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
                     : null,
-                appearance.Text.AdvanceWidthMm))
+                appearance.Text.AdvanceWidthMm)
+            || !NullablePointEqual(sourceText.VisualCenter, appearance.Text.VisualCenter))
         {
             return "Dimension source text appearance differs from the raw VectorPdfPage evidence.";
         }
@@ -543,6 +549,10 @@ public static class SourceEquivalenceAssessor
         TeyPdfCad.Core.Geometry.Point2 second)
         => AlmostEqual(first.X, second.X)
             && AlmostEqual(first.Y, second.Y);
+
+    private static bool NullablePointEqual(Point2? first, Point2? second)
+        => first.HasValue == second.HasValue
+            && (!first.HasValue || PointEqual(first.Value, second!.Value));
 
     private static bool NullableAlmostEqual(double? first, double? second)
         => first.HasValue == second.HasValue
