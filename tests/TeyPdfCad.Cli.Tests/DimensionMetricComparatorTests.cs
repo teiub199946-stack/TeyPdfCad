@@ -56,6 +56,22 @@ public sealed class DimensionMetricComparatorTests
                       "startY": 0,
                       "endX": 10,
                       "endY": 6.25
+                    },
+                    {
+                      "role": "arrow-geometry",
+                      "sourceIds": ["arrow-1"],
+                      "startX": -1,
+                      "startY": 4,
+                      "endX": 1,
+                      "endY": 6
+                    },
+                    {
+                      "role": "arrow-geometry",
+                      "sourceIds": ["arrow-2"],
+                      "startX": 9,
+                      "startY": 6,
+                      "endX": 11,
+                      "endY": 4
                     }
                   ]
                 }
@@ -293,6 +309,54 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_reports_exact_source_tick_matches_in_exploded_geometry()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var native = $"""
+        {
+          "schemaVersion": "5",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Equal(2, candidate.SourceArrowLineCount);
+        Assert.Equal(2, candidate.MatchedSourceArrowLineCount);
+        Assert.DoesNotContain("source-arrow-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_fails_closed_when_exploded_tick_length_drifts()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"startX\": -1,\n              \"startY\": 4,\n              \"startZ\": 0,\n              \"endX\": 1,\n              \"endY\": 6",
+                "\"startX\": -1.2,\n              \"startY\": 3.8,\n              \"startZ\": 0,\n              \"endX\": 1.2,\n              \"endY\": 6.2",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "5",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.True(candidate.MatchedSourceArrowLineCount < candidate.SourceArrowLineCount);
+        Assert.Contains("source-arrow-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_missing_exploded_dimension_geometry()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -352,6 +416,44 @@ public sealed class DimensionMetricComparatorTests
               "minZ": 0,
               "maxX": 10,
               "maxY": 6.25,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-3",
+              "geometryKind": "line",
+              "startX": -1,
+              "startY": 4,
+              "startZ": 0,
+              "endX": 1,
+              "endY": 6,
+              "endZ": 0,
+              "minX": -1,
+              "minY": 4,
+              "minZ": 0,
+              "maxX": 1,
+              "maxY": 6,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-4",
+              "geometryKind": "line",
+              "startX": 9,
+              "startY": 6,
+              "startZ": 0,
+              "endX": 11,
+              "endY": 4,
+              "endZ": 0,
+              "minX": 9,
+              "minY": 4,
+              "minZ": 0,
+              "maxX": 11,
+              "maxY": 6,
               "maxZ": 0,
               "nestedBlockName": "",
               "vertexCount": 0
@@ -775,6 +877,22 @@ public sealed class DimensionMetricComparatorTests
                       "startY": 0,
                       "endX": 10,
                       "endY": 6.25
+                    },
+                    {
+                      "role": "arrow-geometry",
+                      "sourceIds": ["arrow-1"],
+                      "startX": -1,
+                      "startY": 4,
+                      "endX": 1,
+                      "endY": 6
+                    },
+                    {
+                      "role": "arrow-geometry",
+                      "sourceIds": ["arrow-2"],
+                      "startX": 9,
+                      "startY": 6,
+                      "endX": 11,
+                      "endY": 4
                     }
                   ]
                 }
@@ -860,6 +978,22 @@ public sealed class DimensionMetricComparatorTests
                       "startY": 0,
                       "endX": 10,
                       "endY": 6.25
+                    },
+                    {
+                      "role": "arrow-geometry",
+                      "sourceIds": ["arrow-1"],
+                      "startX": -1,
+                      "startY": 4,
+                      "endX": 1,
+                      "endY": 6
+                    },
+                    {
+                      "role": "arrow-geometry",
+                      "sourceIds": ["arrow-2"],
+                      "startX": 9,
+                      "startY": 6,
+                      "endX": 11,
+                      "endY": 4
                     }
                   ]
                 }
@@ -1005,6 +1139,44 @@ public sealed class DimensionMetricComparatorTests
               "minZ": 0,
               "maxX": 10,
               "maxY": 6.25,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-3",
+              "geometryKind": "line",
+              "startX": -1,
+              "startY": 4,
+              "startZ": 0,
+              "endX": 1,
+              "endY": 6,
+              "endZ": 0,
+              "minX": -1,
+              "minY": 4,
+              "minZ": 0,
+              "maxX": 1,
+              "maxY": 6,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-4",
+              "geometryKind": "line",
+              "startX": 9,
+              "startY": 6,
+              "startZ": 0,
+              "endX": 11,
+              "endY": 4,
+              "endZ": 0,
+              "minX": 9,
+              "minY": 4,
+              "minZ": 0,
+              "maxX": 11,
+              "maxY": 6,
               "maxZ": 0,
               "nestedBlockName": "",
               "vertexCount": 0
