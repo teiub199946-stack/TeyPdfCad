@@ -514,6 +514,8 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains("native-fragment-formatting-not-plain", candidate.Blockers);
     }
 
+    [Fact]
+    public void Comparator_accepts_matching_source_font_sha_only_as_one_proof_component()
     {
         const string sha = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
         var source = $$"""
