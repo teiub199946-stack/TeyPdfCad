@@ -547,6 +547,7 @@ public sealed class ConversionPipeline
             semanticRecognition[page.Number].LevelCandidateCount,
             semanticRecognition[page.Number].ArcDimensionCandidateCount,
             semanticRecognition[page.Number].Warnings,
+            BuildDimensionMetricEvidence(page.Number, semanticRecognition[page.Number]),
             templateSelections is not null
                 && templateSelections.TryGetValue(page.Number, out var selection)
                 && selection.IsConfirmed,
@@ -616,6 +617,32 @@ public sealed class ConversionPipeline
                     || (pageExecution.ReadBackConfirmed
                         && pageExecution.CandidateNotVerifiedSourceIds.Count == 0
                         && !pageExecution.AnyGeometryLost)))).ToArray();
+
+    private static IReadOnlyList<DimensionMetricEvidence> BuildDimensionMetricEvidence(
+        int pageNumber,
+        PageSemanticSummary semantic)
+    {
+        if (semantic.Result is null)
+            return [];
+
+        return semantic.Result.Dimensions
+            .Where(candidate => candidate.SourceAppearance?.Text is not null)
+            .Select(candidate =>
+            {
+                var text = candidate.SourceAppearance!.Text;
+                return new DimensionMetricEvidence(
+                    SourceReplacementPlanner.GetCandidateKey(candidate, pageNumber),
+                    candidate.SourceText,
+                    text.FontName,
+                    text.AdvanceWidthMm,
+                    text.HeightMm,
+                    text.RotationDegrees,
+                    text.VisualCenter?.X,
+                    text.VisualCenter?.Y);
+            })
+            .OrderBy(item => item.CandidateId, StringComparer.Ordinal)
+            .ToArray();
+    }
 
     private static IReadOnlyList<ReplacementResidual> GetReportedResiduals(
         SourceReplacementPlan plan,
@@ -956,6 +983,7 @@ public sealed class ConversionPipeline
         int LevelCandidateCount,
         int ArcDimensionCandidateCount,
         IReadOnlyList<string> SemanticWarnings,
+        IReadOnlyList<DimensionMetricEvidence> DimensionMetricEvidence,
         bool TemplateSelected,
         string? TemplateName,
         string TemplateReason,
@@ -970,6 +998,16 @@ public sealed class ConversionPipeline
         int GeometryLostCount,
         string SemanticAuditStatus,
         bool Complete);
+
+    private sealed record DimensionMetricEvidence(
+        string CandidateId,
+        string SourceText,
+        string? SourceFontName,
+        double? SourceAdvanceWidthMm,
+        double SourceHeightMm,
+        double SourceRotationDegrees,
+        double? SourceVisualCenterX,
+        double? SourceVisualCenterY);
 
     private sealed record PageSemanticSummary(
         int DimensionCandidateCount,
