@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -310,7 +311,7 @@ public sealed class ReconstructionCommands
 
                             if (entity is MText mtext)
                             {
-                                var style = ReadTextStyle(transaction, mtext.TextStyleId);
+                                var style = ReadTextStyle(transaction, database, mtext.TextStyleId);
                                 textMetrics.Add(new DimensionTextMetric(
                                     "MText",
                                     mtext.Handle.ToString(),
@@ -324,11 +325,13 @@ public sealed class ReconstructionCommands
                                     mtext.Location.Z,
                                     style.Name,
                                     style.FontFile,
-                                    style.WidthFactor));
+                                    style.WidthFactor,
+                                    style.FontResolvedPath,
+                                    style.FontSha256));
                             }
                             else if (entity is DBText dbText)
                             {
-                                var style = ReadTextStyle(transaction, dbText.TextStyleId);
+                                var style = ReadTextStyle(transaction, database, dbText.TextStyleId);
                                 var extents = dbText.GeometricExtents;
                                 textMetrics.Add(new DimensionTextMetric(
                                     "DBText",
@@ -343,7 +346,9 @@ public sealed class ReconstructionCommands
                                     dbText.Position.Z,
                                     style.Name,
                                     style.FontFile,
-                                    style.WidthFactor));
+                                    style.WidthFactor,
+                                    style.FontResolvedPath,
+                                    style.FontSha256));
                             }
                         }
                     }
@@ -405,8 +410,14 @@ public sealed class ReconstructionCommands
         }
     }
 
-    private static (string Name, string FontFile, double WidthFactor) ReadTextStyle(
+    private static (
+        string Name,
+        string FontFile,
+        double WidthFactor,
+        string FontResolvedPath,
+        string FontSha256) ReadTextStyle(
         Transaction transaction,
+        Database database,
         ObjectId textStyleId)
     {
         if (textStyleId.IsNull
@@ -415,13 +426,54 @@ public sealed class ReconstructionCommands
                 OpenMode.ForRead,
                 false) is not TextStyleTableRecord style)
         {
-            return (string.Empty, string.Empty, 1d);
+            return (string.Empty, string.Empty, 1d, string.Empty, string.Empty);
         }
 
+        var fontFile = style.FileName ?? string.Empty;
+        var resolvedPath = ResolveFontPath(database, fontFile);
         return (
             style.Name ?? string.Empty,
-            style.FileName ?? string.Empty,
-            style.XScale);
+            fontFile,
+            style.XScale,
+            resolvedPath,
+            ComputeFileSha256(resolvedPath));
+    }
+
+    private static string ResolveFontPath(Database database, string fontFile)
+    {
+        if (string.IsNullOrWhiteSpace(fontFile))
+            return string.Empty;
+
+        try
+        {
+            var path = HostApplicationServices.Current.FindFile(
+                fontFile,
+                database,
+                FindFileHint.FontFile);
+            return File.Exists(path) ? Path.GetFullPath(path) : string.Empty;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return string.Empty;
+
+        try
+        {
+            using var sha256 = SHA256.Create();
+            using var stream = File.OpenRead(path);
+            return BitConverter.ToString(sha256.ComputeHash(stream))
+                .Replace("-", string.Empty);
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
     }
 
     [CommandMethod("TEYPDFSHEETCONFIG", CommandFlags.Modal)]
