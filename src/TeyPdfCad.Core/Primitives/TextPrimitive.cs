@@ -14,6 +14,7 @@ public sealed record TextPrimitive(
     double? AdvanceWidth = null,
     Point2? VisualCenter = null,
     double? VisibleWidth = null,
+    double? VisibleHeight = null,
     string? FontProgramSha256 = null,
     string? FontProgramSubtype = null,
     string? FontEncodingName = null,
