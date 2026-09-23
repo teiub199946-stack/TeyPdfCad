@@ -294,6 +294,30 @@ internal static class DimensionMetricComparator
 
         double? baselineDirectionDot = null;
 
+        var sourceNativeMeasurementUsable =
+            IsPositiveFinite(source.SourceNativeMeasurementMm);
+        var nativeMeasurementUsable =
+            IsPositiveFinite(native.Measurement);
+        var nativeMeasurementMatches = false;
+        if (!sourceNativeMeasurementUsable)
+        {
+            blockers.Add("source-native-measurement-evidence-invalid");
+        }
+        else if (!nativeMeasurementUsable)
+        {
+            blockers.Add("native-dimension-measurement-invalid");
+        }
+        else
+        {
+            nativeMeasurementMatches =
+                Math.Abs(
+                    native.Measurement!.Value
+                    - source.SourceNativeMeasurementMm!.Value)
+                <= NumericalWidthToleranceMm;
+            if (!nativeMeasurementMatches)
+                blockers.Add("source-native-measurement-mismatch");
+        }
+
         NativeTextMetric explodedTextMetric = NativeTextMetric.Empty;
         if (natives.Count == 1)
         {
@@ -768,6 +792,9 @@ internal static class DimensionMetricComparator
             && matchedSourceExtensionLineCount == 2
             && sourceArrowLines.Length == 2
             && matchedSourceArrowLineCount == 2
+            && sourceNativeMeasurementUsable
+            && nativeMeasurementUsable
+            && nativeMeasurementMatches
             && baselineDirectionDot.HasValue
             && baselineDirectionDot.Value > 0.999999
             && sourceVisualCenterUsable
@@ -893,6 +920,7 @@ internal static class DimensionMetricComparator
                     GetNullableDouble(item, "sourceGlyphInkWidthMm"),
                     GetNullableDouble(item, "sourceGlyphInkHeightMm"),
                     GetNullableDouble(item, "sourceHeightMm"),
+                    GetNullableDouble(item, "sourceNativeMeasurementMm"),
                     GetNullableDouble(item, "sourceRotationDegrees") ?? double.NaN,
                     GetNullableDouble(item, "sourceVisualCenterX"),
                     GetNullableDouble(item, "sourceVisualCenterY"),
@@ -953,6 +981,7 @@ internal static class DimensionMetricComparator
                 GetString(dimension, "candidateId") ?? string.Empty,
                 GetString(dimension, "candidateRole") ?? string.Empty,
                 GetString(dimension, "dimensionText") ?? string.Empty,
+                GetNullableDouble(dimension, "measurement"),
                 GetString(dimension, "error"),
                 textMetrics,
                 blockGeometry,
@@ -1523,6 +1552,7 @@ internal static class DimensionMetricComparator
         double? SourceGlyphInkWidthMm,
         double? SourceGlyphInkHeightMm,
         double? SourceHeightMm,
+        double? SourceNativeMeasurementMm,
         double SourceRotationDegrees,
         double? SourceVisualCenterX,
         double? SourceVisualCenterY,
@@ -1533,6 +1563,7 @@ internal static class DimensionMetricComparator
             => new(
                 candidateId,
                 string.Empty,
+                null,
                 null,
                 null,
                 null,
@@ -1575,6 +1606,7 @@ internal static class DimensionMetricComparator
         string CandidateId,
         string CandidateRole,
         string DimensionText,
+        double? Measurement,
         string? Error,
         IReadOnlyList<NativeTextMetric> TextMetrics,
         IReadOnlyList<NativeBlockGeometry> BlockGeometry,
@@ -1588,6 +1620,7 @@ internal static class DimensionMetricComparator
                 candidateId,
                 string.Empty,
                 string.Empty,
+                null,
                 null,
                 [],
                 [],
