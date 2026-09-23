@@ -315,6 +315,35 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_appearance_requires_exact_role_binding_not_only_source_id_set()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceClaims =
+            [
+                new("d-line", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("d-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-arrow", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("d-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("role", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("source-appearance", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_polyline_segment_source_is_fail_closed_for_whole_source_suppression()
     {
         var (candidate, _) = CreateDimensionAppearanceFixture();
