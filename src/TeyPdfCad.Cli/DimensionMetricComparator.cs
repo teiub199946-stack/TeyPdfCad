@@ -43,7 +43,9 @@ internal sealed record DimensionMetricComparisonCandidate(
     int NativeExplodedGeometryCount,
     IReadOnlyList<string> NativeExplodedGeometryKinds,
     int SourceExtensionLineCount,
-    int MatchedSourceExtensionLineCount);
+    int MatchedSourceExtensionLineCount,
+    int SourceArrowLineCount,
+    int MatchedSourceArrowLineCount);
 
 internal static class DimensionMetricComparator
 {
@@ -301,6 +303,21 @@ internal static class DimensionMetricComparator
             blockers.Add("source-extension-line-unmatched");
         }
 
+        var sourceArrowLines = source.SourceLineGeometry
+            .Where(item => string.Equals(
+                item.Role,
+                "arrow-geometry",
+                StringComparison.Ordinal))
+            .ToArray();
+        var matchedSourceArrowLineCount = sourceArrowLines.Count(sourceLine =>
+            explodedLines.Any(nativeLine =>
+                LinesEqual(sourceLine, nativeLine, NumericalWidthToleranceMm)));
+        if (sourceArrowLines.Length > 0
+            && matchedSourceArrowLineCount != sourceArrowLines.Length)
+        {
+            blockers.Add("source-arrow-line-unmatched");
+        }
+
         if (!IsFirstSafeNumericDimensionText(source.SourceText))
             blockers.Add("source-text-outside-safe-numeric-subset");
 
@@ -447,7 +464,9 @@ internal static class DimensionMetricComparator
                 .OrderBy(value => value, StringComparer.Ordinal)
                 .ToArray(),
             sourceExtensionLines.Length,
-            matchedSourceExtensionLineCount);
+            matchedSourceExtensionLineCount,
+            sourceArrowLines.Length,
+            matchedSourceArrowLineCount);
     }
 
     private static IReadOnlyList<SourceEvidence> ReadSourceEvidence(JsonElement root)
