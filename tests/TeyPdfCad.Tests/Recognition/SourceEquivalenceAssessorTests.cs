@@ -952,6 +952,38 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_is_fail_closed_when_embedded_font_program_identity_is_unavailable()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with { FontProgramSha256 = null }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with { FontProgramSha256 = null })
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("font-program SHA-256", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unavailable", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_is_fail_closed_when_visual_center_is_unavailable()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
@@ -1089,7 +1121,8 @@ public sealed class SourceEquivalenceAssessorTests
                     "Helvetica",
                     5.0,
                     new(7.5, 6.25),
-                    4.5),
+                    4.5,
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
                 new DimensionSourceLineAppearance(
                     new(0, 5),
                     new(10, 5),
@@ -1160,7 +1193,8 @@ public sealed class SourceEquivalenceAssessorTests
                     AdvanceWidthPoints: 5.0 / VectorPdfPage.MillimetresPerPoint,
                     FontName: "Helvetica",
                     VisualCenter: new(7.5, 6.25),
-                    VisibleWidthPoints: 4.5 / VectorPdfPage.MillimetresPerPoint)
+                    VisibleWidthPoints: 4.5 / VectorPdfPage.MillimetresPerPoint,
+                    FontProgramSha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
             ]);
 
         return (candidate, page);
