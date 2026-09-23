@@ -104,8 +104,10 @@ internal sealed class AcadSharpStyleCatalog
                 ArrowSize = 2.5d,
                 TickSize = tickSize ?? 0d,
                 DimensionLineExtension = 0d,
-                ExtensionLineOffset = 0d,
-                ExtensionLineExtension = GetExtensionBeyondDimensionLine(appearance) ?? 0d,
+                ExtensionLineOffset = appearance is null ? 0.75d : 0d,
+                ExtensionLineExtension = appearance is null
+                    ? 1.25d
+                    : GetExtensionBeyondDimensionLine(appearance) ?? 0d,
                 ScaleFactor = 1d,
                 Style = GetPdfTextStyle()
             };
