@@ -96,6 +96,8 @@ public static class DwgEntityFingerprint
             Number(style.LinearScaleFactor),
             Number(style.TextHeight),
             Number(style.ArrowSize),
+            Number(style.TickSize),
+            Number(style.DimensionLineExtension),
             Number(style.ExtensionLineOffset),
             Number(style.ExtensionLineExtension),
             Number(style.ScaleFactor),
