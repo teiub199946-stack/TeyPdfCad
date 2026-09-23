@@ -238,6 +238,73 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_maps_strict_crossing_oblique_ticks_to_isolated_dimension_style()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("dim", new Point2(0, 5), new Point2(10, 5), new VectorStyle()),
+            new VectorLine("ext-1", new Point2(0, 0), new Point2(0, 5), new VectorStyle()),
+            new VectorLine("ext-2", new Point2(10, 0), new Point2(10, 5), new VectorStyle()),
+            new VectorLine("tick-1", new Point2(-1, 4), new Point2(1, 6), new VectorStyle()),
+            new VectorLine("tick-2", new Point2(9, 6), new Point2(11, 4), new VectorStyle()),
+            new VectorText("text", "10", new Point2(5, 5), 2.5, new VectorStyle())
+        ]);
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new(0, 0),
+            new(10, 0),
+            new(5, 5),
+            10,
+            10,
+            1,
+            0.95,
+            "10",
+            1,
+            ["dim", "ext-1", "ext-2", "tick-1", "tick-2", "text"])
+        {
+            RotationRadians = 0,
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("tick-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("tick-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ],
+            SourceAppearance = new DimensionSourceAppearance(
+                new DimensionSourceTextAppearance(
+                    "10", new(5, 5), 2.5, 0, null, null, ["text"]),
+                new DimensionSourceLineAppearance(
+                    new(0, 5), new(10, 5), null, null, null, [], ["dim"]),
+                [
+                    new DimensionSourceLineAppearance(
+                        new(0, 0), new(0, 5), null, null, null, [], ["ext-1"]),
+                    new DimensionSourceLineAppearance(
+                        new(10, 0), new(10, 5), null, null, null, [], ["ext-2"])
+                ],
+                [
+                    new DimensionSourceLineAppearance(
+                        new(-1, 4), new(1, 6), null, null, null, [], ["tick-1"]),
+                    new DimensionSourceLineAppearance(
+                        new(9, 6), new(11, 4), null, null, null, [], ["tick-2"])
+                ])
+        };
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([candidate], [], 1, 0.95);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var dimension = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Dimension>());
+        Assert.Equal(Math.Sqrt(8d), dimension.Style.TickSize, 6);
+        Assert.Equal(0d, dimension.Style.DimensionLineExtension, 6);
+        Assert.Contains("_TICK_", dimension.Style.Name, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Writer_emits_arc_length_as_native_arc_dimension()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
