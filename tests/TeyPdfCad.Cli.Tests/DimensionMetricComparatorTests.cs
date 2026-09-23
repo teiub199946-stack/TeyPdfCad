@@ -204,6 +204,35 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_accepts_translated_block_mcs_when_rigid_transform_matches_exploded_wcs()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = TranslateBlockSnapshotX(
+            NativeDimension("candidate-1", "100", 7.5),
+            100d);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.DoesNotContain(
+            "cross-snapshot-transform-evidence-invalid",
+            candidate.Blockers);
+        Assert.DoesNotContain(
+            "cross-snapshot-structural-transform-mismatch",
+            candidate.Blockers);
+        Assert.True(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_reports_exact_source_extension_line_matches_in_exploded_geometry()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -560,7 +589,10 @@ public sealed class DimensionMetricComparatorTests
         Assert.DoesNotContain(
             "source-native-text-center-mismatch",
             candidate.Blockers);
-        Assert.True(candidate.MeasurementsAreUsable);
+        Assert.Contains(
+            "cross-snapshot-structural-transform-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
         Assert.False(candidate.SourceToNativeEquivalenceProven);
     }
 
@@ -1418,6 +1450,30 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains(
             "rendered-glyph-equivalence-not-yet-authorized",
             candidate.Blockers);
+    }
+
+    private static string TranslateBlockSnapshotX(
+        string value,
+        double offset)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(value)!.AsObject();
+        var metric = root["textMetrics"]!.AsArray()[0]!.AsObject();
+        metric["positionX"] = metric["positionX"]!.GetValue<double>() + offset;
+        var fragment = metric["fragments"]!.AsArray()[0]!.AsObject();
+        fragment["locationX"] =
+            fragment["locationX"]!.GetValue<double>() + offset;
+
+        foreach (var item in root["blockGeometry"]!.AsArray())
+        {
+            var geometry = item!.AsObject();
+            foreach (var property in new[] { "startX", "endX", "minX", "maxX" })
+            {
+                geometry[property] =
+                    geometry[property]!.GetValue<double>() + offset;
+            }
+        }
+
+        return root.ToJsonString();
     }
 
     private static string ReplaceLast(
