@@ -38,7 +38,9 @@ public sealed record DimensionSourceTextAppearance(
     string? FontProgramSubtype = null,
     string? FontEncodingName = null,
     bool? FontHasToUnicode = null,
-    bool? FontIsSubset = null);
+    bool? FontIsSubset = null,
+    double? GlyphInkWidthMm = null,
+    double? GlyphInkHeightMm = null);
 
 public sealed record DimensionSourceAppearance(
     DimensionSourceTextAppearance Text,
