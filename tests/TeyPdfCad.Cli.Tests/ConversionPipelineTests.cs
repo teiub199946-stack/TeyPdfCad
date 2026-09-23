@@ -219,6 +219,11 @@ public sealed class ConversionPipelineTests
             Assert.True(double.IsFinite(item.GetProperty("startY").GetDouble()));
             Assert.True(double.IsFinite(item.GetProperty("endX").GetDouble()));
             Assert.True(double.IsFinite(item.GetProperty("endY").GetDouble()));
+            Assert.True(item.TryGetProperty("rgbColor", out _));
+            Assert.True(item.TryGetProperty("strokeWidthMm", out _));
+            Assert.Equal(
+                JsonValueKind.Array,
+                item.GetProperty("dashPatternMm").ValueKind);
         });
     }
 
