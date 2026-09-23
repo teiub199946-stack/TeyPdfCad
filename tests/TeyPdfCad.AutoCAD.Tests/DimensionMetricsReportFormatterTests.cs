@@ -120,6 +120,7 @@ public sealed class DimensionMetricsReportFormatterTests
                         height,
                         height,
                         1d,
+                        1d,
                         0d,
                         1d,
                         2d,
