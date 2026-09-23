@@ -1,4 +1,6 @@
 using TeyPdfCad.Core.Documents;
+using TeyPdfCad.Core.Geometry;
+using TeyPdfCad.Core.Semantics.Dimensions;
 using TeyPdfCad.Core.Semantics;
 
 namespace TeyPdfCad.Core.Recognition;
@@ -190,6 +192,14 @@ public static class SourceEquivalenceAssessor
                 rawEvidenceMismatch);
         }
 
+        var semanticMismatch = ValidateDimensionCandidateConsistency(candidate, appearance);
+        if (semanticMismatch is not null)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                semanticMismatch);
+        }
+
         if (appearance.DimensionLine.IsCompositeObservation)
         {
             return new SourceEquivalenceAssessmentResult(
@@ -200,6 +210,130 @@ public static class SourceEquivalenceAssessor
         return new SourceEquivalenceAssessmentResult(
             false,
             "Dimension source appearance is captured before DWG emission (text metrics/color and line geometry/stroke/dash/color), but native DIMENSION font metrics, arrow topology/type and dimension/extension line style mapping are not yet independently proven equivalent.");
+    }
+
+    private static string? ValidateDimensionCandidateConsistency(
+        DimensionCandidate candidate,
+        DimensionSourceAppearance appearance)
+    {
+        if (!string.Equals(candidate.SourceText, appearance.Text.Value, StringComparison.Ordinal))
+        {
+            return "Dimension semantic text differs from the raw source appearance text.";
+        }
+
+        if (!DimensionTextParser.TryParse(appearance.Text.Value, out var parsed)
+            || parsed is null
+            || parsed.Kind != DimensionTextKind.Linear
+            || !AlmostEqual(parsed.NominalValue, candidate.DisplayedValue))
+        {
+            return "Dimension semantic text/value is not exactly derived from the raw source appearance text.";
+        }
+
+        if (appearance.ExtensionLines.Count != 2)
+        {
+            return "Dimension semantic geometry is not source-equivalent: exactly two source extension-line observations are required.";
+        }
+
+        var dimensionVector = GeometryMath.Subtract(
+            appearance.DimensionLine.End,
+            appearance.DimensionLine.Start);
+        if (GeometryMath.Length(dimensionVector) <= 1e-9)
+        {
+            return "Dimension semantic geometry is not source-equivalent: source dimension line is degenerate.";
+        }
+
+        var sourceDimensionMidpoint = GeometryMath.Midpoint(
+            appearance.DimensionLine.Start,
+            appearance.DimensionLine.End);
+        if (!PointEqual(candidate.DimensionLinePoint, sourceDimensionMidpoint))
+        {
+            return "Dimension semantic geometry differs from the source-appearance dimension-line location.";
+        }
+
+        var sourceRotation = Math.Atan2(dimensionVector.Y, dimensionVector.X);
+        if (!candidate.RotationRadians.HasValue
+            || !ParallelAngleEqual(candidate.RotationRadians.Value, sourceRotation))
+        {
+            return "Dimension semantic geometry differs from the source-appearance dimension-line rotation.";
+        }
+
+        var normalizedDegrees = Math.Abs(sourceRotation * 180d / Math.PI) % 180d;
+        if (normalizedDegrees > 90d)
+            normalizedDegrees = 180d - normalizedDegrees;
+        var axisDistance = Math.Min(normalizedDegrees, Math.Abs(90d - normalizedDegrees));
+        var expectedKind = axisDistance <= 1d
+            ? DimensionKind.Rotated
+            : DimensionKind.Aligned;
+        if (candidate.Kind != expectedKind)
+        {
+            return "Dimension semantic geometry kind differs from the source-appearance orientation.";
+        }
+
+        if (!TryDefinitionPoint(appearance.ExtensionLines[0], appearance.DimensionLine, out var sourceDefinition1)
+            || !TryDefinitionPoint(appearance.ExtensionLines[1], appearance.DimensionLine, out var sourceDefinition2))
+        {
+            return "Dimension semantic geometry is not source-equivalent: source extension-line definition endpoint is ambiguous.";
+        }
+
+        var direct = PointEqual(candidate.DefinitionPoint1, sourceDefinition1)
+            && PointEqual(candidate.DefinitionPoint2, sourceDefinition2);
+        var reversed = PointEqual(candidate.DefinitionPoint1, sourceDefinition2)
+            && PointEqual(candidate.DefinitionPoint2, sourceDefinition1);
+        if (!direct && !reversed)
+        {
+            return "Dimension semantic geometry definition points differ from the source-appearance extension lines.";
+        }
+
+        if (!double.IsFinite(candidate.DrawingScale) || candidate.DrawingScale <= 0d)
+        {
+            return "Dimension semantic geometry has an invalid drawing scale.";
+        }
+
+        var unitDimension = GeometryMath.Normalize(dimensionVector);
+        var projectedDistance = Math.Abs(GeometryMath.Dot(
+            GeometryMath.Subtract(sourceDefinition2, sourceDefinition1),
+            unitDimension));
+        var sourceReconstructedMeasurement = projectedDistance * candidate.DrawingScale;
+        if (!double.IsFinite(sourceReconstructedMeasurement)
+            || !AlmostEqual(sourceReconstructedMeasurement, candidate.ReconstructedMeasurement))
+        {
+            return "Dimension semantic geometry/reconstructed measurement differs from the source-appearance geometry and scale.";
+        }
+
+        return null;
+    }
+
+    private static bool TryDefinitionPoint(
+        DimensionSourceLineAppearance extension,
+        DimensionSourceLineAppearance dimensionLine,
+        out Point2 definitionPoint)
+    {
+        var startDistance = GeometryMath.DistancePointToInfiniteLine(
+            extension.Start,
+            dimensionLine.Start,
+            dimensionLine.End);
+        var endDistance = GeometryMath.DistancePointToInfiniteLine(
+            extension.End,
+            dimensionLine.Start,
+            dimensionLine.End);
+
+        if (Math.Abs(startDistance - endDistance) <= 1e-9)
+        {
+            definitionPoint = default;
+            return false;
+        }
+
+        definitionPoint = startDistance > endDistance
+            ? extension.Start
+            : extension.End;
+        return true;
+    }
+
+    private static bool ParallelAngleEqual(double firstRadians, double secondRadians)
+    {
+        var difference = Math.Abs(firstRadians - secondRadians) % Math.PI;
+        difference = Math.Min(difference, Math.PI - difference);
+        return difference <= 1e-9;
     }
 
     private static string? ValidateDimensionSourceAppearance(
