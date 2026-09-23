@@ -351,7 +351,7 @@ public sealed class IndependentNativeExpectationTests
             Style = style,
             Text = "50",
             TextMiddlePoint = new XYZ(40, 10, 0),
-            IsTextUserDefinedLocation = true
+            IsTextUserDefinedLocation = false
         };
         CandidateMetadataCodec.Write(wrong, new CandidateEntityMetadata(candidateId, "primary"));
         drawing.Entities.Add(wrong);
@@ -364,6 +364,8 @@ public sealed class IndependentNativeExpectationTests
         Assert.False(verification.IsVerified);
         Assert.Contains(verification.InvalidEntities, value =>
             value.Contains("expectedTextMiddlePoint", StringComparison.Ordinal));
+        Assert.Contains(verification.InvalidEntities, value =>
+            value.Contains("expectedTextUserDefinedLocation", StringComparison.Ordinal));
     }
 
     private static SemanticReconstructionResult EmptySemantics()
