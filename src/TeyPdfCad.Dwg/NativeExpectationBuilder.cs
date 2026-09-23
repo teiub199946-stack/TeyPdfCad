@@ -140,6 +140,7 @@ internal static class NativeExpectationBuilder
                             ("expectedDimensionText", NativeDimensionTextBuilder.Build(
                                 candidate.SourceText,
                                 candidate.DisplayedValue)),
+                            ("expectedLayer", "PDF_РАЗМЕРЫ"),
                             ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension)))));
             }
 
