@@ -143,8 +143,16 @@ internal static class DimensionMetricComparator
                 blockers.Add("native-candidate-role-not-primary");
             if (!string.IsNullOrWhiteSpace(native.Error))
                 blockers.Add("native-dimension-metrics-error");
-            if (!string.Equals(source.SourceText, native.DimensionText, StringComparison.Ordinal))
-                blockers.Add("dimension-text-mismatch");
+
+            // In the first safe subset the DIMENSION must remain semantically
+            // live: AutoCAD generates the displayed numeric text from the
+            // measurement. A non-empty DimensionText is an explicit override
+            // and would freeze the label after geometry edits.
+            if (IsFirstSafeNumericDimensionText(source.SourceText)
+                && !string.IsNullOrEmpty(native.DimensionText))
+            {
+                blockers.Add("native-text-override-present");
+            }
         }
 
         NativeTextMetric metric = NativeTextMetric.Empty;
