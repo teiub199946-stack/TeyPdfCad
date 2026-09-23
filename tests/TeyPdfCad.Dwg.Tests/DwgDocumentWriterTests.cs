@@ -230,7 +230,10 @@ public sealed class DwgDocumentWriterTests
         Assert.NotNull(dimension.Style);
         Assert.NotNull(dimension.Style.Style);
         Assert.Equal("TEYPDFCAD_TEXT", dimension.Style.Style.Name);
-        Assert.Equal("arial.ttf", dimension.Style.Style.Filename, ignoreCase: true);
+        Assert.True(string.Equals(
+            "arial.ttf",
+            dimension.Style.Style.Filename,
+            StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1d, dimension.Style.Style.Width, 6);
     }
 
