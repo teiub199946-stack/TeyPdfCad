@@ -553,7 +553,11 @@ public sealed class LinearDimensionRecognizer
             text.AdvanceWidth,
             text.VisualCenter,
             text.VisibleWidth,
-            text.FontProgramSha256);
+            text.FontProgramSha256,
+            text.FontProgramSubtype,
+            text.FontEncodingName,
+            text.FontHasToUnicode,
+            text.FontIsSubset);
 
     private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
         => groups
