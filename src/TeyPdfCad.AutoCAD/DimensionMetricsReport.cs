@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
@@ -19,7 +20,9 @@ internal sealed record DimensionTextMetric(
     string FontFile,
     double TextStyleWidthFactor,
     string FontResolvedPath = "",
-    string FontSha256 = "");
+    string FontSha256 = "",
+    double NominalTextHeight = 0d,
+    double EntityWidthFactor = 1d);
 
 internal sealed record DimensionMetric(
     string DimensionHandle,
@@ -67,5 +70,19 @@ internal static class DimensionMetricsReportFormatter
                 NullValueHandling = NullValueHandling.Include,
                 ContractResolver = new CamelCasePropertyNamesContractResolver()
             });
+    }
+}
+
+internal static class DimensionMetricsFileIdentity
+{
+    public static string ComputeSha256(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return string.Empty;
+
+        using var sha256 = SHA256.Create();
+        using var stream = File.OpenRead(path);
+        return BitConverter.ToString(sha256.ComputeHash(stream))
+            .Replace("-", string.Empty);
     }
 }
