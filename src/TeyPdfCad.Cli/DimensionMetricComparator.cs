@@ -274,13 +274,10 @@ internal static class DimensionMetricComparator
                         blockers.Add("native-fragment-formatting-not-plain");
                     }
 
-                    var directionLength = Math.Sqrt(
-                        fragment.DirectionX * fragment.DirectionX
-                        + fragment.DirectionY * fragment.DirectionY
-                        + fragment.DirectionZ * fragment.DirectionZ);
-                    if (!double.IsFinite(directionLength)
-                        || directionLength <= 1e-9
-                        || Math.Abs(fragment.DirectionZ) > 1e-9)
+                    if (!TryGetPlanarUnitDirection(
+                            fragment,
+                            out _,
+                            out _))
                     {
                         blockers.Add("native-fragment-direction-not-planar");
                     }
@@ -290,27 +287,21 @@ internal static class DimensionMetricComparator
 
         double? baselineDirectionDot = null;
         if (metric.Fragments.Count == 1
-            && double.IsFinite(source.SourceRotationDegrees))
+            && double.IsFinite(source.SourceRotationDegrees)
+            && TryGetPlanarUnitDirection(
+                metric.Fragments[0],
+                out var nativeX,
+                out var nativeY))
         {
-            var fragment = metric.Fragments[0];
-            var nativeLength = Math.Sqrt(
-                fragment.DirectionX * fragment.DirectionX
-                + fragment.DirectionY * fragment.DirectionY);
-            if (nativeLength > 1e-12
-                && double.IsFinite(nativeLength))
-            {
-                var sourceRadians = source.SourceRotationDegrees * Math.PI / 180d;
-                var sourceX = Math.Cos(sourceRadians);
-                var sourceY = Math.Sin(sourceRadians);
-                var nativeX = fragment.DirectionX / nativeLength;
-                var nativeY = fragment.DirectionY / nativeLength;
-                baselineDirectionDot = sourceX * nativeX + sourceY * nativeY;
+            var sourceRadians = source.SourceRotationDegrees * Math.PI / 180d;
+            var sourceX = Math.Cos(sourceRadians);
+            var sourceY = Math.Sin(sourceRadians);
+            baselineDirectionDot = sourceX * nativeX + sourceY * nativeY;
 
-                if (Math.Abs(sourceX - nativeX) > 1e-6
-                    || Math.Abs(sourceY - nativeY) > 1e-6)
-                {
-                    blockers.Add("source-native-baseline-direction-mismatch");
-                }
+            if (Math.Abs(sourceX - nativeX) > 1e-6
+                || Math.Abs(sourceY - nativeY) > 1e-6)
+            {
+                blockers.Add("source-native-baseline-direction-mismatch");
             }
         }
 
@@ -792,6 +783,40 @@ internal static class DimensionMetricComparator
             return false;
         }
 
+        return true;
+    }
+
+    private static bool TryGetPlanarUnitDirection(
+        NativeFragmentMetric fragment,
+        out double x,
+        out double y)
+    {
+        x = 0d;
+        y = 0d;
+        if (!fragment.DirectionX.HasValue
+            || !fragment.DirectionY.HasValue
+            || !fragment.DirectionZ.HasValue)
+        {
+            return false;
+        }
+
+        var rawX = fragment.DirectionX.Value;
+        var rawY = fragment.DirectionY.Value;
+        var rawZ = fragment.DirectionZ.Value;
+        if (!double.IsFinite(rawX)
+            || !double.IsFinite(rawY)
+            || !double.IsFinite(rawZ)
+            || Math.Abs(rawZ) > 1e-9)
+        {
+            return false;
+        }
+
+        var length = Math.Sqrt(rawX * rawX + rawY * rawY);
+        if (!double.IsFinite(length) || length <= 1e-12)
+            return false;
+
+        x = rawX / length;
+        y = rawY / length;
         return true;
     }
 
