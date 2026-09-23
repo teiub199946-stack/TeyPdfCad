@@ -271,6 +271,28 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_reports_formatted_source_text_outside_first_safe_subset()
+    {
+        var source = SourceReport("candidate-1", "10 mm", 7.5);
+        var native = $"""
+        {
+          "schemaVersion": "2",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "10 mm", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "source-text-outside-safe-numeric-subset",
+            candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_reports_font_encoding_outside_first_safe_subset()
     {
         var source = SourceReport("candidate-1", "100", 7.5)
