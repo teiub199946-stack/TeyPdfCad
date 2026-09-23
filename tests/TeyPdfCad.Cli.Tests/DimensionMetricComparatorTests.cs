@@ -158,6 +158,92 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_dbtext_axis_aligned_extents_as_width_proof()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var dbTextNative = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"entityType\": \"MText\"",
+                "\"entityType\": \"DBText\"",
+                StringComparison.Ordinal)
+            .Replace(
+                "mtext-actual-bounds-dimblock-mcs",
+                "dbtext-geometric-extents-dimblock-mcs",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "2",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{dbTextNative}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.Contains("native-metric-kind-not-supported", candidate.Blockers);
+    }
+
+    [Fact]
+    public async Task Cli_command_writes_fail_closed_metric_comparison_report()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var sourcePath = Path.Combine(directory, "conversion.json");
+            var nativePath = Path.Combine(directory, "autocad-metrics.json");
+            var outputPath = Path.Combine(directory, "comparison.json");
+            await File.WriteAllTextAsync(
+                sourcePath,
+                SourceReport("candidate-1", "100", 7.5));
+            await File.WriteAllTextAsync(
+                nativePath,
+                $"""
+                {
+                  "schemaVersion": "2",
+                  "drawingName": "probe.dwg",
+                  "drawingUnits": "Millimeters",
+                  "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+                }
+                """);
+
+            var exitCode = await Program.Main(
+            [
+                "compare-dimension-metrics",
+                "--conversion-report", sourcePath,
+                "--autocad-metrics", nativePath,
+                "--output", outputPath
+            ]);
+
+            Assert.Equal(0, exitCode);
+            Assert.True(File.Exists(outputPath));
+            using var json = JsonDocument.Parse(
+                await File.ReadAllTextAsync(outputPath));
+            var candidate = Assert.Single(
+                json.RootElement
+                    .GetProperty("candidates")
+                    .EnumerateArray());
+            Assert.False(
+                candidate.GetProperty("sourceToNativeEquivalenceProven")
+                    .GetBoolean());
+            Assert.Contains(
+                candidate.GetProperty("blockers").EnumerateArray(),
+                blocker => blocker.GetString()
+                    == "rendered-glyph-equivalence-not-yet-authorized");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Comparator_fails_closed_on_visible_width_drift()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
