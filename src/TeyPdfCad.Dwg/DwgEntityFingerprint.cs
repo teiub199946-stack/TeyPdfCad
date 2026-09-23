@@ -193,7 +193,8 @@ public static class DwgEntityFingerprint
                 : "<auto>",
             Number(dimension.TextRotation),
             dimension.FlipArrow1 ? "1" : "0",
-            dimension.FlipArrow2 ? "1" : "0");
+            dimension.FlipArrow2 ? "1" : "0",
+            Point(dimension.Normal));
 
     private static string Point(XYZ point)
         => Number(point.X) + "," + Number(point.Y) + "," + Number(point.Z);
