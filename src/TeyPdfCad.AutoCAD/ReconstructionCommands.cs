@@ -257,6 +257,173 @@ public sealed class ReconstructionCommands
         transaction.Commit();
     }
 
+    [CommandMethod("TEYPDFDIMMETRICS", CommandFlags.Modal)]
+    public void ExportDimensionTextMetrics()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null) return;
+
+        var database = document.Database;
+        var editor = document.Editor;
+        var metrics = new List<DimensionMetric>();
+
+        using (var transaction = database.TransactionManager.StartTransaction())
+        {
+            var blockTable = (BlockTable)transaction.GetObject(
+                database.BlockTableId,
+                OpenMode.ForRead);
+            var modelSpace = (BlockTableRecord)transaction.GetObject(
+                blockTable[BlockTableRecord.ModelSpace],
+                OpenMode.ForRead);
+
+            foreach (var objectId in modelSpace.Cast<ObjectId>())
+            {
+                if (transaction.GetObject(objectId, OpenMode.ForRead, false) is not Dimension dimension)
+                    continue;
+
+                var textMetrics = new List<DimensionTextMetric>();
+                string? error = null;
+                var dimBlockHandle = string.Empty;
+
+                try
+                {
+                    dimension.UpgradeOpen();
+                    dimension.RecomputeDimensionBlock(true);
+
+                    if (dimension.DimBlockId.IsNull)
+                    {
+                        error = "AutoCAD did not provide a dimension display block after recompute.";
+                    }
+                    else
+                    {
+                        dimBlockHandle = dimension.DimBlockId.Handle.ToString();
+                        var dimBlock = (BlockTableRecord)transaction.GetObject(
+                            dimension.DimBlockId,
+                            OpenMode.ForRead);
+
+                        foreach (var entityId in dimBlock.Cast<ObjectId>())
+                        {
+                            var entity = transaction.GetObject(
+                                entityId,
+                                OpenMode.ForRead,
+                                false);
+
+                            if (entity is MText mtext)
+                            {
+                                var style = ReadTextStyle(transaction, mtext.TextStyleId);
+                                textMetrics.Add(new DimensionTextMetric(
+                                    "MText",
+                                    mtext.Handle.ToString(),
+                                    mtext.Contents ?? string.Empty,
+                                    "mtext-actual-bounds",
+                                    mtext.ActualWidth,
+                                    mtext.ActualHeight,
+                                    mtext.Rotation,
+                                    mtext.Location.X,
+                                    mtext.Location.Y,
+                                    mtext.Location.Z,
+                                    style.Name,
+                                    style.FontFile,
+                                    style.WidthFactor));
+                            }
+                            else if (entity is DBText dbText)
+                            {
+                                var style = ReadTextStyle(transaction, dbText.TextStyleId);
+                                var extents = dbText.GeometricExtents;
+                                textMetrics.Add(new DimensionTextMetric(
+                                    "DBText",
+                                    dbText.Handle.ToString(),
+                                    dbText.TextString ?? string.Empty,
+                                    "dbtext-geometric-extents",
+                                    Math.Abs(extents.MaxPoint.X - extents.MinPoint.X),
+                                    Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y),
+                                    dbText.Rotation,
+                                    dbText.Position.X,
+                                    dbText.Position.Y,
+                                    dbText.Position.Z,
+                                    style.Name,
+                                    style.FontFile,
+                                    style.WidthFactor));
+                            }
+                        }
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    error = ex.GetType().Name + ": " + ex.Message;
+                }
+
+                metrics.Add(new DimensionMetric(
+                    dimension.Handle.ToString(),
+                    dimension.GetType().Name,
+                    dimension.Measurement,
+                    dimension.DimensionText ?? string.Empty,
+                    dimBlockHandle,
+                    textMetrics,
+                    error));
+            }
+
+            // RecomputeDimensionBlock can update the anonymous display block.
+            // This command is diagnostic only: abort the transaction so the
+            // user's drawing is never modified by metrics capture.
+            transaction.Abort();
+        }
+
+        var report = new DimensionMetricsReport(
+            DimensionMetricsReportFormatter.SchemaVersion,
+            document.Name ?? string.Empty,
+            database.Insunits.ToString(),
+            metrics);
+
+        try
+        {
+            var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
+            Directory.CreateDirectory(outputDirectory);
+            var timestamp = DateTime.UtcNow.ToString(
+                "yyyyMMdd_HHmmssfff",
+                CultureInfo.InvariantCulture);
+            var outputPath = Path.Combine(
+                outputDirectory,
+                $"DimensionMetrics_{timestamp}.json");
+
+            File.WriteAllText(
+                outputPath,
+                DimensionMetricsReportFormatter.Format(report),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            editor.WriteMessage(
+                $"\nTEYPDFCAD_DIM_METRICS {outputPath}\n" +
+                $"dimensions={metrics.Count}, " +
+                $"textEntities={metrics.Sum(item => item.TextMetrics.Count)}, " +
+                $"errors={metrics.Count(item => !string.IsNullOrWhiteSpace(item.Error))}. " +
+                "Drawing was not changed.\n");
+        }
+        catch (System.Exception ex)
+        {
+            editor.WriteMessage(
+                $"\nTeyPdfCad dimension metrics export failed: {ex.Message}\n");
+        }
+    }
+
+    private static (string Name, string FontFile, double WidthFactor) ReadTextStyle(
+        Transaction transaction,
+        ObjectId textStyleId)
+    {
+        if (textStyleId.IsNull
+            || transaction.GetObject(
+                textStyleId,
+                OpenMode.ForRead,
+                false) is not TextStyleTableRecord style)
+        {
+            return (string.Empty, string.Empty, 1d);
+        }
+
+        return (
+            style.Name ?? string.Empty,
+            style.FileName ?? string.Empty,
+            style.XScale);
+    }
+
     [CommandMethod("TEYPDFSHEETCONFIG", CommandFlags.Modal)]
     public void ConfigureSheetBounds()
     {
