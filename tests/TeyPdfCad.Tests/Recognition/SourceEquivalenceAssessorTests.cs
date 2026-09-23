@@ -951,6 +951,58 @@ public sealed class SourceEquivalenceAssessorTests
         Assert.Contains("differs from the raw VectorPdfPage evidence", assessment.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("Type0/CIDFontType2", "WinAnsiEncoding", false, false, "simple TrueType")]
+    [InlineData("TrueType", "Identity-H", false, false, "WinAnsiEncoding")]
+    [InlineData("TrueType", "WinAnsiEncoding", true, false, "ToUnicode")]
+    [InlineData("TrueType", "WinAnsiEncoding", false, true, "subset")]
+    public void Dimension_source_equivalence_rejects_font_resources_outside_first_safe_subset(
+        string subtype,
+        string encoding,
+        bool hasToUnicode,
+        bool isSubset,
+        string expectedReason)
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with
+                {
+                    FontProgramSubtype = subtype,
+                    FontEncodingName = encoding,
+                    FontHasToUnicode = hasToUnicode,
+                    FontIsSubset = isSubset
+                }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with
+                    {
+                        FontProgramSubtype = subtype,
+                        FontEncodingName = encoding,
+                        FontHasToUnicode = hasToUnicode,
+                        FontIsSubset = isSubset
+                    })
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains(expectedReason, assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Dimension_source_equivalence_is_fail_closed_when_embedded_font_program_identity_is_unavailable()
     {
@@ -1122,7 +1174,11 @@ public sealed class SourceEquivalenceAssessorTests
                     5.0,
                     new(7.5, 6.25),
                     4.5,
-                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    "TrueType",
+                    "WinAnsiEncoding",
+                    false,
+                    false),
                 new DimensionSourceLineAppearance(
                     new(0, 5),
                     new(10, 5),
@@ -1194,7 +1250,11 @@ public sealed class SourceEquivalenceAssessorTests
                     FontName: "Helvetica",
                     VisualCenter: new(7.5, 6.25),
                     VisibleWidthPoints: 4.5 / VectorPdfPage.MillimetresPerPoint,
-                    FontProgramSha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+                    FontProgramSha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    FontProgramSubtype: "TrueType",
+                    FontEncodingName: "WinAnsiEncoding",
+                    FontHasToUnicode: false,
+                    FontIsSubset: false)
             ]);
 
         return (candidate, page);
