@@ -397,6 +397,63 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_requires_endpoint_separated_arrow_sources()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var sharedArrow = new DimensionSourceLineAppearance(
+            new(0, 5),
+            new(10, 5.1),
+            "DIM",
+            0,
+            0.25,
+            [],
+            ["d-arrow-shared"]);
+
+        candidate = candidate with
+        {
+            SourceClaims =
+            [
+                new("d-line", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("d-ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-arrow-shared", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("d-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ],
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                ArrowLines = [sharedArrow]
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities
+                .Where(entity => entity.SourceId is not "d-arrow-1" and not "d-arrow-2")
+                .Append((VectorEntity)new VectorLine(
+                    "d-arrow-shared",
+                    sharedArrow.Start,
+                    sharedArrow.End,
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)))
+                .ToArray()
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("arrow", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("endpoint", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_appearance_requires_exact_role_binding_not_only_source_id_set()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
