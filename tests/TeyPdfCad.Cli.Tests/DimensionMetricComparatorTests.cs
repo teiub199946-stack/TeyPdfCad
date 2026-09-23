@@ -413,11 +413,10 @@ public sealed class DimensionMetricComparatorTests
     public void Comparator_rejects_exploded_text_font_sha_drift()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
-        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
-            .Replace(
-                "\"fontSha256\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\n              \"nominalTextHeight\": 2.5,\n              \"entityWidthFactor\": 1,\n              \"backgroundFill\": false,\n              \"useBackgroundColor\": false,\n              \"backgroundScaleFactor\": 0,\n              \"showBorders\": false,\n              \"attachment\": \"MiddleCenter\",\n              \"fragments\": [\n                {\n                  \"text\": \"100\"",
-                "\"fontSha256\": \"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\",\n              \"nominalTextHeight\": 2.5,\n              \"entityWidthFactor\": 1,\n              \"backgroundFill\": false,\n              \"useBackgroundColor\": false,\n              \"backgroundScaleFactor\": 0,\n              \"showBorders\": false,\n              \"attachment\": \"MiddleCenter\",\n              \"fragments\": [\n                {\n                  \"text\": \"100\"",
-                StringComparison.Ordinal);
+        var nativeDimension = ReplaceLast(
+            NativeDimension("candidate-1", "100", 7.5),
+            "\"fontSha256\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"",
+            "\"fontSha256\": \"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\"");
         var native = $"""
         {
           "schemaVersion": "8",
@@ -1064,6 +1063,16 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains(
             "rendered-glyph-equivalence-not-yet-authorized",
             candidate.Blockers);
+    }
+
+    private static string ReplaceLast(
+        string value,
+        string oldValue,
+        string newValue)
+    {
+        var index = value.LastIndexOf(oldValue, StringComparison.Ordinal);
+        Assert.True(index >= 0);
+        return value[..index] + newValue + value[(index + oldValue.Length)..];
     }
 
     private static string SourceReport(
