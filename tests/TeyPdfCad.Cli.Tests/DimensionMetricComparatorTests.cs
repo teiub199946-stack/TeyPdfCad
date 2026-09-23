@@ -45,7 +45,7 @@ public sealed class DimensionMetricComparatorTests
               "dimensionHandle": "10",
               "dimensionType": "RotatedDimension",
               "measurement": 100,
-              "dimensionText": "100",
+              "dimensionText": "",
               "dimensionBlockHandle": "20",
               "candidateId": "p1:dimension:abc",
               "candidateRole": "primary",
@@ -412,6 +412,31 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_explicit_native_text_override_in_first_safe_subset()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"dimensionText\": \"\"",
+                "\"dimensionText\": \"100\"",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "3",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains("native-text-override-present", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_multiple_or_formatted_native_fragments()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -538,7 +563,7 @@ public sealed class DimensionMetricComparatorTests
           "dimensionHandle": "10",
           "dimensionType": "RotatedDimension",
           "measurement": 100,
-          "dimensionText": "{{text}}",
+          "dimensionText": "",
           "dimensionBlockHandle": "20",
           "candidateId": "{{candidateId}}",
           "candidateRole": "primary",
