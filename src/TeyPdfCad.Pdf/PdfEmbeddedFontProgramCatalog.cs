@@ -133,15 +133,15 @@ internal sealed class PdfEmbeddedFontProgramCatalog
             var descendants = ResolveArray(
                 Get(fontDictionary, "DescendantFonts"),
                 resolver);
-            if (descendants is { Data.Count: > 0 })
-            {
-                var descendant = ResolveDictionary(descendants.Data[0], resolver);
-                if (descendant is not null)
-                {
-                    descriptorOwner = descendant;
-                    AddName(descendant, "BaseFont", names);
-                }
-            }
+            if (descendants is not { Data.Count: 1 })
+                return new FontProgramCandidate(names.ToArray(), null);
+
+            var descendant = ResolveDictionary(descendants.Data[0], resolver);
+            if (descendant is null)
+                return new FontProgramCandidate(names.ToArray(), null);
+
+            descriptorOwner = descendant;
+            AddName(descendant, "BaseFont", names);
         }
 
         var descriptor = ResolveDictionary(
@@ -185,15 +185,20 @@ internal sealed class PdfEmbeddedFontProgramCatalog
         DictionaryToken descriptor,
         Func<IToken, IToken?> resolver)
     {
+        var streams = new List<StreamToken>();
         foreach (var key in new[] { "FontFile", "FontFile2", "FontFile3" })
         {
             var token = Get(descriptor, key);
+            if (token is null)
+                continue;
+
             var resolved = Resolve(token, resolver);
-            if (resolved is StreamToken stream)
-                return stream;
+            if (resolved is not StreamToken stream)
+                return null;
+            streams.Add(stream);
         }
 
-        return null;
+        return streams.Count == 1 ? streams[0] : null;
     }
 
     private static DictionaryToken? FindInheritedResources(
