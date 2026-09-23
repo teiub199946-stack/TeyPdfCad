@@ -1,3 +1,4 @@
+using ACadSharp;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Dwg;
@@ -236,6 +237,112 @@ public sealed class DwgDocumentWriterTests
             dimension.Style.Style.Filename,
             StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1d, dimension.Style.Style.Width, 6);
+    }
+
+    [Fact]
+    public void Writer_maps_source_dimension_colors_weights_dashes_and_text_height_to_isolated_style()
+    {
+        var dimStyle = new VectorStyle(
+            RgbColor: 0x445566,
+            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint,
+            DashPatternPoints:
+            [
+                4d / VectorPdfPage.MillimetresPerPoint,
+                2d / VectorPdfPage.MillimetresPerPoint
+            ]);
+        var extStyle = new VectorStyle(
+            RgbColor: 0x778899,
+            StrokeWidthPoints: 0.35 / VectorPdfPage.MillimetresPerPoint,
+            DashPatternPoints:
+            [
+                1d / VectorPdfPage.MillimetresPerPoint,
+                1d / VectorPdfPage.MillimetresPerPoint
+            ]);
+        var textStyle = new VectorStyle(RgbColor: 0x112233);
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("dim", new Point2(0, 5), new Point2(10, 5), dimStyle),
+            new VectorLine("ext-1", new Point2(0, 0), new Point2(0, 6), extStyle),
+            new VectorLine("ext-2", new Point2(10, 0), new Point2(10, 6), extStyle),
+            new VectorLine("arrow-1", new Point2(0, 5), new Point2(1, 6), dimStyle),
+            new VectorLine("arrow-2", new Point2(10, 5), new Point2(9, 6), dimStyle),
+            new VectorText(
+                "text",
+                "10",
+                new Point2(5, 5),
+                3.2 / VectorPdfPage.MillimetresPerPoint,
+                textStyle,
+                AdvanceWidthPoints: 5d / VectorPdfPage.MillimetresPerPoint,
+                FontName: "Helvetica",
+                VisualCenter: new Point2(5, 6.6))
+        ]);
+        var appearance = new DimensionSourceAppearance(
+            new DimensionSourceTextAppearance(
+                "10", new(5, 5), 3.2, 0, null, 0x112233, ["text"],
+                "Helvetica", 5d, new(5, 6.6)),
+            new DimensionSourceLineAppearance(
+                new(0, 5), new(10, 5), null, 0x445566, 0.25, [4d, 2d], ["dim"]),
+            [
+                new DimensionSourceLineAppearance(
+                    new(0, 0), new(0, 6), null, 0x778899, 0.35, [1d, 1d], ["ext-1"]),
+                new DimensionSourceLineAppearance(
+                    new(10, 0), new(10, 6), null, 0x778899, 0.35, [1d, 1d], ["ext-2"])
+            ],
+            [
+                new DimensionSourceLineAppearance(
+                    new(0, 5), new(1, 6), null, 0x445566, 0.25, [4d, 2d], ["arrow-1"]),
+                new DimensionSourceLineAppearance(
+                    new(10, 5), new(9, 6), null, 0x445566, 0.25, [4d, 2d], ["arrow-2"])
+            ]);
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new(0, 0),
+            new(10, 0),
+            new(5, 5),
+            10,
+            10,
+            1,
+            0.95,
+            "10",
+            1,
+            ["dim", "ext-1", "ext-2", "arrow-1", "arrow-2", "text"])
+        {
+            RotationRadians = 0,
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("arrow-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ],
+            SourceAppearance = appearance
+        };
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([candidate], [], 1, 0.95);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var dimension = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Dimension>());
+        var style = dimension.Style;
+
+        Assert.NotNull(style);
+        Assert.Contains("_SRC_", style.Name, StringComparison.Ordinal);
+        Assert.Equal(3.2d, style.TextHeight, 6);
+        Assert.Equal(Color.FromTrueColor(0x445566).ToString(), style.DimensionLineColor.ToString());
+        Assert.Equal(Color.FromTrueColor(0x778899).ToString(), style.ExtensionLineColor.ToString());
+        Assert.Equal(Color.FromTrueColor(0x112233).ToString(), style.TextColor.ToString());
+        Assert.Equal((LineWeightType)25, style.DimensionLineWeight);
+        Assert.Equal((LineWeightType)35, style.ExtensionLineWeight);
+        Assert.Equal([4d, -2d], style.LineType.Segments.Select(segment => segment.Length).ToArray());
+        Assert.Equal([1d, -1d], style.LineTypeExt1.Segments.Select(segment => segment.Length).ToArray());
+        Assert.Equal([1d, -1d], style.LineTypeExt2.Segments.Select(segment => segment.Length).ToArray());
+        Assert.Equal(0d, style.ExtensionLineOffset, 6);
+        Assert.Equal(1d, style.ExtensionLineExtension, 6);
     }
 
     [Fact]
