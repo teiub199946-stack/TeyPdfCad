@@ -36,7 +36,7 @@ public sealed class DimensionMetricComparatorTests
         """;
         var native = """
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -66,7 +66,32 @@ public sealed class DimensionMetricComparatorTests
                   "fontResolvedPath": "C:\\Windows\\Fonts\\arial.ttf",
                   "fontSha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                   "nominalTextHeight": 2.5,
-                  "entityWidthFactor": 1
+                  "entityWidthFactor": 1,
+                  "fragments": [
+                    {
+                      "text": "100",
+                      "trueTypeFont": "Arial",
+                      "shxFont": "",
+                      "extentWidth": 7.5,
+                      "extentHeight": 2.5,
+                      "capsHeight": 2.5,
+                      "trackingFactor": 1,
+                      "obliqueAngle": 0,
+                      "locationX": 15,
+                      "locationY": 20,
+                      "locationZ": 0,
+                      "directionX": 1,
+                      "directionY": 0,
+                      "directionZ": 0,
+                      "bold": false,
+                      "italic": false,
+                      "stackTop": false,
+                      "stackBottom": false,
+                      "underlined": false,
+                      "overlined": false,
+                      "strikethrough": false
+                    }
+                  ]
                 }
               ]
             }
@@ -96,7 +121,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = """
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -117,6 +142,25 @@ public sealed class DimensionMetricComparatorTests
         var report = DimensionMetricComparator.Compare(source, native);
 
         Assert.Contains("native-candidate-id-missing", report.GlobalBlockers);
+        Assert.False(Assert.Single(report.Candidates).MeasurementsAreUsable);
+    }
+
+    [Fact]
+    public void Comparator_rejects_legacy_schema_without_fragment_evidence()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var native = $"""
+        {
+          "schemaVersion": "2",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var report = DimensionMetricComparator.Compare(source, native);
+
+        Assert.Contains("unsupported-native-metrics-schema", report.GlobalBlockers);
         Assert.False(Assert.Single(report.Candidates).MeasurementsAreUsable);
     }
 
@@ -146,7 +190,7 @@ public sealed class DimensionMetricComparatorTests
         var oneNative = NativeDimension("candidate-1", "100", 7.5);
         var native = $$"""
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{oneNative}}, {{oneNative}}]
@@ -176,7 +220,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{dbTextNative}}]
@@ -210,7 +254,7 @@ public sealed class DimensionMetricComparatorTests
                 nativePath,
                 $"""
                 {
-                  "schemaVersion": "2",
+                  "schemaVersion": "3",
                   "drawingName": "probe.dwg",
                   "drawingUnits": "Millimeters",
                   "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -253,7 +297,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = $$"""
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 8.0)}}]
@@ -276,7 +320,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "10 mm", 7.5);
         var native = $"""
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "10 mm", 7.5)}}]
@@ -302,7 +346,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -317,7 +361,36 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
-    public void Comparator_accepts_matching_source_font_sha_only_as_one_proof_component()
+    public void Comparator_rejects_multiple_or_formatted_native_fragments()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var one = NativeDimension("candidate-1", "100", 7.5);
+        var formatted = one
+            .Replace(
+                "\"trackingFactor\": 1",
+                "\"trackingFactor\": 1.1",
+                StringComparison.Ordinal)
+            .Replace(
+                "\"underlined\": false",
+                "\"underlined\": true",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "3",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{formatted}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.Contains("native-fragment-tracking-not-one", candidate.Blockers);
+        Assert.Contains("native-fragment-formatting-not-plain", candidate.Blockers);
+    }
+
     {
         const string sha = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
         var source = $$"""
@@ -348,7 +421,7 @@ public sealed class DimensionMetricComparatorTests
         """;
         var native = $$"""
         {
-          "schemaVersion": "2",
+          "schemaVersion": "3",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -434,7 +507,32 @@ public sealed class DimensionMetricComparatorTests
               "fontResolvedPath": "C:\\Windows\\Fonts\\arial.ttf",
               "fontSha256": "{{fontSha}}",
               "nominalTextHeight": 2.5,
-              "entityWidthFactor": 1
+              "entityWidthFactor": 1,
+              "fragments": [
+                {
+                  "text": "{{text}}",
+                  "trueTypeFont": "Arial",
+                  "shxFont": "",
+                  "extentWidth": {{width.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
+                  "extentHeight": 2.5,
+                  "capsHeight": 2.5,
+                  "trackingFactor": 1,
+                  "obliqueAngle": 0,
+                  "locationX": 15,
+                  "locationY": 20,
+                  "locationZ": 0,
+                  "directionX": 1,
+                  "directionY": 0,
+                  "directionZ": 0,
+                  "bold": false,
+                  "italic": false,
+                  "stackTop": false,
+                  "stackBottom": false,
+                  "underlined": false,
+                  "overlined": false,
+                  "strikethrough": false
+                }
+              ]
             }
           ]
         }
