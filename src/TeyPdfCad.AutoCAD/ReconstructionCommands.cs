@@ -284,6 +284,7 @@ public sealed class ReconstructionCommands
                 var textMetrics = new List<DimensionTextMetric>();
                 var blockGeometry = new List<DimensionBlockGeometryMetric>();
                 var explodedGeometry = new List<DimensionBlockGeometryMetric>();
+                var explodedTextMetrics = new List<DimensionTextMetric>();
                 string? error = null;
                 var dimBlockHandle = string.Empty;
                 var candidateIdentity = ReadCandidateIdentity(dimension);
@@ -373,9 +374,12 @@ public sealed class ReconstructionCommands
                             }
                         }
 
-                        explodedGeometry.AddRange(ReadExplodedDimensionGeometry(
+                        var explodedEvidence = ReadExplodedDimensionEvidence(
                             transaction,
-                            dimension));
+                            database,
+                            dimension);
+                        explodedGeometry.AddRange(explodedEvidence.Geometry);
+                        explodedTextMetrics.AddRange(explodedEvidence.TextMetrics);
 
                         if (textMetrics.Count == 0)
                         {
@@ -399,7 +403,8 @@ public sealed class ReconstructionCommands
                     candidateIdentity.CandidateId,
                     candidateIdentity.Role,
                     blockGeometry,
-                    explodedGeometry));
+                    explodedGeometry,
+                    explodedTextMetrics));
             }
 
             // RecomputeDimensionBlock can update the anonymous display block.
@@ -604,11 +609,15 @@ public sealed class ReconstructionCommands
             vertexCount);
     }
 
-    private static IReadOnlyList<DimensionBlockGeometryMetric> ReadExplodedDimensionGeometry(
+    private static (
+        IReadOnlyList<DimensionBlockGeometryMetric> Geometry,
+        IReadOnlyList<DimensionTextMetric> TextMetrics) ReadExplodedDimensionEvidence(
         Transaction transaction,
+        Database database,
         Dimension dimension)
     {
-        var output = new List<DimensionBlockGeometryMetric>();
+        var geometry = new List<DimensionBlockGeometryMetric>();
+        var textMetrics = new List<DimensionTextMetric>();
         var exploded = new DBObjectCollection();
 
         try
@@ -620,18 +629,83 @@ public sealed class ReconstructionCommands
                 if (item is not Entity entity)
                     continue;
 
-                output.Add(ReadDimensionBlockGeometry(
+                var identity = "explode-" + ordinal.ToString(CultureInfo.InvariantCulture);
+                ordinal++;
+
+                if (entity is MText mtext)
+                {
+                    var style = ReadTextStyle(
+                        transaction,
+                        database,
+                        mtext.TextStyleId);
+                    textMetrics.Add(new DimensionTextMetric(
+                        "MText",
+                        identity,
+                        mtext.Contents ?? string.Empty,
+                        "mtext-actual-bounds-exploded-wcs",
+                        mtext.ActualWidth,
+                        mtext.ActualHeight,
+                        mtext.Rotation,
+                        mtext.Location.X,
+                        mtext.Location.Y,
+                        mtext.Location.Z,
+                        style.Name,
+                        style.FontFile,
+                        style.WidthFactor,
+                        style.FontResolvedPath,
+                        style.FontSha256,
+                        mtext.TextHeight,
+                        style.WidthFactor,
+                        BackgroundFill: mtext.BackgroundFill,
+                        UseBackgroundColor: mtext.UseBackgroundColor,
+                        BackgroundScaleFactor: mtext.BackgroundFill
+                            ? mtext.BackgroundScaleFactor
+                            : 0d,
+                        ShowBorders: mtext.ShowBorders,
+                        Attachment: mtext.Attachment.ToString(),
+                        Fragments: ReadMTextFragments(mtext)));
+                    continue;
+                }
+
+                if (entity is DBText dbText)
+                {
+                    var style = ReadTextStyle(
+                        transaction,
+                        database,
+                        dbText.TextStyleId);
+                    var extents = dbText.GeometricExtents;
+                    textMetrics.Add(new DimensionTextMetric(
+                        "DBText",
+                        identity,
+                        dbText.TextString ?? string.Empty,
+                        "dbtext-geometric-extents-exploded-wcs",
+                        Math.Abs(extents.MaxPoint.X - extents.MinPoint.X),
+                        Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y),
+                        dbText.Rotation,
+                        dbText.Position.X,
+                        dbText.Position.Y,
+                        dbText.Position.Z,
+                        style.Name,
+                        style.FontFile,
+                        style.WidthFactor,
+                        style.FontResolvedPath,
+                        style.FontSha256,
+                        dbText.Height,
+                        dbText.WidthFactor));
+                    continue;
+                }
+
+                geometry.Add(ReadDimensionBlockGeometry(
                     transaction,
                     entity,
-                    "explode-" + ordinal.ToString(CultureInfo.InvariantCulture)));
-                ordinal++;
+                    identity));
             }
 
-            return output;
+            return (geometry, textMetrics);
         }
         catch (System.Exception)
         {
-            return [];
+            return ([], []);
         }
         finally
         {
