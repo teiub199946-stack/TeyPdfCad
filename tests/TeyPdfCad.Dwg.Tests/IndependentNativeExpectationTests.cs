@@ -330,6 +330,7 @@ public sealed class IndependentNativeExpectationTests
         var expected = manifest.Candidates[candidateId];
         Assert.Equal("35,10,0", expected.Entities.Single().RequiredProperties["expectedTextMiddlePoint"]);
         Assert.Equal("true", expected.Entities.Single().RequiredProperties["expectedTextUserDefinedLocation"]);
+        Assert.Equal("0,0,1", expected.Entities.Single().RequiredProperties["expectedNormal"]);
 
         var drawing = new CadDocument();
         var style = new DimensionStyle("TEYPDFCAD_SCALE_1")
@@ -351,7 +352,8 @@ public sealed class IndependentNativeExpectationTests
             Style = style,
             Text = "50",
             TextMiddlePoint = new XYZ(40, 10, 0),
-            IsTextUserDefinedLocation = false
+            IsTextUserDefinedLocation = false,
+            Normal = new XYZ(0, 0, -1)
         };
         CandidateMetadataCodec.Write(wrong, new CandidateEntityMetadata(candidateId, "primary"));
         drawing.Entities.Add(wrong);
@@ -366,6 +368,8 @@ public sealed class IndependentNativeExpectationTests
             value.Contains("expectedTextMiddlePoint", StringComparison.Ordinal));
         Assert.Contains(verification.InvalidEntities, value =>
             value.Contains("expectedTextUserDefinedLocation", StringComparison.Ordinal));
+        Assert.Contains(verification.InvalidEntities, value =>
+            value.Contains("expectedNormal", StringComparison.Ordinal));
     }
 
     private static SemanticReconstructionResult EmptySemantics()
