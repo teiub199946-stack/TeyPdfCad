@@ -125,6 +125,27 @@ internal static class NativeExpectationBuilder
                 var dimension = BuildExpectedDimension(
                     sheet,
                     candidate);
+                var dimensionProperties = new List<(string Key, string Value)>
+                {
+                    ("expectedMeasurement", Number(candidate.ReconstructedMeasurement)),
+                    ("measurementTolerance", "0.000001"),
+                    ("expectedDimensionText", NativeDimensionTextBuilder.Build(
+                        candidate.SourceText,
+                        candidate.DisplayedValue)),
+                    ("expectedLayer", "PDF_РАЗМЕРЫ"),
+                    ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension))
+                };
+                if (candidate.SourceAppearance?.Text.VisualCenter is { } visualCenter)
+                {
+                    dimensionProperties.Add((
+                        "expectedTextMiddlePoint",
+                        Point(new XYZ(
+                            sheet.ModelOriginX + visualCenter.X,
+                            sheet.ModelOriginY + visualCenter.Y,
+                            0d))));
+                    dimensionProperties.Add(("expectedTextUserDefinedLocation", "true"));
+                }
+
                 AddExpected(
                     expected,
                     equivalence.GetRequired(candidateId),
@@ -133,14 +154,7 @@ internal static class NativeExpectationBuilder
                         "primary",
                         "Dimension",
                         DwgEntityFingerprint.ComputeGeometry(dimension),
-                        Properties(
-                            ("expectedMeasurement", Number(candidate.ReconstructedMeasurement)),
-                            ("measurementTolerance", "0.000001"),
-                            ("expectedDimensionText", NativeDimensionTextBuilder.Build(
-                                candidate.SourceText,
-                                candidate.DisplayedValue)),
-                            ("expectedLayer", "PDF_РАЗМЕРЫ"),
-                            ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension)))));
+                        Properties(dimensionProperties.ToArray())));
             }
 
             foreach (var candidate in semantics.Leaders)
@@ -348,6 +362,14 @@ internal static class NativeExpectationBuilder
         dimension.Text = NativeDimensionTextBuilder.Build(
             candidate.SourceText,
             candidate.DisplayedValue);
+        if (candidate.SourceAppearance?.Text.VisualCenter is { } visualCenter)
+        {
+            dimension.TextMiddlePoint = new XYZ(
+                sheet.ModelOriginX + visualCenter.X,
+                sheet.ModelOriginY + visualCenter.Y,
+                0d);
+            dimension.IsTextUserDefinedLocation = true;
+        }
         return dimension;
     }
 
@@ -484,6 +506,9 @@ internal static class NativeExpectationBuilder
             pair => pair.Key,
             pair => pair.Value,
             StringComparer.Ordinal);
+
+    private static string Point(XYZ point)
+        => string.Join(",", Number(point.X), Number(point.Y), Number(point.Z));
 
     private static string Number(double value)
         => value.ToString("R", CultureInfo.InvariantCulture);
