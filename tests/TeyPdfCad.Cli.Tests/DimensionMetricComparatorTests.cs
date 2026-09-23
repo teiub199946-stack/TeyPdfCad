@@ -116,6 +116,27 @@ public sealed class DimensionMetricComparatorTests
                   "nestedBlockName": "",
                   "vertexCount": 0
                 }
+              ],
+              "explodedGeometry": [
+                {
+                  "entityType": "Line",
+                  "entityHandle": "explode-0",
+                  "geometryKind": "line",
+                  "startX": 0,
+                  "startY": 5,
+                  "startZ": 0,
+                  "endX": 10,
+                  "endY": 5,
+                  "endZ": 0,
+                  "minX": 0,
+                  "minY": 5,
+                  "minZ": 0,
+                  "maxX": 10,
+                  "maxY": 5,
+                  "maxZ": 0,
+                  "nestedBlockName": "",
+                  "vertexCount": 0
+                }
               ]
             }
           ]
