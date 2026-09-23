@@ -189,6 +189,10 @@ public sealed class ConversionPipelineTests
         Assert.True(
             evidence.GetProperty("sourceVisibleWidthMm").GetDouble() > 0d);
         Assert.True(
+            evidence.GetProperty("sourceGlyphInkWidthMm").GetDouble() > 0d);
+        Assert.True(
+            evidence.GetProperty("sourceGlyphInkHeightMm").GetDouble() > 0d);
+        Assert.True(
             evidence.GetProperty("sourceHeightMm").GetDouble() > 0d);
         Assert.Equal(
             "drawing-wcs-model-mm",
