@@ -75,6 +75,55 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
     }
 
     [Fact]
+    public void Descriptor_with_multiple_font_program_entries_is_fail_closed()
+    {
+        var descriptor = Dictionary(
+            ("Type", Name("FontDescriptor")),
+            ("FontName", Name("ArialMT")),
+            ("FontFile", new StreamToken(
+                EmptyDictionary(),
+                Encoding.ASCII.GetBytes("type1-program"))),
+            ("FontFile2", new StreamToken(
+                EmptyDictionary(),
+                Encoding.ASCII.GetBytes("truetype-program"))));
+        var resources = Resources(("F1", Font("ArialMT", descriptor)));
+
+        var catalog = PdfEmbeddedFontProgramCatalog.CreateFromResources(
+            resources,
+            token => token);
+
+        Assert.Null(catalog.ResolveUniqueSha256("ArialMT"));
+    }
+
+    [Fact]
+    public void Type0_with_multiple_descendants_is_fail_closed()
+    {
+        var bytes = Encoding.ASCII.GetBytes("cid-font-program");
+        var descendant1 = Font(
+            "ArialUnicodeMS",
+            Descriptor(
+                "ArialUnicodeMS",
+                new StreamToken(EmptyDictionary(), bytes)));
+        var descendant2 = Font(
+            "ArialUnicodeMS",
+            Descriptor(
+                "ArialUnicodeMS",
+                new StreamToken(EmptyDictionary(), bytes)));
+        var type0 = Dictionary(
+            ("Type", Name("Font")),
+            ("Subtype", Name("Type0")),
+            ("BaseFont", Name("ArialUnicodeMS")),
+            ("DescendantFonts", new ArrayToken([descendant1, descendant2])));
+        var resources = Resources(("F1", type0));
+
+        var catalog = PdfEmbeddedFontProgramCatalog.CreateFromResources(
+            resources,
+            token => token);
+
+        Assert.Null(catalog.ResolveUniqueSha256("ArialUnicodeMS"));
+    }
+
+    [Fact]
     public void Type0_font_uses_descendant_font_descriptor_program()
     {
         var fontBytes = Encoding.ASCII.GetBytes("cid-font-program");
