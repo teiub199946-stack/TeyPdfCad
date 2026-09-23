@@ -1,6 +1,7 @@
 using TeyPdfCad.Core.Documents;
 using TeyPdfCad.Core.Geometry;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.WordExtractor;
 
 namespace TeyPdfCad.Pdf;
@@ -32,10 +33,18 @@ public sealed class PdfPigVectorDocumentReader
                 mediaBounds.Left,
                 mediaBounds.Bottom);
             var entities = graphics.Entities.ToList();
+            var diagnostics = graphics.Diagnostics.ToList();
             var words = NearestNeighbourWordExtractor.Instance.GetWords(sourcePage.Letters);
             var textSequence = 0;
+            var skippedHiddenText = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
+                if (word.Letters.Any(letter => !IsVisible(letter.RenderingMode)))
+                {
+                    skippedHiddenText = true;
+                    continue;
+                }
+
                 var first = word.Letters[0];
                 var last = word.Letters[^1];
                 var baselineX = last.EndBaseLine.X - first.StartBaseLine.X;
@@ -61,17 +70,28 @@ public sealed class PdfPigVectorDocumentReader
                     FontName: GetWordFontName(word)));
             }
 
+            if (skippedHiddenText)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "hidden-pdf-text-skipped",
+                    $"Hidden or clipping-only PDF text was intentionally omitted on page {sourcePage.Number} so it cannot become visible DWG text."));
+            }
+
             pages.Add(new VectorPdfPage(
                 Number: sourcePage.Number,
                 WidthPoints: sourcePage.Width,
                 HeightPoints: sourcePage.Height,
                 RotationDegrees: sourcePage.Rotation.Value,
                 Entities: entities,
-                SourceDiagnostics: graphics.Diagnostics));
+                SourceDiagnostics: diagnostics));
         }
 
         return Task.FromResult(new VectorPdfDocument(pages));
     }
+
+    private static bool IsVisible(TextRenderingMode mode)
+        => mode is not TextRenderingMode.Neither
+            and not TextRenderingMode.NeitherClip;
 
     private static string? GetWordFontName(UglyToad.PdfPig.Content.Word word)
     {
