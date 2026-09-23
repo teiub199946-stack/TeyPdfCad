@@ -43,9 +43,11 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Equal(
             ["A2", "F2"],
             parsed.Dimensions[1].TextMetrics.Select(item => item.EntityHandle).ToArray());
-        Assert.Contains("\"schemaVersion\": \"2\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": \"3\"", first, StringComparison.Ordinal);
         Assert.Contains("\"width\": 8.25", first, StringComparison.Ordinal);
         Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"fragments\":", first, StringComparison.Ordinal);
+        Assert.Contains("\"trackingFactor\": 1.0", first, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -91,5 +93,32 @@ public sealed class DimensionMetricsReportFormatterTests
             0,
             "TEYPDFCAD_TEXT",
             "arial.ttf",
-            1);
+            1,
+            Fragments: type == "MText"
+                ?
+                [
+                    new DimensionTextFragmentMetric(
+                        "100",
+                        "Arial",
+                        string.Empty,
+                        width,
+                        height,
+                        height,
+                        1d,
+                        0d,
+                        1d,
+                        2d,
+                        0d,
+                        1d,
+                        0d,
+                        0d,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false)
+                ]
+                : []);
 }
