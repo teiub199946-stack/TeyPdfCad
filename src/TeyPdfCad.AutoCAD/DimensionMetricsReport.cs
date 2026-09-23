@@ -47,6 +47,11 @@ internal sealed record DimensionTextMetric(
     string FontSha256 = "",
     double NominalTextHeight = 0d,
     double EntityWidthFactor = 1d,
+    bool BackgroundFill = false,
+    bool UseBackgroundColor = false,
+    double BackgroundScaleFactor = 0d,
+    bool ShowBorders = false,
+    string Attachment = "",
     IReadOnlyList<DimensionTextFragmentMetric>? Fragments = null);
 
 internal sealed record DimensionBlockGeometryMetric(
@@ -91,7 +96,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "6";
+    public const string SchemaVersion = "7";
 
     public static string Format(DimensionMetricsReport report)
     {
