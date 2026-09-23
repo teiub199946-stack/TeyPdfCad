@@ -1211,11 +1211,14 @@ public sealed class SourceEquivalenceAssessorTests
                     5.0,
                     new(7.5, 6.25),
                     4.5,
+                    2.5,
                     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                     "TrueType",
                     "WinAnsiEncoding",
                     false,
-                    false),
+                    false,
+                    4.4,
+                    2.4),
                 new DimensionSourceLineAppearance(
                     new(0, 5),
                     new(10, 5),
@@ -1287,11 +1290,14 @@ public sealed class SourceEquivalenceAssessorTests
                     FontName: "Helvetica",
                     VisualCenter: new(7.5, 6.25),
                     VisibleWidthPoints: 4.5 / VectorPdfPage.MillimetresPerPoint,
+                    VisibleHeightPoints: 2.5 / VectorPdfPage.MillimetresPerPoint,
                     FontProgramSha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                     FontProgramSubtype: "TrueType",
                     FontEncodingName: "WinAnsiEncoding",
                     FontHasToUnicode: false,
-                    FontIsSubset: false)
+                    FontIsSubset: false,
+                    GlyphInkWidthPoints: 4.4 / VectorPdfPage.MillimetresPerPoint,
+                    GlyphInkHeightPoints: 2.4 / VectorPdfPage.MillimetresPerPoint)
             ]);
 
         return (candidate, page);
