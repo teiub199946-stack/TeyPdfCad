@@ -151,6 +151,20 @@ public sealed class PdfPigVectorDocumentReaderTests
     }
 
     [Fact]
+    public async Task Reader_keeps_visible_text_source_id_tied_to_raw_word_ordinal_after_hidden_text()
+    {
+        const string contents = "BT /F1 12 Tf 3 Tr 72 700 Td (HIDDEN) Tj 0 Tr 0 -30 Td (VISIBLE) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var visible = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+
+        Assert.Equal("VISIBLE", visible.Value);
+        Assert.Equal("page-1-text-2", visible.SourceId);
+        Assert.Contains(page.Diagnostics, diagnostic => diagnostic.Code == "hidden-pdf-text-skipped");
+    }
+
+    [Fact]
     public async Task Reader_reports_text_clipping_without_hiding_visible_fill_clip_text()
     {
         const string contents = "0 0 m 10 10 l S BT /F1 12 Tf 4 Tr 72 700 Td (CLIPPED) Tj ET";
