@@ -284,6 +284,63 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_proves_cross_snapshot_line_appearance_for_explicit_styles()
+    {
+        var source = WithSourceLineAppearance(
+            SourceReport("candidate-1", "100", 7.5));
+        var nativeDimension = WithExplicitLineAppearance(
+            TranslateBlockSnapshotX(
+                NativeDimension("candidate-1", "100", 7.5),
+                100d));
+        var native = $"""
+        {
+          "schemaVersion": "9",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.True(candidate.CrossSnapshotLineAppearanceEvidenceUsable);
+        Assert.DoesNotContain(
+            "cross-snapshot-line-appearance-mismatch",
+            candidate.Blockers);
+    }
+
+    [Fact]
+    public void Comparator_rejects_cross_snapshot_explicit_color_drift()
+    {
+        var source = WithSourceLineAppearance(
+            SourceReport("candidate-1", "100", 7.5));
+        var nativeDimension = WithExplicitLineAppearance(
+            NativeDimension("candidate-1", "100", 7.5));
+        var root = System.Text.Json.Nodes.JsonNode.Parse(nativeDimension)!.AsObject();
+        var firstBlockLine = root["blockGeometry"]!.AsArray()[0]!.AsObject();
+        firstBlockLine["rgbColor"] = 0x112233;
+        nativeDimension = root.ToJsonString();
+        var native = $"""
+        {
+          "schemaVersion": "9",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.CrossSnapshotLineAppearanceEvidenceUsable);
+        Assert.Contains(
+            "cross-snapshot-line-appearance-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_cross_snapshot_fragment_location_drift()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
