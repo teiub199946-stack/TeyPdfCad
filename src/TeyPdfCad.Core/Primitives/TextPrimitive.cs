@@ -14,7 +14,11 @@ public sealed record TextPrimitive(
     double? AdvanceWidth = null,
     Point2? VisualCenter = null,
     double? VisibleWidth = null,
-    string? FontProgramSha256 = null)
+    string? FontProgramSha256 = null,
+    string? FontProgramSubtype = null,
+    string? FontEncodingName = null,
+    bool? FontHasToUnicode = null,
+    bool? FontIsSubset = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 }
