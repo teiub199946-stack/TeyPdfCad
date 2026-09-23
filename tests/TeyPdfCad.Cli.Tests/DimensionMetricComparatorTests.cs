@@ -76,7 +76,8 @@ public sealed class DimensionMetricComparatorTests
         Assert.Equal("p1:dimension:abc", candidate.CandidateId);
         Assert.True(candidate.MeasurementsAreUsable);
         Assert.False(candidate.SourceToNativeEquivalenceProven);
-        Assert.Equal(0d, candidate.VisibleWidthDeltaMm, 9);
+        Assert.True(candidate.VisibleWidthDeltaMm.HasValue);
+        Assert.Equal(0d, candidate.VisibleWidthDeltaMm.Value, 9);
         Assert.Equal(
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             candidate.NativeFontSha256);
@@ -125,7 +126,8 @@ public sealed class DimensionMetricComparatorTests
 
         Assert.True(candidate.MeasurementsAreUsable);
         Assert.False(candidate.SourceToNativeEquivalenceProven);
-        Assert.Equal(0.5d, candidate.VisibleWidthDeltaMm, 9);
+        Assert.True(candidate.VisibleWidthDeltaMm.HasValue);
+        Assert.Equal(0.5d, candidate.VisibleWidthDeltaMm.Value, 9);
         Assert.Contains("visible-width-mismatch", candidate.Blockers);
     }
 
