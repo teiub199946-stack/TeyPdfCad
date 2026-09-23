@@ -68,8 +68,8 @@ public sealed class SourceEquivalenceAssessorTests
             SourceReplacementPlanner.GetCandidateKey(candidate, 1));
 
         Assert.False(assessment.IsComplete);
-        Assert.Contains("captured before DWG emission", assessment.Reason, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("not yet independently proven equivalent", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("arrow", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("native DIMENSION", assessment.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
