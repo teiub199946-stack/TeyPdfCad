@@ -72,6 +72,9 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Contains("\"schemaVersion\": \"4\"", first, StringComparison.Ordinal);
         Assert.Contains("\"width\": 8.25", first, StringComparison.Ordinal);
         Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"backgroundFill\": false", first, StringComparison.Ordinal);
+        Assert.Contains("\"showBorders\": false", first, StringComparison.Ordinal);
+        Assert.Contains("\"attachment\": \"MiddleCenter\"", first, StringComparison.Ordinal);
         Assert.Contains("\"fragments\":", first, StringComparison.Ordinal);
         Assert.Contains("\"trackingFactor\": 1.0", first, StringComparison.Ordinal);
         Assert.Contains("\"blockGeometry\":", first, StringComparison.Ordinal);
@@ -122,6 +125,11 @@ public sealed class DimensionMetricsReportFormatterTests
             "TEYPDFCAD_TEXT",
             "arial.ttf",
             1,
+            BackgroundFill: false,
+            UseBackgroundColor: false,
+            BackgroundScaleFactor: 1.5d,
+            ShowBorders: false,
+            Attachment: "MiddleCenter",
             Fragments: type == "MText"
                 ?
                 [
