@@ -87,6 +87,55 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_reports_global_blocker_for_native_metric_without_candidate_id()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var native = """
+        {
+          "schemaVersion": "2",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [
+            {
+              "dimensionHandle": "10",
+              "dimensionType": "RotatedDimension",
+              "measurement": 100,
+              "dimensionText": "100",
+              "dimensionBlockHandle": "20",
+              "candidateId": "",
+              "candidateRole": "primary",
+              "textMetrics": []
+            }
+          ]
+        }
+        """;
+
+        var report = DimensionMetricComparator.Compare(source, native);
+
+        Assert.Contains("native-candidate-id-missing", report.GlobalBlockers);
+        Assert.False(Assert.Single(report.Candidates).MeasurementsAreUsable);
+    }
+
+    [Fact]
+    public void Comparator_rejects_unknown_native_metrics_schema()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var native = $"""
+        {
+          "schemaVersion": "999",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var report = DimensionMetricComparator.Compare(source, native);
+
+        Assert.Contains("unsupported-native-metrics-schema", report.GlobalBlockers);
+        Assert.False(Assert.Single(report.Candidates).MeasurementsAreUsable);
+    }
+
+    [Fact]
     public void Comparator_fails_closed_on_duplicate_native_candidate_identity()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
