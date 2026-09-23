@@ -3,6 +3,7 @@ using TeyPdfCad.Core.Geometry;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.WordExtractor;
+using UglyToad.PdfPig.Tokens;
 
 namespace TeyPdfCad.Pdf;
 
@@ -24,14 +25,15 @@ public sealed class PdfPigVectorDocumentReader
             var mediaBounds = sourcePage.MediaBox.Bounds;
             var mediaWidth = sourcePage.Rotation.SwapsAxis ? mediaBounds.Height : mediaBounds.Width;
             var mediaHeight = sourcePage.Rotation.SwapsAxis ? mediaBounds.Width : mediaBounds.Height;
+            var rawMediaOrigin = TryGetDirectRawMediaBoxOrigin(sourcePage);
             var graphics = graphicsInterpreter.InterpretDetailed(
                 sourcePage.Operations,
                 sourcePage.Number,
                 sourcePage.Rotation.Value,
                 mediaWidth,
                 mediaHeight,
-                mediaBounds.Left,
-                mediaBounds.Bottom);
+                rawMediaOrigin?.Left ?? mediaBounds.Left,
+                rawMediaOrigin?.Bottom ?? mediaBounds.Bottom);
             var entities = graphics.Entities.ToList();
             var diagnostics = graphics.Diagnostics.ToList();
             var words = NearestNeighbourWordExtractor.Instance.GetWords(sourcePage.Letters);
@@ -124,6 +126,26 @@ public sealed class PdfPigVectorDocumentReader
         }
 
         return Task.FromResult(new VectorPdfDocument(pages));
+    }
+
+    private static (double Left, double Bottom)? TryGetDirectRawMediaBoxOrigin(
+        UglyToad.PdfPig.Content.Page page)
+    {
+        if (!page.Dictionary.TryGet<ArrayToken>(NameToken.MediaBox, out var mediaBox)
+            || mediaBox.Length != 4
+            || mediaBox[0] is not NumericToken firstX
+            || mediaBox[1] is not NumericToken firstY
+            || mediaBox[2] is not NumericToken secondX
+            || mediaBox[3] is not NumericToken secondY)
+        {
+            return null;
+        }
+
+        var left = Math.Min(firstX.Double, secondX.Double);
+        var bottom = Math.Min(firstY.Double, secondY.Double);
+        return double.IsFinite(left) && double.IsFinite(bottom)
+            ? (left, bottom)
+            : null;
     }
 
     private static bool IsVisible(TextRenderingMode mode)
