@@ -121,9 +121,9 @@ public static class DwgEntityFingerprint
             style.Style?.Filename ?? string.Empty,
             Number(style.Style?.Height ?? 0d),
             Number(style.Style?.Width ?? 0d),
-            style.LineType?.Name ?? string.Empty,
-            style.LineTypeExt1?.Name ?? string.Empty,
-            style.LineTypeExt2?.Name ?? string.Empty);
+            LineTypeFingerprint(style.LineType),
+            LineTypeFingerprint(style.LineTypeExt1),
+            LineTypeFingerprint(style.LineTypeExt2));
     }
 
     public static string ComputeBlockDefinition(Insert insert)
@@ -185,6 +185,17 @@ public static class DwgEntityFingerprint
             entity.IsInvisible ? "1" : "0",
             candidateMetadata,
             sourceMetadata);
+    }
+
+    private static string LineTypeFingerprint(ACadSharp.Tables.LineType? lineType)
+    {
+        if (lineType is null)
+            return "<null>";
+
+        return Join(
+            lineType.Name ?? string.Empty,
+            Number(lineType.PatternLen),
+            string.Join(";", lineType.Segments.Select(segment => Number(segment.Length))));
     }
 
     private static string DimensionTextGeometry(Dimension dimension)
