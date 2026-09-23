@@ -60,5 +60,6 @@ public sealed record VectorText(
     double AdvanceWidthPoints = 0d,
     string? FontName = null,
     Point2? VisualCenter = null,
-    double VisibleWidthPoints = 0d)
+    double VisibleWidthPoints = 0d,
+    string? FontProgramSha256 = null)
     : VectorEntity(SourceId, Style, Confidence);
