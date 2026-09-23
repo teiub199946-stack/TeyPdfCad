@@ -21,7 +21,11 @@ public enum ConversionOutcome
     InvalidArgumentsOrIo = 4
 }
 
-public sealed record ConversionResult(ConversionOutcome Outcome, string ReportPath, string? DwgPath);
+public sealed record ConversionResult(
+    ConversionOutcome Outcome,
+    string ReportPath,
+    string? DwgPath,
+    string? ProbeDwgPath = null);
 
 public sealed class ConversionPipeline
 {
@@ -62,7 +66,8 @@ public sealed class ConversionPipeline
         string outputDwgPath,
         string reportPath,
         CancellationToken cancellationToken,
-        string? templateManifestPath = null)
+        string? templateManifestPath = null,
+        string? diagnosticProbeOutputPath = null)
     {
         if (string.IsNullOrWhiteSpace(inputPdfPath)) throw new ArgumentException("Input PDF path is required.", nameof(inputPdfPath));
         if (string.IsNullOrWhiteSpace(outputDwgPath)) throw new ArgumentException("Output DWG path is required.", nameof(outputDwgPath));
@@ -70,7 +75,11 @@ public sealed class ConversionPipeline
 
         try
         {
-            ValidatePaths(inputPdfPath, outputDwgPath, reportPath);
+            ValidatePaths(
+                inputPdfPath,
+                outputDwgPath,
+                reportPath,
+                diagnosticProbeOutputPath);
             await using var input = File.OpenRead(inputPdfPath);
             var document = await new PdfPigVectorDocumentReader().ReadAsync(input, cancellationToken);
             var hatchRecognition = document.Pages.ToDictionary(
@@ -97,7 +106,11 @@ public sealed class ConversionPipeline
             if (pagesWithVectors == 0)
             {
                 await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), null, cancellationToken);
-                return new ConversionResult(ConversionOutcome.UnsupportedVectorContent, reportPath, null);
+                return new ConversionResult(
+                    ConversionOutcome.UnsupportedVectorContent,
+                    reportPath,
+                    null,
+                    null);
             }
 
             var plan = new DocumentLayoutPlanner().Create(document);
@@ -110,6 +123,13 @@ public sealed class ConversionPipeline
             var outputFullPath = Path.GetFullPath(outputDwgPath);
             var outputDirectory = Path.GetDirectoryName(outputFullPath)!;
             Directory.CreateDirectory(outputDirectory);
+            var diagnosticProbeFullPath = string.IsNullOrWhiteSpace(diagnosticProbeOutputPath)
+                ? null
+                : Path.GetFullPath(diagnosticProbeOutputPath);
+            if (diagnosticProbeFullPath is not null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(diagnosticProbeFullPath)!);
+            }
             var runId = Guid.NewGuid().ToString("N");
             var probePath = Path.Combine(outputDirectory, $".teypdfcad-probe-{runId}.dwg");
             var finalPath = Path.Combine(outputDirectory, $".teypdfcad-final-{runId}.dwg");
@@ -264,6 +284,15 @@ public sealed class ConversionPipeline
                 }
                 ValidateReadBack(finalReadBack, plan, document);
 
+                // The optional probe copy is diagnostics-only: it contains the
+                // original source geometry plus native candidates and performs
+                // no destructive source suppression. Publish it only after the
+                // same probe/final structural gates have succeeded.
+                if (diagnosticProbeFullPath is not null)
+                {
+                    File.Copy(probePath, diagnosticProbeFullPath, overwrite: true);
+                }
+
                 // Publication happens only after every probe/final gate above passed.
                 File.Move(finalPath, outputFullPath, overwrite: true);
             }
@@ -335,13 +364,21 @@ public sealed class ConversionPipeline
                     && report.CandidateNotVerifiedSourceIds.Count == 0
                     && !report.AnyGeometryLost);
             await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports, suppressionDecisions), readBackSummary, cancellationToken);
-            return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
+            return new ConversionResult(
+                complete ? ConversionOutcome.Complete : ConversionOutcome.Partial,
+                reportPath,
+                outputDwgPath,
+                diagnosticProbeFullPath);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception exception)
         {
             await TryWriteFailureReportAsync(reportPath, exception.Message, cancellationToken);
-            return new ConversionResult(ConversionOutcome.InvalidArgumentsOrIo, reportPath, null);
+            return new ConversionResult(
+                ConversionOutcome.InvalidArgumentsOrIo,
+                reportPath,
+                null,
+                null);
         }
     }
 
@@ -387,21 +424,39 @@ public sealed class ConversionPipeline
                 .ToArray());
     }
 
-    private static void ValidatePaths(string inputPdfPath, string outputDwgPath, string reportPath)
+    private static void ValidatePaths(
+        string inputPdfPath,
+        string outputDwgPath,
+        string reportPath,
+        string? diagnosticProbeOutputPath)
     {
         var input = Path.GetFullPath(inputPdfPath);
         var output = Path.GetFullPath(outputDwgPath);
         var report = Path.GetFullPath(reportPath);
+        var probe = string.IsNullOrWhiteSpace(diagnosticProbeOutputPath)
+            ? null
+            : Path.GetFullPath(diagnosticProbeOutputPath);
+
         if (!string.Equals(Path.GetExtension(input), ".pdf", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Input file must use the .pdf extension.");
         if (!string.Equals(Path.GetExtension(output), ".dwg", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Output file must use the .dwg extension.");
         if (!string.Equals(Path.GetExtension(report), ".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Report file must use the .json extension.");
-        if (string.Equals(input, output, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(input, report, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(output, report, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Input PDF, output DWG and JSON report must use distinct paths.");
+        if (probe is not null
+            && !string.Equals(Path.GetExtension(probe), ".dwg", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Diagnostic probe output must use the .dwg extension.");
+        }
+
+        var paths = new[] { input, output, report }
+            .Concat(probe is null ? [] : [probe])
+            .ToArray();
+        if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length)
+        {
+            throw new InvalidDataException(
+                "Input PDF, output DWG, JSON report and diagnostic probe DWG must use distinct paths.");
+        }
     }
 
     private static TemplateLibrary? LoadTemplateLibrary(string? templateManifestPath)
