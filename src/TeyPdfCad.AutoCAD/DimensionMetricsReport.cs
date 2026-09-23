@@ -48,6 +48,25 @@ internal sealed record DimensionTextMetric(
     double EntityWidthFactor = 1d,
     IReadOnlyList<DimensionTextFragmentMetric>? Fragments = null);
 
+internal sealed record DimensionBlockGeometryMetric(
+    string EntityType,
+    string EntityHandle,
+    string GeometryKind,
+    double? StartX,
+    double? StartY,
+    double? StartZ,
+    double? EndX,
+    double? EndY,
+    double? EndZ,
+    double? MinX,
+    double? MinY,
+    double? MinZ,
+    double? MaxX,
+    double? MaxY,
+    double? MaxZ,
+    string NestedBlockName,
+    int VertexCount);
+
 internal sealed record DimensionMetric(
     string DimensionHandle,
     string DimensionType,
@@ -57,7 +76,8 @@ internal sealed record DimensionMetric(
     IReadOnlyList<DimensionTextMetric> TextMetrics,
     string? Error = null,
     string CandidateId = "",
-    string CandidateRole = "");
+    string CandidateRole = "",
+    IReadOnlyList<DimensionBlockGeometryMetric>? BlockGeometry = null);
 
 internal sealed record DimensionMetricsReport(
     string SchemaVersion,
@@ -67,7 +87,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "3";
+    public const string SchemaVersion = "4";
 
     public static string Format(DimensionMetricsReport report)
     {
@@ -91,6 +111,10 @@ internal static class DimensionMetricsReportFormatter
                                 .ThenBy(fragment => fragment.Text, StringComparer.Ordinal)
                                 .ToArray()
                         })
+                        .ToArray(),
+                    BlockGeometry = (item.BlockGeometry ?? [])
+                        .OrderBy(entity => entity.EntityType, StringComparer.Ordinal)
+                        .ThenBy(entity => entity.EntityHandle, StringComparer.Ordinal)
                         .ToArray()
                 })
                 .ToArray()
