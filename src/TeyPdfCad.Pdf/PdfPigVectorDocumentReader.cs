@@ -57,7 +57,8 @@ public sealed class PdfPigVectorDocumentReader
                     HeightPoints: heightPoints,
                     Style: new VectorStyle(RgbColor: ToRgb(first.Color.ToRGBValues())),
                     RotationRadians: Math.Atan2(baselineY, baselineX),
-                    AdvanceWidthPoints: advanceWidthPoints));
+                    AdvanceWidthPoints: advanceWidthPoints,
+                    FontName: GetWordFontName(word)));
             }
 
             pages.Add(new VectorPdfPage(
@@ -70,6 +71,17 @@ public sealed class PdfPigVectorDocumentReader
         }
 
         return Task.FromResult(new VectorPdfDocument(pages));
+    }
+
+    private static string? GetWordFontName(UglyToad.PdfPig.Content.Word word)
+    {
+        var names = word.Letters
+            .Select(letter => letter.FontName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return names.Length == 1 ? names[0] : null;
     }
 
     private static int ToRgb((double R, double G, double B) color)
