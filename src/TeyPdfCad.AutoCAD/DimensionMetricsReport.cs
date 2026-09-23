@@ -5,6 +5,29 @@ using Newtonsoft.Json.Serialization;
 
 namespace TeyPdfCad.AutoCAD;
 
+internal sealed record DimensionTextFragmentMetric(
+    string Text,
+    string TrueTypeFont,
+    string ShxFont,
+    double ExtentWidth,
+    double ExtentHeight,
+    double CapsHeight,
+    double TrackingFactor,
+    double ObliqueAngle,
+    double LocationX,
+    double LocationY,
+    double LocationZ,
+    double DirectionX,
+    double DirectionY,
+    double DirectionZ,
+    bool Bold,
+    bool Italic,
+    bool StackTop,
+    bool StackBottom,
+    bool Underlined,
+    bool Overlined,
+    bool Strikethrough);
+
 internal sealed record DimensionTextMetric(
     string EntityType,
     string EntityHandle,
@@ -22,7 +45,8 @@ internal sealed record DimensionTextMetric(
     string FontResolvedPath = "",
     string FontSha256 = "",
     double NominalTextHeight = 0d,
-    double EntityWidthFactor = 1d);
+    double EntityWidthFactor = 1d,
+    IReadOnlyList<DimensionTextFragmentMetric>? Fragments = null);
 
 internal sealed record DimensionMetric(
     string DimensionHandle,
@@ -43,7 +67,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "2";
+    public const string SchemaVersion = "3";
 
     public static string Format(DimensionMetricsReport report)
     {
@@ -59,6 +83,14 @@ internal static class DimensionMetricsReportFormatter
                     TextMetrics = item.TextMetrics
                         .OrderBy(metric => metric.EntityHandle, StringComparer.Ordinal)
                         .ThenBy(metric => metric.EntityType, StringComparer.Ordinal)
+                        .Select(metric => metric with
+                        {
+                            Fragments = (metric.Fragments ?? [])
+                                .OrderBy(fragment => fragment.LocationY)
+                                .ThenBy(fragment => fragment.LocationX)
+                                .ThenBy(fragment => fragment.Text, StringComparer.Ordinal)
+                                .ToArray()
+                        })
                         .ToArray()
                 })
                 .ToArray()
