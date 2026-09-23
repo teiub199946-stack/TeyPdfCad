@@ -84,7 +84,7 @@ internal static class DimensionMetricComparator
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
         var globalBlockers = new List<string>();
 
-        if (!string.Equals(nativeSchemaVersion, "5", StringComparison.Ordinal))
+        if (!string.Equals(nativeSchemaVersion, "6", StringComparison.Ordinal))
             globalBlockers.Add("unsupported-native-metrics-schema");
         if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
             globalBlockers.Add("source-report-pages-missing");
@@ -165,6 +165,21 @@ internal static class DimensionMetricComparator
 
         if (natives.Count == 1)
         {
+            if (!string.Equals(
+                    native.BlockGeometryCoordinateFrame,
+                    "dimension-block-mcs",
+                    StringComparison.Ordinal))
+            {
+                blockers.Add("native-block-coordinate-frame-unsupported");
+            }
+            if (!string.Equals(
+                    native.ExplodedGeometryCoordinateFrame,
+                    "drawing-wcs",
+                    StringComparison.Ordinal))
+            {
+                blockers.Add("native-exploded-coordinate-frame-unsupported");
+            }
+
             ValidateGeometryEvidence(
                 native.BlockGeometry,
                 "native-block",
@@ -402,6 +417,14 @@ internal static class DimensionMetricComparator
             && native.TextMetrics.Count == 1
             && native.BlockGeometry.Count > 0
             && native.ExplodedGeometry.Count > 0
+            && string.Equals(
+                native.BlockGeometryCoordinateFrame,
+                "dimension-block-mcs",
+                StringComparison.Ordinal)
+            && string.Equals(
+                native.ExplodedGeometryCoordinateFrame,
+                "drawing-wcs",
+                StringComparison.Ordinal)
             && metric.Fragments.Count == 1
             && string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase)
             && IsPositiveFinite(source.SourceVisibleWidthMm)
@@ -615,7 +638,9 @@ internal static class DimensionMetricComparator
                 GetString(dimension, "error"),
                 textMetrics,
                 blockGeometry,
-                explodedGeometry));
+                explodedGeometry,
+                GetString(dimension, "blockGeometryCoordinateFrame") ?? string.Empty,
+                GetString(dimension, "explodedGeometryCoordinateFrame") ?? string.Empty));
         }
 
         return output;
@@ -991,10 +1016,21 @@ internal static class DimensionMetricComparator
         string? Error,
         IReadOnlyList<NativeTextMetric> TextMetrics,
         IReadOnlyList<NativeBlockGeometry> BlockGeometry,
-        IReadOnlyList<NativeBlockGeometry> ExplodedGeometry)
+        IReadOnlyList<NativeBlockGeometry> ExplodedGeometry,
+        string BlockGeometryCoordinateFrame,
+        string ExplodedGeometryCoordinateFrame)
     {
         public static NativeDimensionEvidence Empty(string candidateId)
-            => new(candidateId, string.Empty, string.Empty, null, [], [], []);
+            => new(
+                candidateId,
+                string.Empty,
+                string.Empty,
+                null,
+                [],
+                [],
+                [],
+                string.Empty,
+                string.Empty);
     }
 
     private sealed record NativeFragmentMetric(
