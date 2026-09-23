@@ -671,6 +671,114 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_rejects_nonparallel_source_text_rotation_until_native_mapping_is_proven()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var appearance = candidate.SourceAppearance!;
+        candidate = candidate with
+        {
+            SourceAppearance = appearance with
+            {
+                Text = appearance.Text with { RotationDegrees = 30d }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with { RotationRadians = Math.PI / 6d })
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("text rotation", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("parallel", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_equivalence_rejects_dimension_line_endpoints_not_bound_to_extension_lines()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var appearance = candidate.SourceAppearance!;
+        var dimensionLine = appearance.DimensionLine with
+        {
+            Start = new Point2(-1, 5),
+            End = new Point2(11, 5)
+        };
+        var arrows = new[]
+        {
+            appearance.ArrowLines[0] with
+            {
+                Start = new Point2(-1, 5),
+                End = new Point2(0, 6)
+            },
+            appearance.ArrowLines[1] with
+            {
+                Start = new Point2(11, 5),
+                End = new Point2(10, 6)
+            }
+        };
+        candidate = candidate with
+        {
+            SourceAppearance = appearance with
+            {
+                DimensionLine = dimensionLine,
+                ArrowLines = arrows
+            }
+        };
+
+        page = page with
+        {
+            Entities = page.Entities.Select(entity => entity.SourceId switch
+            {
+                "d-line" => (VectorEntity)new VectorLine(
+                    "d-line",
+                    dimensionLine.Start,
+                    dimensionLine.End,
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                "d-arrow-1" => (VectorEntity)new VectorLine(
+                    "d-arrow-1",
+                    arrows[0].Start,
+                    arrows[0].End,
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                "d-arrow-2" => (VectorEntity)new VectorLine(
+                    "d-arrow-2",
+                    arrows[1].Start,
+                    arrows[1].End,
+                    new VectorStyle(
+                        SourceLayer: "DIM",
+                        RgbColor: 0,
+                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                _ => entity
+            }).ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("dimension-line endpoint", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("extension line", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_exposes_exact_native_font_and_width_proof_as_separate_blocker()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
