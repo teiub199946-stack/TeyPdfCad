@@ -270,6 +270,74 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_is_fail_closed_when_font_identity_is_unavailable()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with { FontName = null }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with { FontName = null })
+                    : entity)
+                .ToArray()
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("font identity is unavailable", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_equivalence_is_fail_closed_when_advance_width_is_unavailable()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with { AdvanceWidthMm = null }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with { AdvanceWidthPoints = 0d })
+                    : entity)
+                .ToArray()
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("advance width is unavailable", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_appearance_is_rejected_when_font_identity_differs_from_raw_page()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
