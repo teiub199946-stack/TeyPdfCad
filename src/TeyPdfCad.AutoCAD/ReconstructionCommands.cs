@@ -611,6 +611,7 @@ public sealed class ReconstructionCommands
                     extents.Y,
                     fragment.CapsHeight,
                     fragment.TrackingFactor,
+                    fragment.WidthFactor,
                     fragment.ObliqueAngle,
                     location.X,
                     location.Y,
