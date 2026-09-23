@@ -19,7 +19,9 @@ public sealed record TextPrimitive(
     string? FontProgramSubtype = null,
     string? FontEncodingName = null,
     bool? FontHasToUnicode = null,
-    bool? FontIsSubset = null)
+    bool? FontIsSubset = null,
+    double? GlyphInkWidth = null,
+    double? GlyphInkHeight = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 }
