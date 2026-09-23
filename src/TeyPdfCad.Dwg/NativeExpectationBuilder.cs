@@ -354,6 +354,7 @@ internal static class NativeExpectationBuilder
             : new DimensionAligned(first, second);
 
         dimension.DefinitionPoint = definition;
+        dimension.Normal = new XYZ(0d, 0d, 1d);
 
         // Intentionally do not call AcadSharpStyleCatalog.GetDimensionStyle here.
         // This is the independent pre-write proof path: a defect in the writer's
