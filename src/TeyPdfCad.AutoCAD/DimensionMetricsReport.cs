@@ -31,7 +31,9 @@ internal sealed record DimensionMetric(
     string DimensionText,
     string DimensionBlockHandle,
     IReadOnlyList<DimensionTextMetric> TextMetrics,
-    string? Error = null);
+    string? Error = null,
+    string CandidateId = "",
+    string CandidateRole = "");
 
 internal sealed record DimensionMetricsReport(
     string SchemaVersion,
