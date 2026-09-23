@@ -10,7 +10,8 @@ public sealed record TextPrimitive(
     string? Layer = null,
     IReadOnlyList<string>? SourceIds = null,
     int? RgbColor = null,
-    string? FontName = null)
+    string? FontName = null,
+    double? AdvanceWidth = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 }
