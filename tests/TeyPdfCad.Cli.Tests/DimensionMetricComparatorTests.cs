@@ -939,7 +939,7 @@ public sealed class DimensionMetricComparatorTests
                   "sourceAdvanceWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceVisibleWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceVisibleHeightMm": 2.5,
-                  "sourceGlyphInkWidthMm": 7.5,
+                  "sourceGlyphInkWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceGlyphInkHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
