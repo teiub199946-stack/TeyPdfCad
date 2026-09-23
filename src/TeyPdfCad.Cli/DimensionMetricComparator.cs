@@ -186,6 +186,9 @@ internal static class DimensionMetricComparator
         if (!IsPositiveFinite(source.SourceHeightMm))
             blockers.Add("source-height-invalid");
 
+        if (!IsFirstSafeNumericDimensionText(source.SourceText))
+            blockers.Add("source-text-outside-safe-numeric-subset");
+
         if (!IsSha256(source.SourceFontSha256))
         {
             blockers.Add("source-font-program-fingerprint-unavailable");
@@ -354,6 +357,33 @@ internal static class DimensionMetricComparator
             value,
             "mtext-actual-bounds-dimblock-mcs",
             StringComparison.Ordinal);
+
+    private static bool IsFirstSafeNumericDimensionText(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        var separatorSeen = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character >= '0' && character <= '9')
+                continue;
+
+            if ((character == '.' || character == ',')
+                && !separatorSeen
+                && index > 0
+                && index < value.Length - 1)
+            {
+                separatorSeen = true;
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
 
     private static bool IsSha256(string? value)
         => value is { Length: 64 }
