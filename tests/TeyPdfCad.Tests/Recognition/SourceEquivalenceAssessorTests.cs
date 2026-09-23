@@ -540,6 +540,137 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_rejects_nonstandard_pdf_lineweight_for_exact_native_mapping()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var appearance = candidate.SourceAppearance!;
+        var dimensionLine = appearance.DimensionLine with { StrokeWidthMm = 0.27 };
+        var arrows = appearance.ArrowLines
+            .Select(line => line with { StrokeWidthMm = 0.27 })
+            .ToArray();
+        candidate = candidate with
+        {
+            SourceAppearance = appearance with
+            {
+                DimensionLine = dimensionLine,
+                ArrowLines = arrows
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities.Select(entity => entity.SourceId switch
+            {
+                "d-line" or "d-arrow-1" or "d-arrow-2" => entity is VectorLine line
+                    ? (VectorEntity)(line with
+                    {
+                        Style = line.Style with
+                        {
+                            StrokeWidthPoints = 0.27 / VectorPdfPage.MillimetresPerPoint
+                        }
+                    })
+                    : entity,
+                _ => entity
+            }).ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("lineweight", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("0.27", assessment.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dimension_source_equivalence_keeps_dashed_source_fail_closed_until_dash_phase_is_captured()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var appearance = candidate.SourceAppearance!;
+        var dash = new[] { 4d, 2d };
+        candidate = candidate with
+        {
+            SourceAppearance = appearance with
+            {
+                DimensionLine = appearance.DimensionLine with { DashPatternMm = dash },
+                ArrowLines = appearance.ArrowLines
+                    .Select(line => line with { DashPatternMm = dash })
+                    .ToArray()
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities.Select(entity => entity.SourceId switch
+            {
+                "d-line" or "d-arrow-1" or "d-arrow-2" => entity is VectorLine line
+                    ? (VectorEntity)(line with
+                    {
+                        Style = line.Style with
+                        {
+                            DashPatternPoints = dash
+                                .Select(value => value / VectorPdfPage.MillimetresPerPoint)
+                                .ToArray()
+                        }
+                    })
+                    : entity,
+                _ => entity
+            }).ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("dash phase", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_equivalence_rejects_asymmetric_extension_beyond_dimension_line()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var appearance = candidate.SourceAppearance!;
+        var changed = appearance.ExtensionLines[1] with { End = new Point2(10, 6.0) };
+        candidate = candidate with
+        {
+            SourceAppearance = appearance with
+            {
+                ExtensionLines = [appearance.ExtensionLines[0], changed]
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => entity.SourceId == "d-ext-2"
+                    ? (VectorEntity)new VectorLine(
+                        "d-ext-2",
+                        changed.Start,
+                        changed.End,
+                        new VectorStyle(
+                            SourceLayer: "DIM",
+                            RgbColor: 0,
+                            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint))
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("extension", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("beyond", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("same", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_exposes_exact_native_font_and_width_proof_as_separate_blocker()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
