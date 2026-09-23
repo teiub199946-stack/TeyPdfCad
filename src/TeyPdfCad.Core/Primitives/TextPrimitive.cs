@@ -11,7 +11,8 @@ public sealed record TextPrimitive(
     IReadOnlyList<string>? SourceIds = null,
     int? RgbColor = null,
     string? FontName = null,
-    double? AdvanceWidth = null)
+    double? AdvanceWidth = null,
+    Point2? VisualCenter = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 }
