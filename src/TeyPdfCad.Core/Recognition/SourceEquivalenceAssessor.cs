@@ -221,6 +221,18 @@ public static class SourceEquivalenceAssessor
             return "Dimension semantic text differs from the raw source appearance text.";
         }
 
+        if (string.IsNullOrWhiteSpace(appearance.Text.FontName))
+        {
+            return "Dimension source font identity is unavailable; native font equivalence cannot be proven.";
+        }
+
+        if (!appearance.Text.AdvanceWidthMm.HasValue
+            || !double.IsFinite(appearance.Text.AdvanceWidthMm.Value)
+            || appearance.Text.AdvanceWidthMm.Value <= 0d)
+        {
+            return "Dimension source text advance width is unavailable; native text-metric equivalence cannot be proven.";
+        }
+
         if (!DimensionTextParser.TryParse(appearance.Text.Value, out var parsed)
             || parsed is null
             || parsed.Kind != DimensionTextKind.Linear
@@ -363,7 +375,12 @@ public static class SourceEquivalenceAssessor
                 appearance.Text.RotationDegrees)
             || !string.Equals(sourceText.Style.SourceLayer, appearance.Text.Layer, StringComparison.Ordinal)
             || sourceText.Style.RgbColor != appearance.Text.RgbColor
-            || !string.Equals(sourceText.FontName, appearance.Text.FontName, StringComparison.Ordinal))
+            || !string.Equals(sourceText.FontName, appearance.Text.FontName, StringComparison.Ordinal)
+            || !NullableAlmostEqual(
+                sourceText.AdvanceWidthPoints > 0d
+                    ? sourceText.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
+                    : null,
+                appearance.Text.AdvanceWidthMm))
         {
             return "Dimension source text appearance differs from the raw VectorPdfPage evidence.";
         }
