@@ -233,6 +233,34 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_accepts_rotated_block_mcs_when_rigid_transform_matches_exploded_wcs()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = RotateBlockSnapshotClockwise90(
+            NativeDimension("candidate-1", "100", 7.5));
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.DoesNotContain(
+            "cross-snapshot-transform-evidence-invalid",
+            candidate.Blockers);
+        Assert.DoesNotContain(
+            "cross-snapshot-structural-transform-mismatch",
+            candidate.Blockers);
+        Assert.True(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_reports_exact_source_extension_line_matches_in_exploded_geometry()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -1450,6 +1478,56 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains(
             "rendered-glyph-equivalence-not-yet-authorized",
             candidate.Blockers);
+    }
+
+    private static string RotateBlockSnapshotClockwise90(
+        string value)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(value)!.AsObject();
+        var metric = root["textMetrics"]!.AsArray()[0]!.AsObject();
+
+        static (double X, double Y) Rotate(double x, double y)
+            => (y, -x);
+
+        var metricPosition = Rotate(
+            metric["positionX"]!.GetValue<double>(),
+            metric["positionY"]!.GetValue<double>());
+        metric["positionX"] = metricPosition.X;
+        metric["positionY"] = metricPosition.Y;
+        metric["rotationRadians"] = -Math.PI / 2d;
+
+        var fragment = metric["fragments"]!.AsArray()[0]!.AsObject();
+        var fragmentPosition = Rotate(
+            fragment["locationX"]!.GetValue<double>(),
+            fragment["locationY"]!.GetValue<double>());
+        fragment["locationX"] = fragmentPosition.X;
+        fragment["locationY"] = fragmentPosition.Y;
+        var fragmentDirection = Rotate(
+            fragment["directionX"]!.GetValue<double>(),
+            fragment["directionY"]!.GetValue<double>());
+        fragment["directionX"] = fragmentDirection.X;
+        fragment["directionY"] = fragmentDirection.Y;
+
+        foreach (var item in root["blockGeometry"]!.AsArray())
+        {
+            var geometry = item!.AsObject();
+            var start = Rotate(
+                geometry["startX"]!.GetValue<double>(),
+                geometry["startY"]!.GetValue<double>());
+            var end = Rotate(
+                geometry["endX"]!.GetValue<double>(),
+                geometry["endY"]!.GetValue<double>());
+            geometry["startX"] = start.X;
+            geometry["startY"] = start.Y;
+            geometry["endX"] = end.X;
+            geometry["endY"] = end.Y;
+            geometry["minX"] = Math.Min(start.X, end.X);
+            geometry["minY"] = Math.Min(start.Y, end.Y);
+            geometry["maxX"] = Math.Max(start.X, end.X);
+            geometry["maxY"] = Math.Max(start.Y, end.Y);
+        }
+
+        return root.ToJsonString();
     }
 
     private static string TranslateBlockSnapshotX(
