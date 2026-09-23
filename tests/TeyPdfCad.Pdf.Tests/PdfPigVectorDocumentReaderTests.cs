@@ -126,6 +126,7 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(-Math.PI / 2d, texts[0].RotationRadians, 6);
         Assert.Equal(0x000000, texts[0].Style.RgbColor);
         Assert.Equal("Helvetica", texts[0].FontName);
+        Assert.Null(texts[0].FontProgramSha256);
         Assert.True(texts[0].AdvanceWidthPoints > 0d);
         Assert.True(texts[0].VisibleWidthPoints > 0d);
         Assert.True(double.IsFinite(texts[0].VisibleWidthPoints));
