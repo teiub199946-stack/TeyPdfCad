@@ -43,8 +43,9 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Equal(
             ["A2", "F2"],
             parsed.Dimensions[1].TextMetrics.Select(item => item.EntityHandle).ToArray());
-        Assert.Contains("\"schemaVersion\": \"1\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": \"2\"", first, StringComparison.Ordinal);
         Assert.Contains("\"width\": 8.25", first, StringComparison.Ordinal);
+        Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
     }
 
     private static DimensionTextMetric Metric(
