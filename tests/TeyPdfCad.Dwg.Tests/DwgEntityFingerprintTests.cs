@@ -31,6 +31,12 @@ public sealed class DwgEntityFingerprintTests
         var separateArrows = CreateStyle();
         separateArrows.SeparateArrowBlocks = true;
 
+        var tickSize = CreateStyle();
+        tickSize.TickSize = 2.5d;
+
+        var dimensionLineExtension = CreateStyle();
+        dimensionLineExtension.DimensionLineExtension = 1.25d;
+
         var differentTextStyle = CreateStyle();
         differentTextStyle.Style = new TextStyle("TEYPDFCAD_OTHER_TEXT")
         {
@@ -45,6 +51,8 @@ public sealed class DwgEntityFingerprintTests
         Assert.NotEqual(baseline, Fingerprint(dimensionWeight));
         Assert.NotEqual(baseline, Fingerprint(extensionWeight));
         Assert.NotEqual(baseline, Fingerprint(separateArrows));
+        Assert.NotEqual(baseline, Fingerprint(tickSize));
+        Assert.NotEqual(baseline, Fingerprint(dimensionLineExtension));
         Assert.NotEqual(baseline, Fingerprint(differentTextStyle));
     }
 
