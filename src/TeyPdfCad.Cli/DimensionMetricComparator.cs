@@ -14,6 +14,7 @@ internal sealed record DimensionMetricComparisonCandidate(
     string CandidateId,
     bool MeasurementsAreUsable,
     bool LineAppearanceEvidenceUsable,
+    bool CrossSnapshotLineAppearanceEvidenceUsable,
     bool SourceToNativeEquivalenceProven,
     IReadOnlyList<string> Blockers,
     string SourceText,
@@ -711,6 +712,7 @@ internal static class DimensionMetricComparator
             .ToArray();
         var crossSnapshotStructuralTransformConsistent = false;
         var crossSnapshotTextFragmentTransformConsistent = false;
+        var crossSnapshotLineAppearanceEvidenceUsable = false;
         if (blockLines.Length != native.BlockGeometry.Count
             || native.BlockGeometry.Count != explodedLines.Length)
         {
@@ -775,6 +777,26 @@ internal static class DimensionMetricComparator
                 {
                     blockers.Add(
                         "cross-snapshot-structural-transform-mismatch");
+                }
+
+                if (crossSnapshotStructuralTransformConsistent
+                    && blockLines.All(HasUnambiguousRawLineAppearance)
+                    && explodedLines.All(HasUnambiguousRawLineAppearance))
+                {
+                    var appearanceMatches =
+                        MatchCrossSnapshotLineAppearanceGlobally(
+                            blockLines,
+                            transformedBlockLines,
+                            explodedLines,
+                            NumericalWidthToleranceMm);
+                    crossSnapshotLineAppearanceEvidenceUsable =
+                        appearanceMatches.Count(value => value)
+                            == blockLines.Length;
+                    if (!crossSnapshotLineAppearanceEvidenceUsable)
+                    {
+                        blockers.Add(
+                            "cross-snapshot-line-appearance-mismatch");
+                    }
                 }
             }
         }
@@ -951,6 +973,7 @@ internal static class DimensionMetricComparator
             candidateId,
             measurementsUsable,
             lineAppearanceEvidenceUsable,
+            crossSnapshotLineAppearanceEvidenceUsable,
             SourceToNativeEquivalenceProven: false,
             distinctBlockers,
             source.SourceText,
@@ -1465,6 +1488,75 @@ internal static class DimensionMetricComparator
                 Cosine * x - Sine * y + TranslateX,
                 Sine * x + Cosine * y + TranslateY);
     }
+
+    private static bool[] MatchCrossSnapshotLineAppearanceGlobally(
+        IReadOnlyList<NativeBlockGeometry> blockLines,
+        IReadOnlyList<SourceLineGeometry> transformedBlockLines,
+        IReadOnlyList<NativeBlockGeometry> explodedLines,
+        double tolerance)
+    {
+        if (blockLines.Count != transformedBlockLines.Count)
+            return new bool[blockLines.Count];
+
+        var explodedToBlock = Enumerable.Repeat(-1, explodedLines.Count).ToArray();
+
+        bool TryAssign(int blockIndex, bool[] visitedExploded)
+        {
+            for (var explodedIndex = 0;
+                 explodedIndex < explodedLines.Count;
+                 explodedIndex++)
+            {
+                if (visitedExploded[explodedIndex]
+                    || !LinesEqual(
+                        transformedBlockLines[blockIndex],
+                        explodedLines[explodedIndex],
+                        tolerance)
+                    || !RawLineAppearanceEqual(
+                        blockLines[blockIndex],
+                        explodedLines[explodedIndex]))
+                {
+                    continue;
+                }
+
+                visitedExploded[explodedIndex] = true;
+                if (explodedToBlock[explodedIndex] < 0
+                    || TryAssign(
+                        explodedToBlock[explodedIndex],
+                        visitedExploded))
+                {
+                    explodedToBlock[explodedIndex] = blockIndex;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        for (var blockIndex = 0; blockIndex < blockLines.Count; blockIndex++)
+            TryAssign(blockIndex, new bool[explodedLines.Count]);
+
+        var matchedBlocks = new bool[blockLines.Count];
+        foreach (var blockIndex in explodedToBlock)
+        {
+            if (blockIndex >= 0)
+                matchedBlocks[blockIndex] = true;
+        }
+
+        return matchedBlocks;
+    }
+
+    private static bool RawLineAppearanceEqual(
+        NativeBlockGeometry first,
+        NativeBlockGeometry second)
+        => HasUnambiguousRawLineAppearance(first)
+            && HasUnambiguousRawLineAppearance(second)
+            && first.RgbColor == second.RgbColor
+            && first.LineWeightHundredthsMm
+                == second.LineWeightHundredthsMm
+            && string.Equals(
+                first.Linetype,
+                second.Linetype,
+                StringComparison.OrdinalIgnoreCase);
 
     private static bool HasUsableSourceLineAppearance(
         SourceLineGeometry line)
