@@ -30,6 +30,27 @@ public sealed class DimensionMetricComparatorTests
                   "sourceVisualCenterX": 15,
                   "sourceVisualCenterY": 20
                 }
+              ],
+              "blockGeometry": [
+                {
+                  "entityType": "Line",
+                  "entityHandle": "40",
+                  "geometryKind": "line",
+                  "startX": 0,
+                  "startY": 5,
+                  "startZ": 0,
+                  "endX": 10,
+                  "endY": 5,
+                  "endZ": 0,
+                  "minX": 0,
+                  "minY": 5,
+                  "minZ": 0,
+                  "maxX": 10,
+                  "maxY": 5,
+                  "maxZ": 0,
+                  "nestedBlockName": "",
+                  "vertexCount": 0
+                }
               ]
             }
           ]
@@ -37,7 +58,7 @@ public sealed class DimensionMetricComparatorTests
         """;
         var native = """
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -122,7 +143,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = """
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -144,6 +165,32 @@ public sealed class DimensionMetricComparatorTests
 
         Assert.Contains("native-candidate-id-missing", report.GlobalBlockers);
         Assert.False(Assert.Single(report.Candidates).MeasurementsAreUsable);
+    }
+
+    [Fact]
+    public void Comparator_rejects_missing_regenerated_block_geometry()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                ",\n          \"blockGeometry\": [\n            {\n              \"entityType\": \"Line\",\n              \"entityHandle\": \"40\",\n              \"geometryKind\": \"line\",\n              \"startX\": 0,\n              \"startY\": 5,\n              \"startZ\": 0,\n              \"endX\": 10,\n              \"endY\": 5,\n              \"endZ\": 0,\n              \"minX\": 0,\n              \"minY\": 5,\n              \"minZ\": 0,\n              \"maxX\": 10,\n              \"maxY\": 5,\n              \"maxZ\": 0,\n              \"nestedBlockName\": \"\",\n              \"vertexCount\": 0\n            }\n          ]",
+                string.Empty,
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "4",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.Contains("native-block-geometry-missing", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
     }
 
     [Fact]
@@ -191,7 +238,7 @@ public sealed class DimensionMetricComparatorTests
         var oneNative = NativeDimension("candidate-1", "100", 7.5);
         var native = $$"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{oneNative}}, {{oneNative}}]
@@ -221,7 +268,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{dbTextNative}}]
@@ -255,7 +302,7 @@ public sealed class DimensionMetricComparatorTests
                 nativePath,
                 $"""
                 {
-                  "schemaVersion": "3",
+                  "schemaVersion": "4",
                   "drawingName": "probe.dwg",
                   "drawingUnits": "Millimeters",
                   "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -298,7 +345,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = $$"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 8.0)}}]
@@ -326,7 +373,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -351,7 +398,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -371,7 +418,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "10 mm", 7.5);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "10 mm", 7.5)}}]
@@ -397,7 +444,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -422,7 +469,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -452,7 +499,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{formatted}}]
@@ -498,7 +545,7 @@ public sealed class DimensionMetricComparatorTests
         """;
         var native = $$"""
         {
-          "schemaVersion": "3",
+          "schemaVersion": "4",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -611,6 +658,27 @@ public sealed class DimensionMetricComparatorTests
                   "strikethrough": false
                 }
               ]
+            }
+          ],
+          "blockGeometry": [
+            {
+              "entityType": "Line",
+              "entityHandle": "40",
+              "geometryKind": "line",
+              "startX": 0,
+              "startY": 5,
+              "startZ": 0,
+              "endX": 10,
+              "endY": 5,
+              "endZ": 0,
+              "minX": 0,
+              "minY": 5,
+              "minZ": 0,
+              "maxX": 10,
+              "maxY": 5,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
             }
           ]
         }
