@@ -106,8 +106,8 @@ public sealed class LinearDimensionRecognizerTests
         Assert.Equal("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", appearance.Text.FontProgramSha256);
         Assert.Equal("TrueType", appearance.Text.FontProgramSubtype);
         Assert.Equal("WinAnsiEncoding", appearance.Text.FontEncodingName);
-        Assert.False(appearance.Text.FontHasToUnicode);
-        Assert.False(appearance.Text.FontIsSubset);
+        Assert.True(appearance.Text.FontHasToUnicode == false);
+        Assert.True(appearance.Text.FontIsSubset == false);
 
         Assert.Equal(0.35, appearance.DimensionLine.StrokeWidthMm!.Value, 6);
         Assert.Equal([4.0, 1.0], appearance.DimensionLine.DashPatternMm);
