@@ -259,6 +259,113 @@ public sealed class IndependentNativeExpectationTests
             value => value.Contains("layer", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Wrong_dimension_text_middle_point_is_rejected_against_prewrite_manifest()
+    {
+        var page = new VectorPdfPage(1, 100, 100, 0,
+        [
+            new VectorLine("dim", new(10, 10), new(60, 10), new VectorStyle()),
+            new VectorLine("ext-1", new(10, 0), new(10, 10), new VectorStyle()),
+            new VectorLine("ext-2", new(60, 0), new(60, 10), new VectorStyle()),
+            new VectorLine("arrow-1", new(9, 9), new(11, 11), new VectorStyle()),
+            new VectorLine("arrow-2", new(59, 11), new(61, 9), new VectorStyle()),
+            new VectorText(
+                "text", "50", new(32, 10), 2.5, new VectorStyle(),
+                RotationRadians: 0,
+                AdvanceWidthPoints: 6,
+                FontName: "Helvetica",
+                VisualCenter: new(35, 10))
+        ]);
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new(10, 0),
+            new(60, 0),
+            new(35, 10),
+            50,
+            50,
+            1,
+            0.95,
+            "50",
+            1,
+            ["dim", "ext-1", "ext-2", "arrow-1", "arrow-2", "text"])
+        {
+            RotationRadians = 0,
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("arrow-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ],
+            SourceAppearance = new DimensionSourceAppearance(
+                new DimensionSourceTextAppearance(
+                    "50", new(32, 10), 2.5 * VectorPdfPage.MillimetresPerPoint, 0,
+                    null, null, ["text"], "Helvetica",
+                    6 * VectorPdfPage.MillimetresPerPoint, new(35, 10)),
+                new DimensionSourceLineAppearance(new(10, 10), new(60, 10), null, null, null, [], ["dim"]),
+                [
+                    new DimensionSourceLineAppearance(new(10, 0), new(10, 10), null, null, null, [], ["ext-1"]),
+                    new DimensionSourceLineAppearance(new(60, 0), new(60, 10), null, null, null, [], ["ext-2"])
+                ],
+                [
+                    new DimensionSourceLineAppearance(new(9, 9), new(11, 11), null, null, null, [], ["arrow-1"]),
+                    new DimensionSourceLineAppearance(new(59, 11), new(61, 9), null, null, null, [], ["arrow-2"])
+                ])
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+        var hatch = new HatchRecognitionResult([], []);
+        var plan = new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatch, page.Number);
+        var document = new VectorPdfDocument([page]);
+        var layout = new DocumentLayoutPlanner().Create(document);
+        var manifest = NativeExpectationBuilder.Build(
+            document,
+            layout,
+            new Dictionary<int, HatchRecognitionResult> { [1] = hatch },
+            new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
+            new Dictionary<int, SourceReplacementPlan> { [1] = plan });
+
+        var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, 1);
+        var expected = manifest.Candidates[candidateId];
+        Assert.Equal("35,10,0", expected.Entities.Single().RequiredProperties["expectedTextMiddlePoint"]);
+        Assert.Equal("true", expected.Entities.Single().RequiredProperties["expectedTextUserDefinedLocation"]);
+
+        var drawing = new CadDocument();
+        var style = new DimensionStyle("TEYPDFCAD_SCALE_1")
+        {
+            LinearScaleFactor = 1,
+            TextHeight = 2.5,
+            ArrowSize = 2.5,
+            ExtensionLineOffset = 0.75,
+            ExtensionLineExtension = 1.25,
+            ScaleFactor = 1
+        };
+        drawing.DimensionStyles.Add(style);
+        var wrong = new DimensionLinear
+        {
+            FirstPoint = new XYZ(10, 0, 0),
+            SecondPoint = new XYZ(60, 0, 0),
+            DefinitionPoint = new XYZ(35, 10, 0),
+            Rotation = 0,
+            Style = style,
+            Text = "50",
+            TextMiddlePoint = new XYZ(40, 10, 0),
+            IsTextUserDefinedLocation = true
+        };
+        CandidateMetadataCodec.Write(wrong, new CandidateEntityMetadata(candidateId, "primary"));
+        drawing.Entities.Add(wrong);
+
+        using var file = WriteDrawing(drawing);
+        var verification = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.False(verification.IsVerified);
+        Assert.Contains(verification.InvalidEntities, value =>
+            value.Contains("expectedTextMiddlePoint", StringComparison.Ordinal));
+    }
+
     private static SemanticReconstructionResult EmptySemantics()
         => new([], [], null, 0d);
 
