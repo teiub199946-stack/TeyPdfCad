@@ -61,6 +61,7 @@ public sealed record VectorText(
     string? FontName = null,
     Point2? VisualCenter = null,
     double VisibleWidthPoints = 0d,
+    double VisibleHeightPoints = 0d,
     string? FontProgramSha256 = null,
     string? FontProgramSubtype = null,
     string? FontEncodingName = null,
