@@ -78,7 +78,8 @@ internal sealed record DimensionMetric(
     string? Error = null,
     string CandidateId = "",
     string CandidateRole = "",
-    IReadOnlyList<DimensionBlockGeometryMetric>? BlockGeometry = null);
+    IReadOnlyList<DimensionBlockGeometryMetric>? BlockGeometry = null,
+    IReadOnlyList<DimensionBlockGeometryMetric>? ExplodedGeometry = null);
 
 internal sealed record DimensionMetricsReport(
     string SchemaVersion,
@@ -88,7 +89,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "4";
+    public const string SchemaVersion = "5";
 
     public static string Format(DimensionMetricsReport report)
     {
@@ -114,6 +115,10 @@ internal static class DimensionMetricsReportFormatter
                         })
                         .ToArray(),
                     BlockGeometry = (item.BlockGeometry ?? [])
+                        .OrderBy(entity => entity.EntityType, StringComparer.Ordinal)
+                        .ThenBy(entity => entity.EntityHandle, StringComparer.Ordinal)
+                        .ToArray(),
+                    ExplodedGeometry = (item.ExplodedGeometry ?? [])
                         .OrderBy(entity => entity.EntityType, StringComparer.Ordinal)
                         .ThenBy(entity => entity.EntityHandle, StringComparer.Ordinal)
                         .ToArray()
