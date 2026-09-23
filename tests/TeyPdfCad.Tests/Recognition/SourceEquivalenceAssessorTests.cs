@@ -837,6 +837,74 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_is_fail_closed_when_glyph_ink_extents_are_unavailable()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with
+                {
+                    GlyphInkWidthMm = null,
+                    GlyphInkHeightMm = null
+                }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with
+                    {
+                        GlyphInkWidthPoints = 0d,
+                        GlyphInkHeightPoints = 0d
+                    })
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("glyph-outline ink extents", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_appearance_rejects_glyph_ink_drift_from_raw_page()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with
+                {
+                    GlyphInkWidthMm =
+                        candidate.SourceAppearance.Text.GlyphInkWidthMm!.Value + 0.5d
+                }
+            }
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains(
+            "raw VectorPdfPage evidence",
+            assessment.Reason,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_exposes_exact_native_font_and_width_proof_as_separate_blocker()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
