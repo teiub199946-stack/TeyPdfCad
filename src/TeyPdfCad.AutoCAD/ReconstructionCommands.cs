@@ -606,7 +606,13 @@ public sealed class ReconstructionCommands
             maxY,
             maxZ,
             nestedBlockName,
-            vertexCount);
+            vertexCount,
+            SafeColorMethod(entity, out var rgbColor),
+            rgbColor,
+            entity.LineWeight.ToString(),
+            (int)entity.LineWeight >= 0 ? (int)entity.LineWeight : null,
+            SafeEntityLinetype(entity),
+            SafeEntityLayer(entity));
     }
 
     private static (
@@ -711,6 +717,56 @@ public sealed class ReconstructionCommands
         {
             foreach (DBObject item in exploded)
                 item.Dispose();
+        }
+    }
+
+    private static string SafeColorMethod(
+        Entity entity,
+        out int? rgbColor)
+    {
+        rgbColor = null;
+        try
+        {
+            var color = entity.Color;
+            var method = color.ColorMethod.ToString();
+            if (string.Equals(method, "ByColor", StringComparison.Ordinal)
+                || string.Equals(method, "ByAci", StringComparison.Ordinal))
+            {
+                rgbColor =
+                    (color.Red << 16)
+                    | (color.Green << 8)
+                    | color.Blue;
+            }
+
+            return method;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeEntityLinetype(Entity entity)
+    {
+        try
+        {
+            return entity.Linetype ?? string.Empty;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeEntityLayer(Entity entity)
+    {
+        try
+        {
+            return entity.Layer ?? string.Empty;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
         }
     }
 
