@@ -183,6 +183,58 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_binds_native_dimension_to_deterministic_pdf_text_style()
+    {
+        var page = new VectorPdfPage(1, 72, 72, 0,
+        [
+            new VectorLine("dim", new Point2(0, 5), new Point2(10, 5), new VectorStyle()),
+            new VectorLine("ext-1", new Point2(0, 0), new Point2(0, 5), new VectorStyle()),
+            new VectorLine("ext-2", new Point2(10, 0), new Point2(10, 5), new VectorStyle()),
+            new VectorLine("arrow-1", new Point2(-1, 4), new Point2(1, 6), new VectorStyle()),
+            new VectorLine("arrow-2", new Point2(9, 6), new Point2(11, 4), new VectorStyle()),
+            new VectorText("text", "10", new Point2(5, 5), 2.5, new VectorStyle())
+        ]);
+        var document = new VectorPdfDocument([page]);
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new(0, 0),
+            new(10, 0),
+            new(5, 5),
+            10,
+            10,
+            1,
+            0.95,
+            "10",
+            1,
+            ["dim", "ext-1", "ext-2", "arrow-1", "arrow-2", "text"])
+        {
+            RotationRadians = 0,
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("arrow-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = new SemanticReconstructionResult([candidate], [], 1, 0.95);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var dimension = Assert.Single(drawing.Entities.OfType<ACadSharp.Entities.Dimension>());
+        Assert.NotNull(dimension.Style);
+        Assert.NotNull(dimension.Style.Style);
+        Assert.Equal("TEYPDFCAD_TEXT", dimension.Style.Style.Name);
+        Assert.Equal("arial.ttf", dimension.Style.Style.Filename, ignoreCase: true);
+        Assert.Equal(1d, dimension.Style.Style.Width, 6);
+    }
+
+    [Fact]
     public void Writer_emits_arc_length_as_native_arc_dimension()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
