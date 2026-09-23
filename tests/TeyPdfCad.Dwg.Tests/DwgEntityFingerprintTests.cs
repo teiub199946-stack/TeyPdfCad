@@ -74,6 +74,35 @@ public sealed class DwgEntityFingerprintTests
             DwgEntityFingerprint.ComputeGeometry(moved));
     }
 
+    [Fact]
+    public void Dimension_geometry_fingerprint_covers_ocs_normal_for_text_coordinates()
+    {
+        var positiveZ = new DimensionAligned(
+            new CSMath.XYZ(0, 0, 0),
+            new CSMath.XYZ(10, 0, 0))
+        {
+            DefinitionPoint = new CSMath.XYZ(5, 5, 0),
+            TextMiddlePoint = new CSMath.XYZ(5, 5, 0),
+            IsTextUserDefinedLocation = true,
+            Normal = new CSMath.XYZ(0, 0, 1),
+            Style = CreateStyle()
+        };
+        var negativeZ = new DimensionAligned(
+            new CSMath.XYZ(0, 0, 0),
+            new CSMath.XYZ(10, 0, 0))
+        {
+            DefinitionPoint = new CSMath.XYZ(5, 5, 0),
+            TextMiddlePoint = new CSMath.XYZ(5, 5, 0),
+            IsTextUserDefinedLocation = true,
+            Normal = new CSMath.XYZ(0, 0, -1),
+            Style = CreateStyle()
+        };
+
+        Assert.NotEqual(
+            DwgEntityFingerprint.ComputeGeometry(positiveZ),
+            DwgEntityFingerprint.ComputeGeometry(negativeZ));
+    }
+
     private static DimensionStyle CreateStyle()
         => new("TEYPDFCAD_SCALE_1")
         {
