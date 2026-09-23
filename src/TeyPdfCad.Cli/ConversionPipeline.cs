@@ -767,7 +767,10 @@ public sealed class ConversionPipeline
             sheet.ModelOriginX + line.Start.X,
             sheet.ModelOriginY + line.Start.Y,
             sheet.ModelOriginX + line.End.X,
-            sheet.ModelOriginY + line.End.Y);
+            sheet.ModelOriginY + line.End.Y,
+            line.RgbColor,
+            line.StrokeWidthMm,
+            line.DashPatternMm.ToArray());
 
     private static IReadOnlyList<ReplacementResidual> GetReportedResiduals(
         SourceReplacementPlan plan,
@@ -1171,7 +1174,10 @@ public sealed class ConversionPipeline
         double StartX,
         double StartY,
         double EndX,
-        double EndY);
+        double EndY,
+        int? RgbColor,
+        double? StrokeWidthMm,
+        IReadOnlyList<double> DashPatternMm);
 
     private sealed record PageSemanticSummary(
         int DimensionCandidateCount,
