@@ -208,9 +208,14 @@ public sealed class PdfPigVectorDocumentReaderTests
 
         var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
         var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
 
         Assert.Equal(72d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.X, 6);
         Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.Y, 6);
+        Assert.Equal(72d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
+        Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
+        Assert.Equal(100d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.End.X, 6);
+        Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.End.Y, 6);
     }
 
     [Fact]
