@@ -19,6 +19,10 @@ internal sealed record DimensionMetricComparisonCandidate(
     string NativeDimensionText,
     string? SourceFontName,
     string? SourceFontSha256,
+    string? SourceFontSubtype,
+    string? SourceFontEncodingName,
+    bool? SourceFontHasToUnicode,
+    bool? SourceFontIsSubset,
     string NativeFontFile,
     string NativeFontSha256,
     string NativeMetricKind,
@@ -195,6 +199,21 @@ internal static class DimensionMetricComparator
             blockers.Add("font-program-sha256-mismatch");
         }
 
+        if (!string.Equals(
+                source.SourceFontSubtype,
+                "TrueType",
+                StringComparison.Ordinal))
+            blockers.Add("source-font-subtype-not-simple-truetype");
+        if (!string.Equals(
+                source.SourceFontEncodingName,
+                "WinAnsiEncoding",
+                StringComparison.Ordinal))
+            blockers.Add("source-font-encoding-not-winansi");
+        if (source.SourceFontHasToUnicode != false)
+            blockers.Add("source-font-tounicode-not-absent");
+        if (source.SourceFontIsSubset != false)
+            blockers.Add("source-font-is-subset-or-unknown");
+
         double? widthDelta = null;
         if (IsPositiveFinite(source.SourceVisibleWidthMm)
             && IsPositiveFinite(metric.Width))
@@ -238,6 +257,10 @@ internal static class DimensionMetricComparator
             native.DimensionText,
             source.SourceFontName,
             source.SourceFontSha256,
+            source.SourceFontSubtype,
+            source.SourceFontEncodingName,
+            source.SourceFontHasToUnicode,
+            source.SourceFontIsSubset,
             metric.FontFile,
             metric.FontSha256,
             metric.MetricKind,
@@ -271,6 +294,10 @@ internal static class DimensionMetricComparator
                     GetString(item, "sourceText") ?? string.Empty,
                     GetString(item, "sourceFontName"),
                     GetString(item, "sourceFontSha256"),
+                    GetString(item, "sourceFontSubtype"),
+                    GetString(item, "sourceFontEncodingName"),
+                    GetNullableBool(item, "sourceFontHasToUnicode"),
+                    GetNullableBool(item, "sourceFontIsSubset"),
                     GetNullableDouble(item, "sourceAdvanceWidthMm"),
                     GetNullableDouble(item, "sourceVisibleWidthMm"),
                     GetNullableDouble(item, "sourceHeightMm")));
@@ -363,6 +390,23 @@ internal static class DimensionMetricComparator
             ? value.GetString()
             : null;
 
+    private static bool? GetNullableBool(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(name, out var value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null
+        };
+    }
+
     private static double? GetNullableDouble(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object
@@ -384,12 +428,27 @@ internal static class DimensionMetricComparator
         string SourceText,
         string? SourceFontName,
         string? SourceFontSha256,
+        string? SourceFontSubtype,
+        string? SourceFontEncodingName,
+        bool? SourceFontHasToUnicode,
+        bool? SourceFontIsSubset,
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
         double? SourceHeightMm)
     {
         public static SourceEvidence Empty(string candidateId)
-            => new(candidateId, string.Empty, null, null, null, null, null);
+            => new(
+                candidateId,
+                string.Empty,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private sealed record NativeDimensionEvidence(
