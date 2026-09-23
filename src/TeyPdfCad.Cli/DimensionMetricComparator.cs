@@ -491,15 +491,6 @@ internal static class DimensionMetricComparator
             .ToArray();
         if (sourceDimensionLines.Length != 1)
             blockers.Add("source-dimension-line-count-not-one");
-        var matchedSourceDimensionLineCount = CountUniqueLineMatches(
-            sourceDimensionLines,
-            explodedLines,
-            NumericalWidthToleranceMm);
-        if (sourceDimensionLines.Length > 0
-            && matchedSourceDimensionLineCount != sourceDimensionLines.Length)
-        {
-            blockers.Add("source-dimension-line-unmatched");
-        }
 
         var sourceExtensionLines = source.SourceLineGeometry
             .Where(item => string.Equals(
@@ -509,15 +500,6 @@ internal static class DimensionMetricComparator
             .ToArray();
         if (sourceExtensionLines.Length != 2)
             blockers.Add("source-extension-line-count-not-two");
-        var matchedSourceExtensionLineCount = CountUniqueLineMatches(
-            sourceExtensionLines,
-            explodedLines,
-            NumericalWidthToleranceMm);
-        if (sourceExtensionLines.Length > 0
-            && matchedSourceExtensionLineCount != sourceExtensionLines.Length)
-        {
-            blockers.Add("source-extension-line-unmatched");
-        }
 
         var sourceArrowLines = source.SourceLineGeometry
             .Where(item => string.Equals(
@@ -527,15 +509,53 @@ internal static class DimensionMetricComparator
             .ToArray();
         if (sourceArrowLines.Length != 2)
             blockers.Add("source-arrow-line-count-not-two");
-        var matchedSourceArrowLineCount = CountUniqueLineMatches(
+
+        var structuralMatch = MatchSourceLineworkGlobally(
+            sourceDimensionLines,
+            sourceExtensionLines,
             sourceArrowLines,
             explodedLines,
             NumericalWidthToleranceMm);
+        var matchedSourceDimensionLineCount = structuralMatch.DimensionLineMatches;
+        var matchedSourceExtensionLineCount = structuralMatch.ExtensionLineMatches;
+        var matchedSourceArrowLineCount = structuralMatch.ArrowLineMatches;
+        var sourceStructuralLineCount =
+            sourceDimensionLines.Length
+            + sourceExtensionLines.Length
+            + sourceArrowLines.Length;
+
+        if (sourceDimensionLines.Length > 0
+            && matchedSourceDimensionLineCount != sourceDimensionLines.Length)
+        {
+            blockers.Add("source-dimension-line-unmatched");
+        }
+        if (sourceExtensionLines.Length > 0
+            && matchedSourceExtensionLineCount != sourceExtensionLines.Length)
+        {
+            blockers.Add("source-extension-line-unmatched");
+        }
         if (sourceArrowLines.Length > 0
             && matchedSourceArrowLineCount != sourceArrowLines.Length)
         {
             blockers.Add("source-arrow-line-unmatched");
         }
+
+        if (structuralMatch.TotalMatches != sourceStructuralLineCount)
+            blockers.Add("source-structural-line-global-one-to-one-mismatch");
+
+        // The first safe subset is line-only. Matching all expected source
+        // strokes is insufficient if the native DIMENSION explodes to extra
+        // non-text geometry: that would still alter the visible drawing after
+        // source suppression. Require exact structural coverage fail-closed.
+        if (native.ExplodedGeometry.Count != sourceStructuralLineCount)
+        {
+            blockers.Add(
+                "native-exploded-geometry-count-does-not-match-source-structure");
+        }
+        if (explodedLines.Length != native.ExplodedGeometry.Count)
+            blockers.Add("native-exploded-non-line-geometry-present");
+        if (explodedLines.Length != sourceStructuralLineCount)
+            blockers.Add("native-exploded-line-count-does-not-match-source-structure");
 
         if (!IsFirstSafeNumericDimensionText(source.SourceText))
             blockers.Add("source-text-outside-safe-numeric-subset");
@@ -924,37 +944,107 @@ internal static class DimensionMetricComparator
         return true;
     }
 
-    private static int CountUniqueLineMatches(
-        IReadOnlyList<SourceLineGeometry> sourceLines,
+    private static StructuralLineMatchResult MatchSourceLineworkGlobally(
+        IReadOnlyList<SourceLineGeometry> dimensionLines,
+        IReadOnlyList<SourceLineGeometry> extensionLines,
+        IReadOnlyList<SourceLineGeometry> arrowLines,
         IReadOnlyList<NativeBlockGeometry> nativeLines,
         double tolerance)
     {
-        var usedNative = new bool[nativeLines.Count];
-        var matched = 0;
+        var sources = dimensionLines
+            .Select(line => new StructuralSourceLine(StructuralLineRole.Dimension, line))
+            .Concat(extensionLines.Select(line =>
+                new StructuralSourceLine(StructuralLineRole.Extension, line)))
+            .Concat(arrowLines.Select(line =>
+                new StructuralSourceLine(StructuralLineRole.Arrow, line)))
+            .ToArray();
 
-        foreach (var source in sourceLines)
+        // Maximum-cardinality bipartite matching prevents one exploded entity
+        // from satisfying two source strokes, including across different roles.
+        // A simple per-role used[] set is insufficient because it is reset for
+        // the next role and can therefore double-count the same native line.
+        var nativeToSource = Enumerable.Repeat(-1, nativeLines.Count).ToArray();
+
+        bool TryAssign(int sourceIndex, bool[] visitedNative)
         {
-            var matchIndex = -1;
-            for (var index = 0; index < nativeLines.Count; index++)
+            for (var nativeIndex = 0; nativeIndex < nativeLines.Count; nativeIndex++)
             {
-                if (usedNative[index])
-                    continue;
-                if (LinesEqual(source, nativeLines[index], tolerance))
+                if (visitedNative[nativeIndex]
+                    || !LinesEqual(
+                        sources[sourceIndex].Geometry,
+                        nativeLines[nativeIndex],
+                        tolerance))
                 {
-                    matchIndex = index;
-                    break;
+                    continue;
+                }
+
+                visitedNative[nativeIndex] = true;
+                if (nativeToSource[nativeIndex] < 0
+                    || TryAssign(nativeToSource[nativeIndex], visitedNative))
+                {
+                    nativeToSource[nativeIndex] = sourceIndex;
+                    return true;
                 }
             }
 
-            if (matchIndex < 0)
-                continue;
-
-            usedNative[matchIndex] = true;
-            matched++;
+            return false;
         }
 
-        return matched;
+        for (var sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
+            TryAssign(sourceIndex, new bool[nativeLines.Count]);
+
+        var matchedSources = new bool[sources.Length];
+        foreach (var sourceIndex in nativeToSource)
+        {
+            if (sourceIndex >= 0)
+                matchedSources[sourceIndex] = true;
+        }
+
+        var dimensionMatches = 0;
+        var extensionMatches = 0;
+        var arrowMatches = 0;
+        for (var sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
+        {
+            if (!matchedSources[sourceIndex])
+                continue;
+
+            switch (sources[sourceIndex].Role)
+            {
+                case StructuralLineRole.Dimension:
+                    dimensionMatches++;
+                    break;
+                case StructuralLineRole.Extension:
+                    extensionMatches++;
+                    break;
+                case StructuralLineRole.Arrow:
+                    arrowMatches++;
+                    break;
+            }
+        }
+
+        return new StructuralLineMatchResult(
+            dimensionMatches,
+            extensionMatches,
+            arrowMatches,
+            matchedSources.Count(value => value));
     }
+
+    private enum StructuralLineRole
+    {
+        Dimension,
+        Extension,
+        Arrow
+    }
+
+    private readonly record struct StructuralSourceLine(
+        StructuralLineRole Role,
+        SourceLineGeometry Geometry);
+
+    private readonly record struct StructuralLineMatchResult(
+        int DimensionLineMatches,
+        int ExtensionLineMatches,
+        int ArrowLineMatches,
+        int TotalMatches);
 
     private static bool LinesEqual(
         SourceLineGeometry source,
