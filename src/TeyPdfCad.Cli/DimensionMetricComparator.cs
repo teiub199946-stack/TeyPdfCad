@@ -253,6 +253,8 @@ internal static class DimensionMetricComparator
                     }
                     if (!AlmostEqual(fragment.TrackingFactor, 1d))
                         blockers.Add("native-fragment-tracking-not-one");
+                    if (!AlmostEqual(fragment.WidthFactor, 1d))
+                        blockers.Add("native-fragment-width-factor-not-one");
                     if (!AlmostEqual(fragment.ObliqueAngle, 0d))
                         blockers.Add("native-fragment-oblique-not-zero");
                     if (fragment.Bold || fragment.Italic)
@@ -484,6 +486,7 @@ internal static class DimensionMetricComparator
                                 GetNullableDouble(fragment, "extentHeight"),
                                 GetNullableDouble(fragment, "capsHeight"),
                                 GetNullableDouble(fragment, "trackingFactor"),
+                                GetNullableDouble(fragment, "widthFactor"),
                                 GetNullableDouble(fragment, "obliqueAngle"),
                                 GetNullableDouble(fragment, "locationX"),
                                 GetNullableDouble(fragment, "locationY"),
@@ -795,6 +798,7 @@ internal static class DimensionMetricComparator
         double? ExtentHeight,
         double? CapsHeight,
         double? TrackingFactor,
+        double? WidthFactor,
         double? ObliqueAngle,
         double? LocationX,
         double? LocationY,
