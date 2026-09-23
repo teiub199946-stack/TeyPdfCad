@@ -44,6 +44,7 @@ public sealed class PdfPigVectorDocumentReader
             var encounteredAmbiguousFontIdentity = false;
             var encounteredMissingAdvanceWidth = false;
             var encounteredMissingVisibleWidth = false;
+            var encounteredMissingVisibleHeight = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
                 textSequence++;
@@ -73,6 +74,11 @@ public sealed class PdfPigVectorDocumentReader
                     baselineX,
                     baselineY,
                     advanceWidthPoints);
+                var visibleHeightPoints = MeasureVisibleHeightPerpendicularToBaseline(
+                    word.BoundingBox,
+                    baselineX,
+                    baselineY,
+                    advanceWidthPoints);
                 var fontName = GetWordFontName(word);
                 var fontProgramIdentity = fontPrograms.ResolveUnique(fontName);
                 if (string.IsNullOrWhiteSpace(fontName))
@@ -81,6 +87,8 @@ public sealed class PdfPigVectorDocumentReader
                     encounteredMissingAdvanceWidth = true;
                 if (visibleWidthPoints <= 1e-9)
                     encounteredMissingVisibleWidth = true;
+                if (visibleHeightPoints <= 1e-9)
+                    encounteredMissingVisibleHeight = true;
 
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
@@ -97,6 +105,7 @@ public sealed class PdfPigVectorDocumentReader
                         word.BoundingBox.Centroid.X * VectorPdfPage.MillimetresPerPoint,
                         word.BoundingBox.Centroid.Y * VectorPdfPage.MillimetresPerPoint),
                     VisibleWidthPoints: visibleWidthPoints,
+                    VisibleHeightPoints: visibleHeightPoints,
                     FontProgramSha256: fontProgramIdentity?.Sha256,
                     FontProgramSubtype: fontProgramIdentity?.FontSubtype,
                     FontEncodingName: fontProgramIdentity?.EncodingName,
@@ -139,6 +148,13 @@ public sealed class PdfPigVectorDocumentReader
                     $"One or more visible PDF words on page {sourcePage.Number} have no usable visible bounding width along the text baseline; exact rendered-width equivalence is not proven."));
             }
 
+            if (encounteredMissingVisibleHeight)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "missing-pdf-text-visible-height",
+                    $"One or more visible PDF words on page {sourcePage.Number} have no usable visible bounding height perpendicular to the text baseline; exact rendered-height equivalence is not proven."));
+            }
+
             pages.Add(new VectorPdfPage(
                 Number: sourcePage.Number,
                 WidthPoints: sourcePage.Width,
@@ -175,6 +191,34 @@ public sealed class PdfPigVectorDocumentReader
             .ToArray();
         var width = projections.Max() - projections.Min();
         return double.IsFinite(width) && width > 0d ? width : 0d;
+    }
+
+    private static double MeasureVisibleHeightPerpendicularToBaseline(
+        PdfRectangle boundingBox,
+        double baselineX,
+        double baselineY,
+        double advanceWidth)
+    {
+        if (!double.IsFinite(advanceWidth) || advanceWidth <= 1e-9)
+            return 0d;
+
+        var unitX = baselineX / advanceWidth;
+        var unitY = baselineY / advanceWidth;
+        var normalX = -unitY;
+        var normalY = unitX;
+        var corners = new[]
+        {
+            boundingBox.BottomLeft,
+            boundingBox.BottomRight,
+            boundingBox.TopLeft,
+            boundingBox.TopRight
+        };
+
+        var projections = corners
+            .Select(point => point.X * normalX + point.Y * normalY)
+            .ToArray();
+        var height = projections.Max() - projections.Min();
+        return double.IsFinite(height) && height > 0d ? height : 0d;
     }
 
     private static (double Left, double Bottom)? TryGetDirectRawMediaBoxOrigin(
