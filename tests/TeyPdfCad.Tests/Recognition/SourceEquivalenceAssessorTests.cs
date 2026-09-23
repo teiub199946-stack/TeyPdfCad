@@ -454,6 +454,27 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_exposes_exact_native_font_and_width_proof_as_separate_blocker()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("arial.ttf", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Helvetica", assessment.Reason, StringComparison.Ordinal);
+        Assert.Contains("advance width", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("independently", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_identifies_endpoint_single_wing_arrow_as_unmapped()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
