@@ -133,6 +133,7 @@ internal static class NativeExpectationBuilder
                         candidate.SourceText,
                         candidate.DisplayedValue)),
                     ("expectedLayer", "PDF_РАЗМЕРЫ"),
+                    ("expectedNormal", Point(new XYZ(0d, 0d, 1d))),
                     ("dimensionStyleFingerprint", DwgEntityFingerprint.ComputeDimensionStyle(dimension))
                 };
                 if (candidate.SourceAppearance?.Text.VisualCenter is { } visualCenter)
