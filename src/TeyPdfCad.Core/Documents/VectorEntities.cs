@@ -66,5 +66,7 @@ public sealed record VectorText(
     string? FontProgramSubtype = null,
     string? FontEncodingName = null,
     bool? FontHasToUnicode = null,
-    bool? FontIsSubset = null)
+    bool? FontIsSubset = null,
+    double GlyphInkWidthPoints = 0d,
+    double GlyphInkHeightPoints = 0d)
     : VectorEntity(SourceId, Style, Confidence);
