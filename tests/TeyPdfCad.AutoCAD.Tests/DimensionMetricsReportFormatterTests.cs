@@ -30,7 +30,20 @@ public sealed class DimensionMetricsReportFormatterTests
                     100,
                     "100",
                     "B10",
-                    [Metric("C1", "MText", 8.25, 2.5)])
+                    [Metric("C1", "MText", 8.25, 2.5)],
+                    BlockGeometry:
+                    [
+                        new DimensionBlockGeometryMetric(
+                            "Line",
+                            "L1",
+                            "line",
+                            0, 0, 0,
+                            10, 0, 0,
+                            0, 0, 0,
+                            10, 0, 0,
+                            string.Empty,
+                            0)
+                    ])
             ]);
 
         var first = DimensionMetricsReportFormatter.Format(report);
@@ -43,11 +56,13 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Equal(
             ["A2", "F2"],
             parsed.Dimensions[1].TextMetrics.Select(item => item.EntityHandle).ToArray());
-        Assert.Contains("\"schemaVersion\": \"3\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": \"4\"", first, StringComparison.Ordinal);
         Assert.Contains("\"width\": 8.25", first, StringComparison.Ordinal);
         Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
         Assert.Contains("\"fragments\":", first, StringComparison.Ordinal);
         Assert.Contains("\"trackingFactor\": 1.0", first, StringComparison.Ordinal);
+        Assert.Contains("\"blockGeometry\":", first, StringComparison.Ordinal);
+        Assert.Contains("\"geometryKind\": \"line\"", first, StringComparison.Ordinal);
     }
 
     [Fact]
