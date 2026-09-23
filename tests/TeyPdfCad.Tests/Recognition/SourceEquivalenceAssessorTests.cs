@@ -952,6 +952,43 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Theory]
+    [InlineData("10 ±0.1")]
+    [InlineData("Ø10")]
+    [InlineData("10 mm")]
+    [InlineData(" 10")]
+    public void Dimension_source_equivalence_rejects_text_outside_plain_numeric_first_safe_subset(
+        string sourceText)
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceText = sourceText,
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with { Value = sourceText }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with { Value = sourceText })
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("plain-numeric", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("Type0/CIDFontType2", "WinAnsiEncoding", false, false, "simple TrueType")]
     [InlineData("TrueType", "Identity-H", false, false, "WinAnsiEncoding")]
     [InlineData("TrueType", "WinAnsiEncoding", true, false, "ToUnicode")]
