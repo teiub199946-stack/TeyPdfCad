@@ -283,6 +283,7 @@ public sealed class ReconstructionCommands
 
                 var textMetrics = new List<DimensionTextMetric>();
                 var blockGeometry = new List<DimensionBlockGeometryMetric>();
+                var explodedGeometry = new List<DimensionBlockGeometryMetric>();
                 string? error = null;
                 var dimBlockHandle = string.Empty;
                 var candidateIdentity = ReadCandidateIdentity(dimension);
@@ -365,6 +366,10 @@ public sealed class ReconstructionCommands
                             }
                         }
 
+                        explodedGeometry.AddRange(ReadExplodedDimensionGeometry(
+                            transaction,
+                            dimension));
+
                         if (textMetrics.Count == 0)
                         {
                             error = "Dimension display block contains no MText/DBText entity; rendered text metrics are unavailable.";
@@ -386,7 +391,8 @@ public sealed class ReconstructionCommands
                     error,
                     candidateIdentity.CandidateId,
                     candidateIdentity.Role,
-                    blockGeometry));
+                    blockGeometry,
+                    explodedGeometry));
             }
 
             // RecomputeDimensionBlock can update the anonymous display block.
@@ -498,7 +504,8 @@ public sealed class ReconstructionCommands
 
     private static DimensionBlockGeometryMetric ReadDimensionBlockGeometry(
         Transaction transaction,
-        Entity entity)
+        Entity entity,
+        string? identityOverride = null)
     {
         double? startX = null;
         double? startY = null;
@@ -572,7 +579,7 @@ public sealed class ReconstructionCommands
 
         return new DimensionBlockGeometryMetric(
             entity.GetType().Name,
-            entity.Handle.ToString(),
+            identityOverride ?? SafeEntityIdentity(entity),
             geometryKind,
             startX,
             startY,
@@ -588,6 +595,62 @@ public sealed class ReconstructionCommands
             maxZ,
             nestedBlockName,
             vertexCount);
+    }
+
+    private static IReadOnlyList<DimensionBlockGeometryMetric> ReadExplodedDimensionGeometry(
+        Transaction transaction,
+        Dimension dimension)
+    {
+        var output = new List<DimensionBlockGeometryMetric>();
+        var exploded = new DBObjectCollection();
+
+        try
+        {
+            dimension.Explode(exploded);
+            var ordinal = 0;
+            foreach (DBObject item in exploded)
+            {
+                if (item is not Entity entity)
+                {
+                    item.Dispose();
+                    continue;
+                }
+
+                try
+                {
+                    output.Add(ReadDimensionBlockGeometry(
+                        transaction,
+                        entity,
+                        "explode-" + ordinal.ToString(CultureInfo.InvariantCulture)));
+                }
+                finally
+                {
+                    entity.Dispose();
+                }
+
+                ordinal++;
+            }
+        }
+        catch (System.Exception)
+        {
+            foreach (DBObject item in exploded)
+                item.Dispose();
+            return [];
+        }
+
+        return output;
+    }
+
+    private static string SafeEntityIdentity(Entity entity)
+    {
+        try
+        {
+            return entity.Handle.ToString();
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
     }
 
     private static IReadOnlyList<DimensionTextFragmentMetric> ReadMTextFragments(
