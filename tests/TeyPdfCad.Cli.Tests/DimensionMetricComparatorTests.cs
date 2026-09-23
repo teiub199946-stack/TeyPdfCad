@@ -80,111 +80,15 @@ public sealed class DimensionMetricComparatorTests
           ]
         }
         """;
-        var native = """
+        var native = $$"""
         {
           "schemaVersion": "5",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
-          "dimensions": [
-            {
-              "dimensionHandle": "10",
-              "dimensionType": "RotatedDimension",
-              "measurement": 100,
-              "dimensionText": "",
-              "dimensionBlockHandle": "20",
-              "candidateId": "p1:dimension:abc",
-              "candidateRole": "primary",
-              "textMetrics": [
-                {
-                  "entityType": "MText",
-                  "entityHandle": "30",
-                  "text": "100",
-                  "metricKind": "mtext-actual-bounds-dimblock-mcs",
-                  "width": 7.5,
-                  "height": 2.5,
-                  "rotationRadians": 0,
-                  "positionX": 15,
-                  "positionY": 20,
-                  "positionZ": 0,
-                  "textStyleName": "TEYPDFCAD_TEXT",
-                  "fontFile": "arial.ttf",
-                  "textStyleWidthFactor": 1,
-                  "fontResolvedPath": "C:\\Windows\\Fonts\\arial.ttf",
-                  "fontSha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-                  "nominalTextHeight": 2.5,
-                  "entityWidthFactor": 1,
-                  "fragments": [
-                    {
-                      "text": "100",
-                      "trueTypeFont": "Arial",
-                      "shxFont": "",
-                      "extentWidth": 7.5,
-                      "extentHeight": 2.5,
-                      "capsHeight": 2.5,
-                      "trackingFactor": 1,
-                      "widthFactor": 1,
-                      "obliqueAngle": 0,
-                      "locationX": 15,
-                      "locationY": 20,
-                      "locationZ": 0,
-                      "directionX": 1,
-                      "directionY": 0,
-                      "directionZ": 0,
-                      "bold": false,
-                      "italic": false,
-                      "stackTop": false,
-                      "stackBottom": false,
-                      "underlined": false,
-                      "overlined": false,
-                      "strikethrough": false
-                    }
-                  ]
-                }
-              ],
-              "blockGeometry": [
-                {
-                  "entityType": "Line",
-                  "entityHandle": "40",
-                  "geometryKind": "line",
-                  "startX": 0,
-                  "startY": 5,
-                  "startZ": 0,
-                  "endX": 10,
-                  "endY": 5,
-                  "endZ": 0,
-                  "minX": 0,
-                  "minY": 5,
-                  "minZ": 0,
-                  "maxX": 10,
-                  "maxY": 5,
-                  "maxZ": 0,
-                  "nestedBlockName": "",
-                  "vertexCount": 0
-                }
-              ],
-              "explodedGeometry": [
-                {
-                  "entityType": "Line",
-                  "entityHandle": "explode-0",
-                  "geometryKind": "line",
-                  "startX": 0,
-                  "startY": 5,
-                  "startZ": 0,
-                  "endX": 10,
-                  "endY": 5,
-                  "endZ": 0,
-                  "minX": 0,
-                  "minY": 5,
-                  "minZ": 0,
-                  "maxX": 10,
-                  "maxY": 5,
-                  "maxZ": 0,
-                  "nestedBlockName": "",
-                  "vertexCount": 0
-                }
-              ]
-            }
-          ]
+          "dimensions": [{{NativeDimension(
+              "p1:dimension:abc",
+              "100",
+              7.5)}}]
         }
         """;
 
