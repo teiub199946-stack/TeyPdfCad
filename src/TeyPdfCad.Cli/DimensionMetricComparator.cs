@@ -667,6 +667,7 @@ internal static class DimensionMetricComparator
                 StringComparison.Ordinal))
             .ToArray();
         var crossSnapshotStructuralTransformConsistent = false;
+        var crossSnapshotTextFragmentTransformConsistent = false;
         if (blockLines.Length != native.BlockGeometry.Count
             || native.BlockGeometry.Count != explodedLines.Length)
         {
@@ -682,6 +683,18 @@ internal static class DimensionMetricComparator
         }
         else
         {
+            crossSnapshotTextFragmentTransformConsistent =
+                FragmentLocationMatchesTransform(
+                    metric,
+                    explodedTextMetric,
+                    crossSnapshotTransform,
+                    NumericalWidthToleranceMm);
+            if (!crossSnapshotTextFragmentTransformConsistent)
+            {
+                blockers.Add(
+                    "cross-snapshot-text-fragment-transform-mismatch");
+            }
+
             var transformedBlockLines = new List<SourceLineGeometry>(
                 blockLines.Length);
             var transformUsable = true;
@@ -859,6 +872,7 @@ internal static class DimensionMetricComparator
             && nativeMeasurementUsable
             && nativeMeasurementMatches
             && crossSnapshotStructuralTransformConsistent
+            && crossSnapshotTextFragmentTransformConsistent
             && baselineDirectionDot.HasValue
             && baselineDirectionDot.Value > 0.999999
             && sourceVisualCenterUsable
@@ -1301,6 +1315,45 @@ internal static class DimensionMetricComparator
             translateX,
             translateY);
         return true;
+    }
+
+    private static bool FragmentLocationMatchesTransform(
+        NativeTextMetric blockText,
+        NativeTextMetric explodedText,
+        RigidTransform2D transform,
+        double tolerance)
+    {
+        if (blockText.Fragments.Count != 1
+            || explodedText.Fragments.Count != 1)
+        {
+            return false;
+        }
+
+        var block = blockText.Fragments[0];
+        var exploded = explodedText.Fragments[0];
+        if (!block.LocationX.HasValue
+            || !block.LocationY.HasValue
+            || !block.LocationZ.HasValue
+            || !exploded.LocationX.HasValue
+            || !exploded.LocationY.HasValue
+            || !exploded.LocationZ.HasValue
+            || !double.IsFinite(block.LocationX.Value)
+            || !double.IsFinite(block.LocationY.Value)
+            || !double.IsFinite(block.LocationZ.Value)
+            || !double.IsFinite(exploded.LocationX.Value)
+            || !double.IsFinite(exploded.LocationY.Value)
+            || !double.IsFinite(exploded.LocationZ.Value)
+            || Math.Abs(block.LocationZ.Value) > tolerance
+            || Math.Abs(exploded.LocationZ.Value) > tolerance)
+        {
+            return false;
+        }
+
+        var transformed = transform.Apply(
+            block.LocationX.Value,
+            block.LocationY.Value);
+        return Math.Abs(transformed.X - exploded.LocationX.Value) <= tolerance
+            && Math.Abs(transformed.Y - exploded.LocationY.Value) <= tolerance;
     }
 
     private static bool TryTransformBlockLine(
