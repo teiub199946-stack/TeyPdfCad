@@ -690,6 +690,7 @@ public sealed class ConversionPipeline
                     candidate.SourceText,
                     text.FontName,
                     text.AdvanceWidthMm,
+                    text.VisibleWidthMm,
                     text.HeightMm,
                     text.RotationDegrees,
                     text.VisualCenter?.X,
@@ -939,7 +940,10 @@ public sealed class ConversionPipeline
             text.AdvanceWidthPoints > 0d
                 ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
                 : null,
-            text.VisualCenter)).ToArray();
+            text.VisualCenter,
+            text.VisibleWidthPoints > 0d
+                ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
@@ -1059,6 +1063,7 @@ public sealed class ConversionPipeline
         string SourceText,
         string? SourceFontName,
         double? SourceAdvanceWidthMm,
+        double? SourceVisibleWidthMm,
         double SourceHeightMm,
         double SourceRotationDegrees,
         double? SourceVisualCenterX,
