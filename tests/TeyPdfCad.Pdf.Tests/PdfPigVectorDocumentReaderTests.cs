@@ -132,6 +132,21 @@ public sealed class PdfPigVectorDocumentReaderTests
     }
 
     [Fact]
+    public async Task Reader_does_not_promote_hidden_pdf_text_to_visible_vector_text()
+    {
+        const string contents = "0 0 m 10 10 l S BT /F1 12 Tf 3 Tr 72 700 Td (HIDDEN) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        Assert.Empty(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        Assert.Contains(
+            page.Diagnostics,
+            diagnostic => diagnostic.Code == "hidden-pdf-text-skipped");
+        Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+    }
+
+    [Fact]
     public async Task Reader_derives_text_height_from_visible_glyph_box_not_nominal_font_size()
     {
         // Type1 Helvetica at a nominal 40 pt renders a glyph bounding box that
