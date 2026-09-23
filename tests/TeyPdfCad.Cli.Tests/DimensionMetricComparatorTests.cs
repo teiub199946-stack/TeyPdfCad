@@ -77,6 +77,7 @@ public sealed class DimensionMetricComparatorTests
                       "extentHeight": 2.5,
                       "capsHeight": 2.5,
                       "trackingFactor": 1,
+                      "widthFactor": 1,
                       "obliqueAngle": 0,
                       "locationX": 15,
                       "locationY": 20,
@@ -484,6 +485,31 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_fragment_width_factor_override()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"widthFactor\": 1",
+                "\"widthFactor\": 0.8",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "4",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.Contains("native-fragment-width-factor-not-one", candidate.Blockers);
+    }
+
+    [Fact]
     public void Comparator_rejects_multiple_or_formatted_native_fragments()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -644,6 +670,7 @@ public sealed class DimensionMetricComparatorTests
                   "extentHeight": 2.5,
                   "capsHeight": 2.5,
                   "trackingFactor": 1,
+                  "widthFactor": 1,
                   "obliqueAngle": 0,
                   "locationX": 15,
                   "locationY": 20,
