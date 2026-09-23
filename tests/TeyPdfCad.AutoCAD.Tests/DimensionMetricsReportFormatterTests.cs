@@ -43,6 +43,19 @@ public sealed class DimensionMetricsReportFormatterTests
                             10, 0, 0,
                             string.Empty,
                             0)
+                    ],
+                    ExplodedGeometry:
+                    [
+                        new DimensionBlockGeometryMetric(
+                            "Line",
+                            "explode-0",
+                            "line",
+                            0, 0, 0,
+                            10, 0, 0,
+                            0, 0, 0,
+                            10, 0, 0,
+                            string.Empty,
+                            0)
                     ])
             ]);
 
