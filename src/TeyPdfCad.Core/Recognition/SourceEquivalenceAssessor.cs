@@ -134,6 +134,43 @@ public static class SourceEquivalenceAssessor
                 "Dimension source-appearance evidence does not cover exactly the recognizer-owned source claim set.");
         }
 
+        if (candidate.SourceClaims.Any(claim =>
+                claim.State != SourceClaimState.Valid
+                || claim.IsPartial
+                || string.IsNullOrWhiteSpace(claim.SourceId)))
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                "Dimension source-equivalence requires every recognizer source claim to be valid, non-partial and source-bound.");
+        }
+
+        var appearanceRoleBindings = appearance.DimensionLine.SourceIds
+            .Select(sourceId => new SourceRoleBinding(sourceId, SourceUsageRole.DimensionLine))
+            .Concat(appearance.ExtensionLines.SelectMany(line =>
+                line.SourceIds.Select(sourceId => new SourceRoleBinding(sourceId, SourceUsageRole.ExtensionLine))))
+            .Concat(appearance.ArrowLines.SelectMany(line =>
+                line.SourceIds.Select(sourceId => new SourceRoleBinding(sourceId, SourceUsageRole.ArrowGeometry))))
+            .Concat(appearance.Text.SourceIds.Select(sourceId =>
+                new SourceRoleBinding(sourceId, SourceUsageRole.Text)))
+            .Where(binding => !string.IsNullOrWhiteSpace(binding.SourceId))
+            .Distinct()
+            .OrderBy(binding => binding.SourceId, StringComparer.Ordinal)
+            .ThenBy(binding => binding.Role)
+            .ToArray();
+        var claimRoleBindings = candidate.SourceClaims
+            .Select(claim => new SourceRoleBinding(claim.SourceId, claim.Role))
+            .Distinct()
+            .OrderBy(binding => binding.SourceId, StringComparer.Ordinal)
+            .ThenBy(binding => binding.Role)
+            .ToArray();
+
+        if (!appearanceRoleBindings.SequenceEqual(claimRoleBindings))
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                "Dimension source-appearance role bindings do not exactly match recognizer-owned source roles.");
+        }
+
         var pageSourceIds = page.Entities
             .Select(entity => entity.SourceId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -300,6 +337,10 @@ public static class SourceEquivalenceAssessor
 
     private static bool AlmostEqual(double first, double second)
         => Math.Abs(first - second) <= 1e-6;
+
+    private readonly record struct SourceRoleBinding(
+        string SourceId,
+        SourceUsageRole Role);
 
     private readonly record struct SourceEquivalenceAssessmentResult(
         bool IsComplete,
