@@ -85,6 +85,7 @@ internal sealed record DimensionMetric(
     string CandidateRole = "",
     IReadOnlyList<DimensionBlockGeometryMetric>? BlockGeometry = null,
     IReadOnlyList<DimensionBlockGeometryMetric>? ExplodedGeometry = null,
+    IReadOnlyList<DimensionTextMetric>? ExplodedTextMetrics = null,
     string BlockGeometryCoordinateFrame = "dimension-block-mcs",
     string ExplodedGeometryCoordinateFrame = "drawing-wcs");
 
@@ -96,7 +97,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "7";
+    public const string SchemaVersion = "8";
 
     public static string Format(DimensionMetricsReport report)
     {
@@ -128,6 +129,10 @@ internal static class DimensionMetricsReportFormatter
                     ExplodedGeometry = (item.ExplodedGeometry ?? [])
                         .OrderBy(entity => entity.EntityType, StringComparer.Ordinal)
                         .ThenBy(entity => entity.EntityHandle, StringComparer.Ordinal)
+                        .ToArray(),
+                    ExplodedTextMetrics = (item.ExplodedTextMetrics ?? [])
+                        .OrderBy(metric => metric.EntityHandle, StringComparer.Ordinal)
+                        .ThenBy(metric => metric.EntityType, StringComparer.Ordinal)
                         .ToArray()
                 })
                 .ToArray()
