@@ -136,6 +136,28 @@ public sealed class PdfPigVectorDocumentReaderTests
     }
 
     [Fact]
+    public async Task Reader_keeps_rotated_text_and_geometry_aligned_with_nonzero_media_box_origin()
+    {
+        const string contents = "172 800 m 200 800 l S BT /F1 12 Tf 172 800 Td (A3) Tj ET";
+        await using var input = CreateMinimalPdf(
+            contents,
+            rotation: 90,
+            mediaBox: "100 100 695.276 941.89");
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+
+        var mm = TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint;
+        Assert.Equal(700d * mm, text.InsertionPoint.X, 6);
+        Assert.Equal(523.276d * mm, text.InsertionPoint.Y, 6);
+        Assert.Equal(700d * mm, line.Start.X, 6);
+        Assert.Equal(523.276d * mm, line.Start.Y, 6);
+        Assert.Equal(700d * mm, line.End.X, 6);
+        Assert.Equal(495.276d * mm, line.End.Y, 6);
+    }
+
+    [Fact]
     public async Task Reader_does_not_promote_hidden_pdf_text_to_visible_vector_text()
     {
         const string contents = "0 0 m 10 10 l S BT /F1 12 Tf 3 Tr 72 700 Td (HIDDEN) Tj ET";
