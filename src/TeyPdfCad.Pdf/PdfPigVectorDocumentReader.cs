@@ -37,8 +37,12 @@ public sealed class PdfPigVectorDocumentReader
             var words = NearestNeighbourWordExtractor.Instance.GetWords(sourcePage.Letters);
             var textSequence = 0;
             var skippedHiddenText = false;
+            var encounteredTextClipping = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
+                if (word.Letters.Any(letter => IsTextClippingMode(letter.RenderingMode)))
+                    encounteredTextClipping = true;
+
                 if (word.Letters.Any(letter => !IsVisible(letter.RenderingMode)))
                 {
                     skippedHiddenText = true;
@@ -77,7 +81,14 @@ public sealed class PdfPigVectorDocumentReader
             {
                 diagnostics.Add(new VectorPageDiagnostic(
                     "hidden-pdf-text-skipped",
-                    $"Hidden or clipping-only PDF text was intentionally omitted on page {sourcePage.Number} so it cannot become visible DWG text."));
+                    $"Hidden PDF text was intentionally omitted on page {sourcePage.Number} so it cannot become visible DWG text."));
+            }
+
+            if (encounteredTextClipping)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "unsupported-pdf-text-clipping",
+                    $"PDF text participates in a clipping path on page {sourcePage.Number}; visible text is preserved where applicable, but text-defined clipping is not reconstructed."));
             }
 
             pages.Add(new VectorPdfPage(
@@ -95,6 +106,12 @@ public sealed class PdfPigVectorDocumentReader
     private static bool IsVisible(TextRenderingMode mode)
         => mode is not TextRenderingMode.Neither
             and not TextRenderingMode.NeitherClip;
+
+    private static bool IsTextClippingMode(TextRenderingMode mode)
+        => mode is TextRenderingMode.FillClip
+            or TextRenderingMode.StrokeClip
+            or TextRenderingMode.FillThenStrokeClip
+            or TextRenderingMode.NeitherClip;
 
     private static string? GetWordFontName(UglyToad.PdfPig.Content.Word word)
     {
