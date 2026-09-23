@@ -260,6 +260,124 @@ public sealed class IndependentNativeExpectationTests
     }
 
     [Fact]
+    public void Wrong_source_derived_dimension_style_is_rejected_against_prewrite_manifest()
+    {
+        var dimStyle = new VectorStyle(
+            RgbColor: 0x445566,
+            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint);
+        var extStyle = new VectorStyle(
+            RgbColor: 0x778899,
+            StrokeWidthPoints: 0.35 / VectorPdfPage.MillimetresPerPoint);
+        var page = new VectorPdfPage(1, 100, 100, 0,
+        [
+            new VectorLine("dim", new(0, 5), new(10, 5), dimStyle),
+            new VectorLine("ext-1", new(0, 0), new(0, 6), extStyle),
+            new VectorLine("ext-2", new(10, 0), new(10, 6), extStyle),
+            new VectorLine("arrow-1", new(0, 5), new(1, 6), dimStyle),
+            new VectorLine("arrow-2", new(10, 5), new(9, 6), dimStyle),
+            new VectorText(
+                "text",
+                "10",
+                new(5, 5),
+                3.2 / VectorPdfPage.MillimetresPerPoint,
+                new VectorStyle(RgbColor: 0x112233),
+                AdvanceWidthPoints: 5d / VectorPdfPage.MillimetresPerPoint,
+                FontName: "Helvetica")
+        ]);
+        var candidate = new DimensionCandidate(
+            DimensionKind.Rotated,
+            new(0, 0),
+            new(10, 0),
+            new(5, 5),
+            10,
+            10,
+            1,
+            0.95,
+            "10",
+            1,
+            ["dim", "ext-1", "ext-2", "arrow-1", "arrow-2", "text"])
+        {
+            RotationRadians = 0,
+            SourceClaims =
+            [
+                new("dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("arrow-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ],
+            SourceAppearance = new DimensionSourceAppearance(
+                new DimensionSourceTextAppearance(
+                    "10", new(5, 5), 3.2, 0, null, 0x112233, ["text"],
+                    "Helvetica", 5d),
+                new DimensionSourceLineAppearance(
+                    new(0, 5), new(10, 5), null, 0x445566, 0.25, [], ["dim"]),
+                [
+                    new DimensionSourceLineAppearance(
+                        new(0, 0), new(0, 6), null, 0x778899, 0.35, [], ["ext-1"]),
+                    new DimensionSourceLineAppearance(
+                        new(10, 0), new(10, 6), null, 0x778899, 0.35, [], ["ext-2"])
+                ],
+                [
+                    new DimensionSourceLineAppearance(
+                        new(0, 5), new(1, 6), null, 0x445566, 0.25, [], ["arrow-1"]),
+                    new DimensionSourceLineAppearance(
+                        new(10, 5), new(9, 6), null, 0x445566, 0.25, [], ["arrow-2"])
+                ])
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+        var hatch = new HatchRecognitionResult([], []);
+        var plan = new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatch, page.Number);
+        var document = new VectorPdfDocument([page]);
+        var manifest = NativeExpectationBuilder.Build(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            new Dictionary<int, HatchRecognitionResult> { [1] = hatch },
+            new Dictionary<int, SemanticReconstructionResult> { [1] = semantics },
+            new Dictionary<int, SourceReplacementPlan> { [1] = plan });
+
+        var candidateId = SourceReplacementPlanner.GetCandidateKey(candidate, 1);
+        var expectedEntity = manifest.Candidates[candidateId].Entities.Single();
+
+        var drawing = new CadDocument();
+        var layer = new Layer("PDF_РАЗМЕРЫ");
+        drawing.Layers.Add(layer);
+        var wrongStyle = new DimensionStyle("TEYPDFCAD_SCALE_1")
+        {
+            LinearScaleFactor = 1,
+            TextHeight = 2.5,
+            ArrowSize = 2.5,
+            ExtensionLineOffset = 0.75,
+            ExtensionLineExtension = 1.25,
+            ScaleFactor = 1
+        };
+        drawing.DimensionStyles.Add(wrongStyle);
+        var wrong = new DimensionLinear
+        {
+            FirstPoint = new XYZ(0, 0, 0),
+            SecondPoint = new XYZ(10, 0, 0),
+            DefinitionPoint = new XYZ(5, 5, 0),
+            Rotation = 0,
+            Normal = new XYZ(0, 0, 1),
+            Style = wrongStyle,
+            Layer = layer,
+            Text = expectedEntity.RequiredProperties["expectedDimensionText"]
+        };
+        CandidateMetadataCodec.Write(wrong, new CandidateEntityMetadata(candidateId, "primary"));
+        drawing.Entities.Add(wrong);
+
+        using var file = WriteDrawing(drawing);
+        var verification = new DwgReadBackVerifier()
+            .Verify(file.Path, manifest)
+            .Candidates[candidateId];
+
+        Assert.False(verification.IsVerified);
+        Assert.Contains(verification.InvalidEntities, value =>
+            value.Contains("dimensionStyleFingerprint", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Wrong_dimension_text_middle_point_is_rejected_against_prewrite_manifest()
     {
         var page = new VectorPdfPage(1, 100, 100, 0,
