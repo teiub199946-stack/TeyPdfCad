@@ -40,6 +40,8 @@ public sealed class PdfPigVectorDocumentReader
             var encounteredTextClipping = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
+                textSequence++;
+
                 if (word.Letters.Any(letter => IsTextClippingMode(letter.RenderingMode)))
                     encounteredTextClipping = true;
 
@@ -58,7 +60,6 @@ public sealed class PdfPigVectorDocumentReader
                     baselineX = first.EndBaseLine.X - first.StartBaseLine.X;
                     baselineY = first.EndBaseLine.Y - first.StartBaseLine.Y;
                 }
-                textSequence++;
                 var heightPoints = MeasureWordHeightPoints(word);
                 var advanceWidthPoints = Math.Sqrt(baselineX * baselineX + baselineY * baselineY);
                 entities.Add(new VectorText(
