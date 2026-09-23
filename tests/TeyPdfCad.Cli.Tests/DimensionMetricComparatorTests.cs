@@ -176,6 +176,62 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_proves_source_to_exploded_line_appearance_for_explicit_first_safe_subset()
+    {
+        var source = WithSourceLineAppearance(
+            SourceReport("candidate-1", "100", 7.5));
+        var nativeDimension = WithExplicitLineAppearance(
+            NativeDimension("candidate-1", "100", 7.5));
+        var native = $"""
+        {
+          "schemaVersion": "9",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.True(candidate.LineAppearanceEvidenceUsable);
+        Assert.DoesNotContain(
+            "source-native-line-appearance-mismatch",
+            candidate.Blockers);
+    }
+
+    [Fact]
+    public void Comparator_rejects_explicit_exploded_lineweight_drift()
+    {
+        var source = WithSourceLineAppearance(
+            SourceReport("candidate-1", "100", 7.5));
+        var nativeDimension = WithExplicitLineAppearance(
+            NativeDimension("candidate-1", "100", 7.5));
+        var root = System.Text.Json.Nodes.JsonNode.Parse(nativeDimension)!.AsObject();
+        var firstLine = root["explodedGeometry"]!.AsArray()[0]!.AsObject();
+        firstLine["lineWeightMode"] = "LineWeight030";
+        firstLine["lineWeightHundredthsMm"] = 30;
+        nativeDimension = root.ToJsonString();
+        var native = $"""
+        {
+          "schemaVersion": "9",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.LineAppearanceEvidenceUsable);
+        Assert.Contains(
+            "source-native-line-appearance-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_accepts_explicit_raw_exploded_line_appearance_as_unambiguous_evidence()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -1556,6 +1612,22 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains(
             "rendered-glyph-equivalence-not-yet-authorized",
             candidate.Blockers);
+    }
+
+    private static string WithSourceLineAppearance(string value)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(value)!.AsObject();
+        var evidence = root["pages"]!.AsArray()[0]!.AsObject()[
+            "dimensionMetricEvidence"]!.AsArray()[0]!.AsObject();
+        foreach (var item in evidence["sourceLineGeometry"]!.AsArray())
+        {
+            var line = item!.AsObject();
+            line["rgbColor"] = 0;
+            line["strokeWidthMm"] = 0.25d;
+            line["dashPatternMm"] = new System.Text.Json.Nodes.JsonArray();
+        }
+
+        return root.ToJsonString();
     }
 
     private static string WithExplicitLineAppearance(string value)
