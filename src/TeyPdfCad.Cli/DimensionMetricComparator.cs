@@ -73,7 +73,7 @@ internal static class DimensionMetricComparator
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
         var globalBlockers = new List<string>();
 
-        if (!string.Equals(nativeSchemaVersion, "2", StringComparison.Ordinal))
+        if (!string.Equals(nativeSchemaVersion, "3", StringComparison.Ordinal))
             globalBlockers.Add("unsupported-native-metrics-schema");
         if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
             globalBlockers.Add("source-report-pages-missing");
@@ -176,6 +176,52 @@ internal static class DimensionMetricComparator
                     blockers.Add("native-text-style-width-factor-invalid");
                 if (!IsPositiveFinite(metric.EntityWidthFactor))
                     blockers.Add("native-entity-width-factor-invalid");
+
+                if (metric.Fragments.Count != 1)
+                {
+                    blockers.Add("native-fragment-count-not-one");
+                }
+                else
+                {
+                    var fragment = metric.Fragments[0];
+                    if (!string.Equals(fragment.Text, source.SourceText, StringComparison.Ordinal))
+                        blockers.Add("native-fragment-text-mismatch");
+                    if (string.IsNullOrWhiteSpace(fragment.TrueTypeFont))
+                        blockers.Add("native-fragment-truetype-font-missing");
+                    if (!string.IsNullOrWhiteSpace(fragment.ShxFont))
+                        blockers.Add("native-fragment-shx-font-present");
+                    if (!IsPositiveFinite(fragment.ExtentWidth)
+                        || !IsPositiveFinite(fragment.ExtentHeight)
+                        || !IsPositiveFinite(fragment.CapsHeight))
+                    {
+                        blockers.Add("native-fragment-extents-invalid");
+                    }
+                    if (!AlmostEqual(fragment.TrackingFactor, 1d))
+                        blockers.Add("native-fragment-tracking-not-one");
+                    if (!AlmostEqual(fragment.ObliqueAngle, 0d))
+                        blockers.Add("native-fragment-oblique-not-zero");
+                    if (fragment.Bold || fragment.Italic)
+                        blockers.Add("native-fragment-font-style-not-plain");
+                    if (fragment.StackTop
+                        || fragment.StackBottom
+                        || fragment.Underlined
+                        || fragment.Overlined
+                        || fragment.Strikethrough)
+                    {
+                        blockers.Add("native-fragment-formatting-not-plain");
+                    }
+
+                    var directionLength = Math.Sqrt(
+                        fragment.DirectionX * fragment.DirectionX
+                        + fragment.DirectionY * fragment.DirectionY
+                        + fragment.DirectionZ * fragment.DirectionZ);
+                    if (!double.IsFinite(directionLength)
+                        || directionLength <= 1e-9
+                        || Math.Abs(fragment.DirectionZ) > 1e-9)
+                    {
+                        blockers.Add("native-fragment-direction-not-planar");
+                    }
+                }
             }
         }
 
@@ -183,6 +229,8 @@ internal static class DimensionMetricComparator
             blockers.Add("source-advance-width-invalid");
         if (!IsPositiveFinite(source.SourceVisibleWidthMm))
             blockers.Add("source-visible-width-invalid");
+        else
+            blockers.Add("source-visible-width-is-bbox-projection-not-ink");
         if (!IsPositiveFinite(source.SourceHeightMm))
             blockers.Add("source-height-invalid");
 
@@ -242,6 +290,7 @@ internal static class DimensionMetricComparator
             && sources.Count == 1
             && natives.Count == 1
             && native.TextMetrics.Count == 1
+            && metric.Fragments.Count == 1
             && string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase)
             && IsPositiveFinite(source.SourceVisibleWidthMm)
             && IsPositiveFinite(source.SourceAdvanceWidthMm)
@@ -249,7 +298,9 @@ internal static class DimensionMetricComparator
             && IsPositiveFinite(metric.Width)
             && IsPositiveFinite(metric.Height)
             && IsSupportedMetricKind(metric.MetricKind)
-            && !distinctBlockers.Contains("native-dimension-metrics-error", StringComparer.Ordinal);
+            && !distinctBlockers.Contains("native-dimension-metrics-error", StringComparer.Ordinal)
+            && !distinctBlockers.Any(blocker =>
+                blocker.StartsWith("native-fragment-", StringComparison.Ordinal));
 
         return new DimensionMetricComparisonCandidate(
             candidateId,
@@ -323,6 +374,36 @@ internal static class DimensionMetricComparator
             {
                 foreach (var metric in metrics.EnumerateArray())
                 {
+                    var fragments = new List<NativeFragmentMetric>();
+                    if (TryGetArray(metric, "fragments", out var fragmentArray))
+                    {
+                        foreach (var fragment in fragmentArray.EnumerateArray())
+                        {
+                            fragments.Add(new NativeFragmentMetric(
+                                GetString(fragment, "text") ?? string.Empty,
+                                GetString(fragment, "trueTypeFont") ?? string.Empty,
+                                GetString(fragment, "shxFont") ?? string.Empty,
+                                GetNullableDouble(fragment, "extentWidth"),
+                                GetNullableDouble(fragment, "extentHeight"),
+                                GetNullableDouble(fragment, "capsHeight"),
+                                GetNullableDouble(fragment, "trackingFactor"),
+                                GetNullableDouble(fragment, "obliqueAngle"),
+                                GetNullableDouble(fragment, "locationX"),
+                                GetNullableDouble(fragment, "locationY"),
+                                GetNullableDouble(fragment, "locationZ"),
+                                GetNullableDouble(fragment, "directionX"),
+                                GetNullableDouble(fragment, "directionY"),
+                                GetNullableDouble(fragment, "directionZ"),
+                                GetNullableBool(fragment, "bold") ?? false,
+                                GetNullableBool(fragment, "italic") ?? false,
+                                GetNullableBool(fragment, "stackTop") ?? false,
+                                GetNullableBool(fragment, "stackBottom") ?? false,
+                                GetNullableBool(fragment, "underlined") ?? false,
+                                GetNullableBool(fragment, "overlined") ?? false,
+                                GetNullableBool(fragment, "strikethrough") ?? false));
+                        }
+                    }
+
                     textMetrics.Add(new NativeTextMetric(
                         GetString(metric, "text") ?? string.Empty,
                         GetString(metric, "metricKind") ?? string.Empty,
@@ -334,7 +415,8 @@ internal static class DimensionMetricComparator
                         GetString(metric, "fontSha256") ?? string.Empty,
                         GetNullableDouble(metric, "nominalTextHeight"),
                         GetNullableDouble(metric, "textStyleWidthFactor"),
-                        GetNullableDouble(metric, "entityWidthFactor")));
+                        GetNullableDouble(metric, "entityWidthFactor"),
+                        fragments));
                 }
             }
 
@@ -384,6 +466,11 @@ internal static class DimensionMetricComparator
 
         return true;
     }
+
+    private static bool AlmostEqual(double? actual, double expected)
+        => actual.HasValue
+            && double.IsFinite(actual.Value)
+            && Math.Abs(actual.Value - expected) <= 1e-9;
 
     private static bool IsSha256(string? value)
         => value is { Length: 64 }
@@ -492,6 +579,29 @@ internal static class DimensionMetricComparator
             => new(candidateId, string.Empty, string.Empty, null, []);
     }
 
+    private sealed record NativeFragmentMetric(
+        string Text,
+        string TrueTypeFont,
+        string ShxFont,
+        double? ExtentWidth,
+        double? ExtentHeight,
+        double? CapsHeight,
+        double? TrackingFactor,
+        double? ObliqueAngle,
+        double? LocationX,
+        double? LocationY,
+        double? LocationZ,
+        double? DirectionX,
+        double? DirectionY,
+        double? DirectionZ,
+        bool Bold,
+        bool Italic,
+        bool StackTop,
+        bool StackBottom,
+        bool Underlined,
+        bool Overlined,
+        bool Strikethrough);
+
     private sealed record NativeTextMetric(
         string Text,
         string MetricKind,
@@ -503,7 +613,8 @@ internal static class DimensionMetricComparator
         string FontSha256,
         double? NominalTextHeight,
         double? TextStyleWidthFactor,
-        double? EntityWidthFactor)
+        double? EntityWidthFactor,
+        IReadOnlyList<NativeFragmentMetric> Fragments)
     {
         public static NativeTextMetric Empty { get; } = new(
             string.Empty,
@@ -516,6 +627,7 @@ internal static class DimensionMetricComparator
             string.Empty,
             null,
             null,
-            null);
+            null,
+            []);
     }
 }
