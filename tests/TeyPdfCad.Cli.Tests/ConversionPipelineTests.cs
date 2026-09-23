@@ -176,6 +176,48 @@ public sealed class ConversionPipelineTests
     }
 
     [Fact]
+    public async Task Optional_probe_output_preserves_sources_and_exposes_native_dimension_candidate()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "dimension-probe.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        var probe = Path.Combine(directory, "result.probe.dwg");
+        const string contents =
+            "20 50 m 120 50 l S " +
+            "20 38 m 20 51 l S " +
+            "120 38 m 120 51 l S " +
+            "19 49 m 21 51 l S " +
+            "119 49 m 121 51 l S " +
+            "BT /F1 12 Tf 60 53 Td (35.28) Tj ET";
+        await File.WriteAllBytesAsync(
+            input,
+            CreateMinimalPdfWithHelvetica(contents, 160, 100));
+
+        var result = await new ConversionPipeline().ConvertAsync(
+            input,
+            output,
+            report,
+            default,
+            diagnosticProbeOutputPath: probe);
+
+        Assert.True(File.Exists(output));
+        Assert.True(File.Exists(probe));
+        Assert.Equal(Path.GetFullPath(probe), result.ProbeDwgPath);
+
+        var published = DwgReader.Read(output);
+        Assert.Empty(published.Entities.OfType<ACadSharp.Entities.Dimension>());
+
+        var diagnostic = DwgReader.Read(probe);
+        var native = Assert.Single(diagnostic.Entities.OfType<ACadSharp.Entities.Dimension>());
+        Assert.True(CandidateMetadataCodec.TryRead(native, out var metadata));
+        Assert.False(string.IsNullOrWhiteSpace(metadata.CandidateId));
+        Assert.Equal("primary", metadata.Role);
+        Assert.NotEmpty(diagnostic.Entities.OfType<ACadSharp.Entities.Line>());
+        Assert.NotEmpty(diagnostic.Entities.OfType<ACadSharp.Entities.TextEntity>());
+    }
+
+    [Fact]
     public async Task Pipeline_preserves_uncertain_pattern_geometry_without_native_hatch()
     {
         var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
