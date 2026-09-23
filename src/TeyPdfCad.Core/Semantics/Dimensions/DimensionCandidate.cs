@@ -33,7 +33,11 @@ public sealed record DimensionSourceTextAppearance(
     double? AdvanceWidthMm = null,
     Point2? VisualCenter = null,
     double? VisibleWidthMm = null,
-    string? FontProgramSha256 = null);
+    string? FontProgramSha256 = null,
+    string? FontProgramSubtype = null,
+    string? FontEncodingName = null,
+    bool? FontHasToUnicode = null,
+    bool? FontIsSubset = null);
 
 public sealed record DimensionSourceAppearance(
     DimensionSourceTextAppearance Text,
