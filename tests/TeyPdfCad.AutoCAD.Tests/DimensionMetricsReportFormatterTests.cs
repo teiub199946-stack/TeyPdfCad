@@ -48,6 +48,31 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void File_identity_uses_stable_uppercase_sha256()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "TeyPdfCad.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "fixture.bin");
+        try
+        {
+            File.WriteAllBytes(path, System.Text.Encoding.ASCII.GetBytes("abc"));
+
+            var hash = DimensionMetricsFileIdentity.ComputeSha256(path);
+
+            Assert.Equal(
+                "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+                hash);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static DimensionTextMetric Metric(
         string handle,
         string type,
