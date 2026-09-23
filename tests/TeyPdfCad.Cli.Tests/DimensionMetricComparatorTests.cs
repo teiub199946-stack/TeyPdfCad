@@ -1417,6 +1417,7 @@ public sealed class DimensionMetricComparatorTests
                   "sourceGlyphInkWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceGlyphInkHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
+                  "sourceNativeMeasurementMm": 100,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
                   "sourceVisualCenterY": 20,
