@@ -435,6 +435,19 @@ public sealed class DwgReadBackVerifier
                 error = "expectedDimensionText requires Dimension";
                 return false;
 
+            case "expectedNormal":
+                if (entity is Dimension normalDimension
+                    && TryPoint(expectedValue, out var expectedNormal))
+                {
+                    var actual = normalDimension.Normal;
+                    if (PointEqual(actual, expectedNormal))
+                        return true;
+                    error = $"normal {Point(actual)} != {Point(expectedNormal)}";
+                    return false;
+                }
+                error = "expectedNormal requires Dimension and x,y,z numeric value";
+                return false;
+
             case "expectedTextMiddlePoint":
                 if (entity is Dimension middlePointDimension
                     && TryPoint(expectedValue, out var expectedPoint))
