@@ -382,6 +382,90 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_does_not_reuse_one_exploded_line_across_source_roles()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5)
+            .Replace(
+                "\"role\": \"arrow-geometry\",\n                      \"sourceIds\": [\"arrow-1\"],\n                      \"startX\": -1,\n                      \"startY\": 4,\n                      \"endX\": 1,\n                      \"endY\": 6",
+                "\"role\": \"arrow-geometry\",\n                      \"sourceIds\": [\"arrow-1\"],\n                      \"startX\": 0,\n                      \"startY\": 5,\n                      \"endX\": 10,\n                      \"endY\": 5",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Equal(1, candidate.SourceDimensionLineCount);
+        Assert.Equal(1, candidate.MatchedSourceDimensionLineCount);
+        Assert.Equal(2, candidate.SourceArrowLineCount);
+        Assert.Equal(1, candidate.MatchedSourceArrowLineCount);
+        Assert.Contains(
+            "source-structural-line-global-one-to-one-mismatch",
+            candidate.Blockers);
+        Assert.Contains("source-arrow-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_rejects_extra_exploded_non_text_geometry()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "            }\n          ],\n          \"explodedTextMetrics\": [",
+                """
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-extra",
+              "geometryKind": "line",
+              "startX": 100,
+              "startY": 100,
+              "startZ": 0,
+              "endX": 110,
+              "endY": 100,
+              "endZ": 0,
+              "minX": 100,
+              "minY": 100,
+              "minZ": 0,
+              "maxX": 110,
+              "maxY": 100,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            }
+          ],
+          "explodedTextMetrics": [
+""",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Equal(6, candidate.NativeExplodedGeometryCount);
+        Assert.Contains(
+            "native-exploded-geometry-count-does-not-match-source-structure",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_exploded_text_that_disagrees_with_regenerated_block_text()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
