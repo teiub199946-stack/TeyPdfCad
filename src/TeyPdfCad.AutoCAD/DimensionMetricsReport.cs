@@ -79,7 +79,9 @@ internal sealed record DimensionMetric(
     string CandidateId = "",
     string CandidateRole = "",
     IReadOnlyList<DimensionBlockGeometryMetric>? BlockGeometry = null,
-    IReadOnlyList<DimensionBlockGeometryMetric>? ExplodedGeometry = null);
+    IReadOnlyList<DimensionBlockGeometryMetric>? ExplodedGeometry = null,
+    string BlockGeometryCoordinateFrame = "dimension-block-mcs",
+    string ExplodedGeometryCoordinateFrame = "drawing-wcs");
 
 internal sealed record DimensionMetricsReport(
     string SchemaVersion,
@@ -89,7 +91,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "5";
+    public const string SchemaVersion = "6";
 
     public static string Format(DimensionMetricsReport report)
     {
