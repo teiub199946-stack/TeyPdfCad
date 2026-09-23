@@ -59,5 +59,6 @@ public sealed record VectorText(
     double RotationRadians = 0d,
     double AdvanceWidthPoints = 0d,
     string? FontName = null,
-    Point2? VisualCenter = null)
+    Point2? VisualCenter = null,
+    double VisibleWidthPoints = 0d)
     : VectorEntity(SourceId, Style, Confidence);
