@@ -176,6 +176,58 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_accepts_explicit_raw_exploded_line_appearance_as_unambiguous_evidence()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = WithExplicitLineAppearance(
+            NativeDimension("candidate-1", "100", 7.5));
+        var native = $"""
+        {
+          "schemaVersion": "9",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.DoesNotContain(
+            "native-exploded-line-appearance-inherited-or-unresolved",
+            candidate.Blockers);
+    }
+
+    [Fact]
+    public void Comparator_rejects_bylayer_exploded_line_as_resolved_appearance_proof()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = WithExplicitLineAppearance(
+            NativeDimension("candidate-1", "100", 7.5));
+        var root = System.Text.Json.Nodes.JsonNode.Parse(nativeDimension)!.AsObject();
+        var firstLine = root["explodedGeometry"]!.AsArray()[0]!.AsObject();
+        firstLine["colorMethod"] = "ByLayer";
+        firstLine["rgbColor"] = null;
+        nativeDimension = root.ToJsonString();
+        var native = $"""
+        {
+          "schemaVersion": "9",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "native-exploded-line-appearance-inherited-or-unresolved",
+            candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_cross_snapshot_fragment_location_drift()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -1504,6 +1556,26 @@ public sealed class DimensionMetricComparatorTests
         Assert.Contains(
             "rendered-glyph-equivalence-not-yet-authorized",
             candidate.Blockers);
+    }
+
+    private static string WithExplicitLineAppearance(string value)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(value)!.AsObject();
+        foreach (var arrayName in new[] { "blockGeometry", "explodedGeometry" })
+        {
+            foreach (var item in root[arrayName]!.AsArray())
+            {
+                var geometry = item!.AsObject();
+                geometry["colorMethod"] = "ByColor";
+                geometry["rgbColor"] = 0;
+                geometry["lineWeightMode"] = "LineWeight025";
+                geometry["lineWeightHundredthsMm"] = 25;
+                geometry["linetype"] = "CONTINUOUS";
+                geometry["layer"] = "PDF_РАЗМЕРЫ";
+            }
+        }
+
+        return root.ToJsonString();
     }
 
     private static string ShiftBlockFragmentX(
