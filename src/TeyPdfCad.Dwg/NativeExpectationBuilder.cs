@@ -5,6 +5,7 @@ using ACadSharp.Tables;
 using CSMath;
 using TeyPdfCad.Core.Conversion;
 using TeyPdfCad.Core.Documents;
+using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
 using TeyPdfCad.Core.Semantics.Dimensions;
@@ -360,7 +361,7 @@ internal static class NativeExpectationBuilder
         // Intentionally do not call AcadSharpStyleCatalog.GetDimensionStyle here.
         // This is the independent pre-write proof path: a defect in the writer's
         // style helper must not automatically reproduce itself in the manifest.
-        dimension.Style = BuildIndependentExpectedDimensionStyle(candidate.DrawingScale);
+        dimension.Style = BuildIndependentExpectedDimensionStyle(candidate);
         dimension.Text = NativeDimensionTextBuilder.Build(
             candidate.SourceText,
             candidate.DisplayedValue);
@@ -375,15 +376,24 @@ internal static class NativeExpectationBuilder
         return dimension;
     }
 
-    private static DimensionStyle BuildIndependentExpectedDimensionStyle(double linearScale)
+    private static DimensionStyle BuildIndependentExpectedDimensionStyle(DimensionCandidate candidate)
     {
-        var canonicalScale = Math.Round(linearScale, 6);
-        var name = $"TEYPDFCAD_SCALE_{canonicalScale.ToString("0.######", CultureInfo.InvariantCulture).Replace('.', '_')}";
+        var canonicalScale = Math.Round(candidate.DrawingScale, 6);
+        var tickSize = IndependentlyResolveObliqueTickSize(candidate.SourceAppearance);
+        var scaleToken = canonicalScale.ToString("0.######", CultureInfo.InvariantCulture).Replace('.', '_');
+        var tickToken = tickSize.HasValue
+            ? "_TICK_" + Math.Round(tickSize.Value, 6)
+                .ToString("0.######", CultureInfo.InvariantCulture)
+                .Replace('.', '_')
+            : string.Empty;
+        var name = $"TEYPDFCAD_SCALE_{scaleToken}{tickToken}";
         return new DimensionStyle(name)
         {
             LinearScaleFactor = canonicalScale,
             TextHeight = 2.5d,
             ArrowSize = 2.5d,
+            TickSize = tickSize ?? 0d,
+            DimensionLineExtension = 0d,
             ExtensionLineOffset = 0.75d,
             ExtensionLineExtension = 1.25d,
             ScaleFactor = 1d,
@@ -394,6 +404,81 @@ internal static class NativeExpectationBuilder
                 Width = 1d
             }
         };
+    }
+
+    private static double? IndependentlyResolveObliqueTickSize(DimensionSourceAppearance? appearance)
+    {
+        if (appearance is null || appearance.ArrowLines.Count != 2)
+            return null;
+
+        var dimension = GeometryMath.Subtract(
+            appearance.DimensionLine.End,
+            appearance.DimensionLine.Start);
+        var dimensionLength = GeometryMath.Length(dimension);
+        if (dimensionLength <= 1e-9)
+            return null;
+        var unitDimension = GeometryMath.Normalize(dimension);
+
+        var first = IndependentTickAt(
+            appearance.DimensionLine.Start,
+            appearance.ArrowLines,
+            unitDimension,
+            appearance.Text.HeightMm);
+        var second = IndependentTickAt(
+            appearance.DimensionLine.End,
+            appearance.ArrowLines,
+            unitDimension,
+            appearance.Text.HeightMm);
+        if (first is null || second is null || ReferenceEquals(first, second))
+            return null;
+
+        var firstLength = GeometryMath.Distance(first.Start, first.End);
+        var secondLength = GeometryMath.Distance(second.Start, second.End);
+        var allowedDifference = Math.Max(1e-6, Math.Max(firstLength, secondLength) * 1e-3);
+        if (Math.Abs(firstLength - secondLength) > allowedDifference)
+            return null;
+
+        return (firstLength + secondLength) / 2d;
+    }
+
+    private static DimensionSourceLineAppearance? IndependentTickAt(
+        Point2 endpoint,
+        IReadOnlyList<DimensionSourceLineAppearance> arrows,
+        Point2 unitDimension,
+        double textHeight)
+    {
+        var matches = new List<DimensionSourceLineAppearance>();
+        var contactTolerance = Math.Max(Math.Min(textHeight * 0.05d, 0.1d), 1e-6);
+
+        foreach (var arrow in arrows)
+        {
+            var arrowVector = GeometryMath.Subtract(arrow.End, arrow.Start);
+            var arrowLength = GeometryMath.Length(arrowVector);
+            if (arrowLength <= 1e-9)
+                continue;
+            if (GeometryMath.DistancePointToSegment(endpoint, arrow.Start, arrow.End) > contactTolerance)
+                continue;
+
+            var startToEnd = GeometryMath.Subtract(arrow.End, arrow.Start);
+            var denominator = GeometryMath.Dot(startToEnd, startToEnd);
+            if (denominator <= 1e-12)
+                continue;
+            var projection = GeometryMath.Dot(
+                GeometryMath.Subtract(endpoint, arrow.Start),
+                startToEnd) / denominator;
+            if (projection is <= 0.05d or >= 0.95d)
+                continue;
+
+            var cosine = Math.Abs(GeometryMath.Dot(
+                GeometryMath.Normalize(arrowVector),
+                unitDimension));
+            if (Math.Abs(cosine - Math.Sqrt(0.5d)) > 0.01d)
+                continue;
+
+            matches.Add(arrow);
+        }
+
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     private static DimensionArc BuildExpectedArcDimension(
