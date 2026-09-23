@@ -473,7 +473,7 @@ public static class SourceEquivalenceAssessor
             : "<unknown>";
 
         var sourceFontSha = appearance.Text.FontProgramSha256 ?? "<unknown>";
-        return $"Native DIMENSION text is deterministically bound to TEYPDFCAD_TEXT/arial.ttf. Raw PDF font '{sourceFont}' has decoded embedded-program SHA-256 '{sourceFontSha}', but equality with AutoCAD's resolved native font binary and rendered glyph geometry must still be independently established. PDF baseline advance ({sourceAdvance} mm) and visible bounding width ({sourceVisible} mm) are captured separately; AutoCAD-native rendered width must be compared only to the visible-width metric before equivalence can be completed.";
+        return $"Native DIMENSION text is deterministically bound to TEYPDFCAD_TEXT/arial.ttf. Raw PDF font '{sourceFont}' has decoded embedded-program SHA-256 '{sourceFontSha}', but equality with AutoCAD's resolved native font binary and rendered glyph geometry must still be independently established. PDF baseline advance width ({sourceAdvance} mm) and visible bounding width ({sourceVisible} mm) are captured separately; AutoCAD-native rendered width must be compared only to the visible-width metric before equivalence can be completed.";
     }
 
     private static string? DescribeUnprovenDimensionArrowMapping(
