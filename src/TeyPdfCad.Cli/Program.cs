@@ -4,12 +4,23 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0
+            && string.Equals(
+                args[0],
+                "compare-dimension-metrics",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return await DimensionMetricComparisonCommand.RunAsync(args);
+        }
+
         if ((args.Length != 7 && args.Length != 9 && args.Length != 11)
             || !string.Equals(args[0], "convert", StringComparison.OrdinalIgnoreCase))
         {
             await Console.Error.WriteLineAsync(
                 "Usage: TeyPdfCad.Cli convert --input <pdf> --output <dwg> --report <json> " +
-                "[--template-manifest <json>] [--probe-output <dwg>]");
+                "[--template-manifest <json>] [--probe-output <dwg>]\n" +
+                "   or: TeyPdfCad.Cli compare-dimension-metrics --conversion-report <json> " +
+                "--autocad-metrics <json> --output <json>");
             return (int)ConversionOutcome.InvalidArgumentsOrIo;
         }
 
