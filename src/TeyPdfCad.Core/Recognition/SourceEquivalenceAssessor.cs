@@ -579,6 +579,11 @@ public static class SourceEquivalenceAssessor
             return "Dimension source font identity is unavailable; native font equivalence cannot be proven.";
         }
 
+        if (!IsFirstSafeNumericDimensionText(appearance.Text.Value))
+        {
+            return "Dimension source text is outside the first safe plain-numeric subset; prefixes, suffixes, spaces, tolerances, symbols and formatted text remain fail-closed.";
+        }
+
         if (!IsSha256(appearance.Text.FontProgramSha256))
         {
             return "Dimension source embedded font-program SHA-256 is unavailable or ambiguous; exact native font binary equivalence cannot be proven.";
@@ -904,6 +909,33 @@ public static class SourceEquivalenceAssessor
         TeyPdfCad.Core.Geometry.Point2 second)
         => AlmostEqual(first.X, second.X)
             && AlmostEqual(first.Y, second.Y);
+
+    private static bool IsFirstSafeNumericDimensionText(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        var separatorSeen = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character >= '0' && character <= '9')
+                continue;
+
+            if ((character == '.' || character == ',')
+                && !separatorSeen
+                && index > 0
+                && index < value.Length - 1)
+            {
+                separatorSeen = true;
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
 
     private static bool IsSha256(string? value)
         => value is { Length: 64 }
