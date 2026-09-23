@@ -517,7 +517,11 @@ public sealed class ConversionPipeline
             text.VisibleWidthPoints > 0d
                 ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
                 : null,
-            text.FontProgramSha256)));
+            text.FontProgramSha256,
+            text.FontProgramSubtype,
+            text.FontEncodingName,
+            text.FontHasToUnicode,
+            text.FontIsSubset)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -694,6 +698,10 @@ public sealed class ConversionPipeline
                     candidate.SourceText,
                     text.FontName,
                     text.FontProgramSha256,
+                    text.FontProgramSubtype,
+                    text.FontEncodingName,
+                    text.FontHasToUnicode,
+                    text.FontIsSubset,
                     text.AdvanceWidthMm,
                     text.VisibleWidthMm,
                     text.HeightMm,
@@ -949,7 +957,11 @@ public sealed class ConversionPipeline
             text.VisibleWidthPoints > 0d
                 ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
                 : null,
-            text.FontProgramSha256)).ToArray();
+            text.FontProgramSha256,
+            text.FontProgramSubtype,
+            text.FontEncodingName,
+            text.FontHasToUnicode,
+            text.FontIsSubset)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
@@ -1069,6 +1081,10 @@ public sealed class ConversionPipeline
         string SourceText,
         string? SourceFontName,
         string? SourceFontSha256,
+        string? SourceFontSubtype,
+        string? SourceFontEncodingName,
+        bool? SourceFontHasToUnicode,
+        bool? SourceFontIsSubset,
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
         double SourceHeightMm,
