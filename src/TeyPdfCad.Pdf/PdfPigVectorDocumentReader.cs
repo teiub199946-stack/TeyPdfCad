@@ -38,6 +38,8 @@ public sealed class PdfPigVectorDocumentReader
             var textSequence = 0;
             var skippedHiddenText = false;
             var encounteredTextClipping = false;
+            var encounteredAmbiguousFontIdentity = false;
+            var encounteredMissingAdvanceWidth = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
                 textSequence++;
@@ -62,6 +64,12 @@ public sealed class PdfPigVectorDocumentReader
                 }
                 var heightPoints = MeasureWordHeightPoints(word);
                 var advanceWidthPoints = Math.Sqrt(baselineX * baselineX + baselineY * baselineY);
+                var fontName = GetWordFontName(word);
+                if (string.IsNullOrWhiteSpace(fontName))
+                    encounteredAmbiguousFontIdentity = true;
+                if (advanceWidthPoints <= 1e-9)
+                    encounteredMissingAdvanceWidth = true;
+
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
                     Value: word.Text,
@@ -72,7 +80,7 @@ public sealed class PdfPigVectorDocumentReader
                     Style: new VectorStyle(RgbColor: ToRgb(first.Color.ToRGBValues())),
                     RotationRadians: Math.Atan2(baselineY, baselineX),
                     AdvanceWidthPoints: advanceWidthPoints,
-                    FontName: GetWordFontName(word),
+                    FontName: fontName,
                     VisualCenter: new Point2(
                         word.BoundingBox.Centroid.X * VectorPdfPage.MillimetresPerPoint,
                         word.BoundingBox.Centroid.Y * VectorPdfPage.MillimetresPerPoint)));
@@ -90,6 +98,20 @@ public sealed class PdfPigVectorDocumentReader
                 diagnostics.Add(new VectorPageDiagnostic(
                     "unsupported-pdf-text-clipping",
                     $"PDF text participates in a clipping path on page {sourcePage.Number}; visible text is preserved where applicable, but text-defined clipping is not reconstructed."));
+            }
+
+            if (encounteredAmbiguousFontIdentity)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "ambiguous-pdf-text-font",
+                    $"One or more visible PDF words on page {sourcePage.Number} do not have one uniform non-empty font identity; text is preserved, but exact font equivalence is not proven."));
+            }
+
+            if (encounteredMissingAdvanceWidth)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "missing-pdf-text-advance",
+                    $"One or more visible PDF words on page {sourcePage.Number} have no usable baseline advance width; exact text-width equivalence is not proven."));
             }
 
             pages.Add(new VectorPdfPage(
@@ -116,9 +138,11 @@ public sealed class PdfPigVectorDocumentReader
 
     private static string? GetWordFontName(UglyToad.PdfPig.Content.Word word)
     {
+        if (word.Letters.Any(letter => string.IsNullOrWhiteSpace(letter.FontName)))
+            return null;
+
         var names = word.Letters
-            .Select(letter => letter.FontName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(letter => letter.FontName!)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
