@@ -454,7 +454,10 @@ public sealed class ConversionPipeline
             text.Style.SourceLayer,
             [text.SourceId],
             text.Style.RgbColor,
-            text.FontName)));
+            text.FontName,
+            text.AdvanceWidthPoints > 0d
+                ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -849,7 +852,10 @@ public sealed class ConversionPipeline
             text.Style.SourceLayer,
             [text.SourceId],
             text.Style.RgbColor,
-            text.FontName)).ToArray();
+            text.FontName,
+            text.AdvanceWidthPoints > 0d
+                ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
