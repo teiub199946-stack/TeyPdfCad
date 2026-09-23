@@ -312,6 +312,7 @@ public sealed class ReconstructionCommands
                             if (entity is MText mtext)
                             {
                                 var style = ReadTextStyle(transaction, database, mtext.TextStyleId);
+                                var fragments = ReadMTextFragments(mtext);
                                 textMetrics.Add(new DimensionTextMetric(
                                     "MText",
                                     mtext.Handle.ToString(),
@@ -329,7 +330,8 @@ public sealed class ReconstructionCommands
                                     style.FontResolvedPath,
                                     style.FontSha256,
                                     mtext.TextHeight,
-                                    style.WidthFactor));
+                                    style.WidthFactor,
+                                    Fragments: fragments));
                             }
                             else if (entity is DBText dbText)
                             {
@@ -484,6 +486,57 @@ public sealed class ReconstructionCommands
         {
             return (string.Empty, string.Empty);
         }
+    }
+
+    private static IReadOnlyList<DimensionTextFragmentMetric> ReadMTextFragments(
+        MText mtext)
+    {
+        var fragments = new List<DimensionTextFragmentMetric>();
+        try
+        {
+            MTextFragmentCallback callback = (fragment, _) =>
+            {
+                var extents = fragment.Extents;
+                var location = fragment.Location;
+                var direction = fragment.Direction;
+                fragments.Add(new DimensionTextFragmentMetric(
+                    fragment.Text ?? string.Empty,
+                    Convert.ToString(fragment.TrueTypeFont, CultureInfo.InvariantCulture)
+                        ?? string.Empty,
+                    Convert.ToString(fragment.ShxFont, CultureInfo.InvariantCulture)
+                        ?? string.Empty,
+                    extents.X,
+                    extents.Y,
+                    fragment.CapsHeight,
+                    fragment.TrackingFactor,
+                    fragment.ObliqueAngle,
+                    location.X,
+                    location.Y,
+                    location.Z,
+                    direction.X,
+                    direction.Y,
+                    direction.Z,
+                    fragment.Bold,
+                    fragment.Italic,
+                    fragment.StackTop,
+                    fragment.StackBottom,
+                    fragment.Underlined,
+                    fragment.Overlined,
+                    fragment.Strikethrough));
+                return MTextFragmentCallbackStatus.Continue;
+            };
+
+            mtext.ExplodeFragments(callback);
+        }
+        catch (System.Exception)
+        {
+            // Fragment evidence is diagnostic-only and fail-closed. If AutoCAD
+            // cannot enumerate the generated MText layout we leave the list
+            // empty; the independent comparator will reject that candidate.
+            return [];
+        }
+
+        return fragments;
     }
 
     private static (
