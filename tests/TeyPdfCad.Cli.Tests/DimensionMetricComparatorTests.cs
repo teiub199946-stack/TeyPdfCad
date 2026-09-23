@@ -24,6 +24,7 @@ public sealed class DimensionMetricComparatorTests
                   "sourceFontIsSubset": false,
                   "sourceAdvanceWidthMm": 8.0,
                   "sourceVisibleWidthMm": 7.5,
+                  "sourceVisibleHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
@@ -315,6 +316,56 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_detects_fragment_width_drift_even_when_mtext_actual_width_matches()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"extentWidth\": 7.5",
+                "\"extentWidth\": 7.7",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "3",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains("native-fragment-width-mismatch", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_detects_projected_height_drift_against_native_fragment()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"extentHeight\": 2.5",
+                "\"extentHeight\": 3.0",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "3",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains("projected-height-mismatch", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_reports_formatted_source_text_outside_first_safe_subset()
     {
         var source = SourceReport("candidate-1", "10 mm", 7.5);
@@ -409,6 +460,7 @@ public sealed class DimensionMetricComparatorTests
                   "sourceFontIsSubset": false,
                   "sourceAdvanceWidthMm": 7.5,
                   "sourceVisibleWidthMm": 7.5,
+                  "sourceVisibleHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
@@ -464,6 +516,7 @@ public sealed class DimensionMetricComparatorTests
                   "sourceFontIsSubset": false,
                   "sourceAdvanceWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceVisibleWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
+                  "sourceVisibleHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
