@@ -91,7 +91,7 @@ internal static class DimensionMetricComparator
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
         var globalBlockers = new List<string>();
 
-        if (!string.Equals(nativeSchemaVersion, "7", StringComparison.Ordinal))
+        if (!string.Equals(nativeSchemaVersion, "8", StringComparison.Ordinal))
             globalBlockers.Add("unsupported-native-metrics-schema");
         if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
             globalBlockers.Add("source-report-pages-missing");
@@ -305,6 +305,63 @@ internal static class DimensionMetricComparator
             }
         }
 
+        NativeTextMetric explodedTextMetric = NativeTextMetric.Empty;
+        if (natives.Count == 1)
+        {
+            if (native.ExplodedTextMetrics.Count != 1)
+            {
+                blockers.Add("cross-snapshot-exploded-text-count-not-one");
+            }
+            else
+            {
+                explodedTextMetric = native.ExplodedTextMetrics[0];
+                if (!string.Equals(
+                        metric.EntityType,
+                        "MText",
+                        StringComparison.Ordinal)
+                    || !string.Equals(
+                        explodedTextMetric.EntityType,
+                        "MText",
+                        StringComparison.Ordinal))
+                {
+                    blockers.Add("cross-snapshot-text-type-not-mtext");
+                }
+                if (!string.Equals(
+                        explodedTextMetric.MetricKind,
+                        "mtext-actual-bounds-exploded-wcs",
+                        StringComparison.Ordinal))
+                {
+                    blockers.Add("cross-snapshot-exploded-metric-kind-unsupported");
+                }
+                if (!string.Equals(
+                        metric.Text,
+                        explodedTextMetric.Text,
+                        StringComparison.Ordinal))
+                {
+                    blockers.Add("cross-snapshot-text-mismatch");
+                }
+                if (!string.Equals(
+                        metric.FontSha256,
+                        explodedTextMetric.FontSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    blockers.Add("cross-snapshot-font-sha256-mismatch");
+                }
+                if (!string.Equals(
+                        metric.FontFile,
+                        explodedTextMetric.FontFile,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    blockers.Add("cross-snapshot-font-file-mismatch");
+                }
+                if (!ScalarEqual(metric.Width, explodedTextMetric.Width, 1e-6)
+                    || !ScalarEqual(metric.Height, explodedTextMetric.Height, 1e-6))
+                {
+                    blockers.Add("cross-snapshot-text-extents-mismatch");
+                }
+            }
+        }
+
         if (!IsPositiveFinite(source.SourceAdvanceWidthMm))
             blockers.Add("source-advance-width-invalid");
         if (!IsPositiveFinite(source.SourceVisibleWidthMm))
@@ -484,6 +541,7 @@ internal static class DimensionMetricComparator
         blockers.Add("rendered-glyph-equivalence-not-yet-authorized");
         blockers.Add("anonymous-block-structural-equivalence-not-yet-authorized");
         blockers.Add("exploded-geometry-source-equivalence-not-yet-authorized");
+        blockers.Add("cross-snapshot-transform-equivalence-not-yet-authorized");
 
         var distinctBlockers = blockers
             .Distinct(StringComparer.Ordinal)
@@ -494,6 +552,7 @@ internal static class DimensionMetricComparator
             && sources.Count == 1
             && natives.Count == 1
             && native.TextMetrics.Count == 1
+            && native.ExplodedTextMetrics.Count == 1
             && native.BlockGeometry.Count > 0
             && native.ExplodedGeometry.Count > 0
             && string.Equals(
@@ -535,7 +594,13 @@ internal static class DimensionMetricComparator
             && !distinctBlockers.Any(blocker =>
                 blocker.StartsWith("native-block-", StringComparison.Ordinal))
             && !distinctBlockers.Any(blocker =>
-                blocker.StartsWith("native-exploded-", StringComparison.Ordinal));
+                blocker.StartsWith("native-exploded-", StringComparison.Ordinal))
+            && !distinctBlockers.Any(blocker =>
+                blocker.StartsWith("cross-snapshot-", StringComparison.Ordinal)
+                && !string.Equals(
+                    blocker,
+                    "cross-snapshot-transform-equivalence-not-yet-authorized",
+                    StringComparison.Ordinal));
 
         return new DimensionMetricComparisonCandidate(
             candidateId,
@@ -648,62 +713,12 @@ internal static class DimensionMetricComparator
         var output = new List<NativeDimensionEvidence>();
         foreach (var dimension in dimensions.EnumerateArray())
         {
-            var textMetrics = new List<NativeTextMetric>();
-            if (TryGetArray(dimension, "textMetrics", out var metrics))
-            {
-                foreach (var metric in metrics.EnumerateArray())
-                {
-                    var fragments = new List<NativeFragmentMetric>();
-                    if (TryGetArray(metric, "fragments", out var fragmentArray))
-                    {
-                        foreach (var fragment in fragmentArray.EnumerateArray())
-                        {
-                            fragments.Add(new NativeFragmentMetric(
-                                GetString(fragment, "text") ?? string.Empty,
-                                GetString(fragment, "trueTypeFont") ?? string.Empty,
-                                GetString(fragment, "shxFont") ?? string.Empty,
-                                GetNullableDouble(fragment, "extentWidth"),
-                                GetNullableDouble(fragment, "extentHeight"),
-                                GetNullableDouble(fragment, "capsHeight"),
-                                GetNullableDouble(fragment, "trackingFactor"),
-                                GetNullableDouble(fragment, "widthFactor"),
-                                GetNullableDouble(fragment, "obliqueAngle"),
-                                GetNullableDouble(fragment, "locationX"),
-                                GetNullableDouble(fragment, "locationY"),
-                                GetNullableDouble(fragment, "locationZ"),
-                                GetNullableDouble(fragment, "directionX"),
-                                GetNullableDouble(fragment, "directionY"),
-                                GetNullableDouble(fragment, "directionZ"),
-                                GetNullableBool(fragment, "bold") ?? false,
-                                GetNullableBool(fragment, "italic") ?? false,
-                                GetNullableBool(fragment, "stackTop") ?? false,
-                                GetNullableBool(fragment, "stackBottom") ?? false,
-                                GetNullableBool(fragment, "underlined") ?? false,
-                                GetNullableBool(fragment, "overlined") ?? false,
-                                GetNullableBool(fragment, "strikethrough") ?? false));
-                        }
-                    }
-
-                    textMetrics.Add(new NativeTextMetric(
-                        GetString(metric, "text") ?? string.Empty,
-                        GetString(metric, "metricKind") ?? string.Empty,
-                        GetNullableDouble(metric, "width"),
-                        GetNullableDouble(metric, "height"),
-                        GetString(metric, "textStyleName") ?? string.Empty,
-                        GetString(metric, "fontFile") ?? string.Empty,
-                        GetString(metric, "fontResolvedPath") ?? string.Empty,
-                        GetString(metric, "fontSha256") ?? string.Empty,
-                        GetNullableDouble(metric, "nominalTextHeight"),
-                        GetNullableDouble(metric, "textStyleWidthFactor"),
-                        GetNullableDouble(metric, "entityWidthFactor"),
-                        GetNullableBool(metric, "backgroundFill") ?? false,
-                        GetNullableBool(metric, "useBackgroundColor") ?? false,
-                        GetNullableDouble(metric, "backgroundScaleFactor"),
-                        GetNullableBool(metric, "showBorders") ?? false,
-                        GetString(metric, "attachment") ?? string.Empty,
-                        fragments));
-                }
-            }
+            var textMetrics = ReadTextMetrics(
+                dimension,
+                "textMetrics");
+            var explodedTextMetrics = ReadTextMetrics(
+                dimension,
+                "explodedTextMetrics");
 
             var blockGeometry = new List<NativeBlockGeometry>();
             if (TryGetArray(dimension, "blockGeometry", out var geometryArray))
@@ -743,6 +758,7 @@ internal static class DimensionMetricComparator
                 textMetrics,
                 blockGeometry,
                 explodedGeometry,
+                explodedTextMetrics,
                 GetString(dimension, "blockGeometryCoordinateFrame") ?? string.Empty,
                 GetString(dimension, "explodedGeometryCoordinateFrame") ?? string.Empty));
         }
@@ -907,6 +923,72 @@ internal static class DimensionMetricComparator
         return sameDirection || reverseDirection;
     }
 
+    private static IReadOnlyList<NativeTextMetric> ReadTextMetrics(
+        JsonElement dimension,
+        string propertyName)
+    {
+        if (!TryGetArray(dimension, propertyName, out var metrics))
+            return [];
+
+        var output = new List<NativeTextMetric>();
+        foreach (var metric in metrics.EnumerateArray())
+        {
+            var fragments = new List<NativeFragmentMetric>();
+            if (TryGetArray(metric, "fragments", out var fragmentArray))
+            {
+                foreach (var fragment in fragmentArray.EnumerateArray())
+                {
+                    fragments.Add(new NativeFragmentMetric(
+                        GetString(fragment, "text") ?? string.Empty,
+                        GetString(fragment, "trueTypeFont") ?? string.Empty,
+                        GetString(fragment, "shxFont") ?? string.Empty,
+                        GetNullableDouble(fragment, "extentWidth"),
+                        GetNullableDouble(fragment, "extentHeight"),
+                        GetNullableDouble(fragment, "capsHeight"),
+                        GetNullableDouble(fragment, "trackingFactor"),
+                        GetNullableDouble(fragment, "widthFactor"),
+                        GetNullableDouble(fragment, "obliqueAngle"),
+                        GetNullableDouble(fragment, "locationX"),
+                        GetNullableDouble(fragment, "locationY"),
+                        GetNullableDouble(fragment, "locationZ"),
+                        GetNullableDouble(fragment, "directionX"),
+                        GetNullableDouble(fragment, "directionY"),
+                        GetNullableDouble(fragment, "directionZ"),
+                        GetNullableBool(fragment, "bold") ?? false,
+                        GetNullableBool(fragment, "italic") ?? false,
+                        GetNullableBool(fragment, "stackTop") ?? false,
+                        GetNullableBool(fragment, "stackBottom") ?? false,
+                        GetNullableBool(fragment, "underlined") ?? false,
+                        GetNullableBool(fragment, "overlined") ?? false,
+                        GetNullableBool(fragment, "strikethrough") ?? false));
+                }
+            }
+
+            output.Add(new NativeTextMetric(
+                GetString(metric, "entityType") ?? string.Empty,
+                GetString(metric, "entityHandle") ?? string.Empty,
+                GetString(metric, "text") ?? string.Empty,
+                GetString(metric, "metricKind") ?? string.Empty,
+                GetNullableDouble(metric, "width"),
+                GetNullableDouble(metric, "height"),
+                GetString(metric, "textStyleName") ?? string.Empty,
+                GetString(metric, "fontFile") ?? string.Empty,
+                GetString(metric, "fontResolvedPath") ?? string.Empty,
+                GetString(metric, "fontSha256") ?? string.Empty,
+                GetNullableDouble(metric, "nominalTextHeight"),
+                GetNullableDouble(metric, "textStyleWidthFactor"),
+                GetNullableDouble(metric, "entityWidthFactor"),
+                GetNullableBool(metric, "backgroundFill") ?? false,
+                GetNullableBool(metric, "useBackgroundColor") ?? false,
+                GetNullableDouble(metric, "backgroundScaleFactor"),
+                GetNullableBool(metric, "showBorders") ?? false,
+                GetString(metric, "attachment") ?? string.Empty,
+                fragments));
+        }
+
+        return output;
+    }
+
     private static IReadOnlyList<NativeBlockGeometry> ReadGeometryEvidence(
         JsonElement dimension,
         string propertyName)
@@ -1030,6 +1112,16 @@ internal static class DimensionMetricComparator
         var dz = geometry.EndZ.Value - geometry.StartZ.Value;
         return dx * dx + dy * dy + dz * dz > 1e-18;
     }
+
+    private static bool ScalarEqual(
+        double? first,
+        double? second,
+        double tolerance)
+        => first.HasValue
+            && second.HasValue
+            && double.IsFinite(first.Value)
+            && double.IsFinite(second.Value)
+            && Math.Abs(first.Value - second.Value) <= tolerance;
 
     private static bool AlmostEqual(double? actual, double expected)
         => actual.HasValue
@@ -1193,6 +1285,7 @@ internal static class DimensionMetricComparator
         IReadOnlyList<NativeTextMetric> TextMetrics,
         IReadOnlyList<NativeBlockGeometry> BlockGeometry,
         IReadOnlyList<NativeBlockGeometry> ExplodedGeometry,
+        IReadOnlyList<NativeTextMetric> ExplodedTextMetrics,
         string BlockGeometryCoordinateFrame,
         string ExplodedGeometryCoordinateFrame)
     {
@@ -1202,6 +1295,7 @@ internal static class DimensionMetricComparator
                 string.Empty,
                 string.Empty,
                 null,
+                [],
                 [],
                 [],
                 [],
@@ -1234,6 +1328,8 @@ internal static class DimensionMetricComparator
         bool Strikethrough);
 
     private sealed record NativeTextMetric(
+        string EntityType,
+        string EntityHandle,
         string Text,
         string MetricKind,
         double? Width,
@@ -1253,6 +1349,8 @@ internal static class DimensionMetricComparator
         IReadOnlyList<NativeFragmentMetric> Fragments)
     {
         public static NativeTextMetric Empty { get; } = new(
+            string.Empty,
+            string.Empty,
             string.Empty,
             string.Empty,
             null,
