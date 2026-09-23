@@ -28,9 +28,12 @@ internal sealed record DimensionMetricComparisonCandidate(
     string NativeMetricKind,
     double? SourceAdvanceWidthMm,
     double? SourceVisibleWidthMm,
+    double? SourceVisibleHeightMm,
     double? NativeRenderedWidthMm,
     double? NativeRenderedHeightMm,
     double? VisibleWidthDeltaMm,
+    double? FragmentWidthDeltaMm,
+    double? ProjectedHeightDeltaMm,
     double? SourceHeightMm,
     double? NativeNominalTextHeightMm,
     double? NativeTextStyleWidthFactor,
@@ -231,6 +234,10 @@ internal static class DimensionMetricComparator
             blockers.Add("source-visible-width-invalid");
         else
             blockers.Add("source-visible-width-is-bbox-projection-not-ink");
+        if (!IsPositiveFinite(source.SourceVisibleHeightMm))
+            blockers.Add("source-visible-height-invalid");
+        else
+            blockers.Add("source-visible-height-is-bbox-projection-not-ink");
         if (!IsPositiveFinite(source.SourceHeightMm))
             blockers.Add("source-height-invalid");
 
@@ -274,6 +281,30 @@ internal static class DimensionMetricComparator
                 blockers.Add("visible-width-mismatch");
         }
 
+        double? fragmentWidthDelta = null;
+        double? projectedHeightDelta = null;
+        if (metric.Fragments.Count == 1)
+        {
+            var fragment = metric.Fragments[0];
+            if (IsPositiveFinite(source.SourceVisibleWidthMm)
+                && IsPositiveFinite(fragment.ExtentWidth))
+            {
+                fragmentWidthDelta =
+                    fragment.ExtentWidth!.Value - source.SourceVisibleWidthMm!.Value;
+                if (Math.Abs(fragmentWidthDelta.Value) > NumericalWidthToleranceMm)
+                    blockers.Add("native-fragment-width-mismatch");
+            }
+
+            if (IsPositiveFinite(source.SourceVisibleHeightMm)
+                && IsPositiveFinite(fragment.ExtentHeight))
+            {
+                projectedHeightDelta =
+                    fragment.ExtentHeight!.Value - source.SourceVisibleHeightMm!.Value;
+                if (Math.Abs(projectedHeightDelta.Value) > NumericalWidthToleranceMm)
+                    blockers.Add("projected-height-mismatch");
+            }
+        }
+
         // Even when every currently captured scalar matches, source->native text
         // appearance is not authorized until the project has independently
         // proven that the compared PDF metric is a real glyph/ink metric and
@@ -293,6 +324,7 @@ internal static class DimensionMetricComparator
             && metric.Fragments.Count == 1
             && string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase)
             && IsPositiveFinite(source.SourceVisibleWidthMm)
+            && IsPositiveFinite(source.SourceVisibleHeightMm)
             && IsPositiveFinite(source.SourceAdvanceWidthMm)
             && IsPositiveFinite(source.SourceHeightMm)
             && IsPositiveFinite(metric.Width)
@@ -320,9 +352,12 @@ internal static class DimensionMetricComparator
             metric.MetricKind,
             source.SourceAdvanceWidthMm,
             source.SourceVisibleWidthMm,
+            source.SourceVisibleHeightMm,
             metric.Width,
             metric.Height,
             widthDelta,
+            fragmentWidthDelta,
+            projectedHeightDelta,
             source.SourceHeightMm,
             metric.NominalTextHeight,
             metric.TextStyleWidthFactor,
@@ -354,6 +389,7 @@ internal static class DimensionMetricComparator
                     GetNullableBool(item, "sourceFontIsSubset"),
                     GetNullableDouble(item, "sourceAdvanceWidthMm"),
                     GetNullableDouble(item, "sourceVisibleWidthMm"),
+                    GetNullableDouble(item, "sourceVisibleHeightMm"),
                     GetNullableDouble(item, "sourceHeightMm")));
             }
         }
@@ -551,12 +587,14 @@ internal static class DimensionMetricComparator
         bool? SourceFontIsSubset,
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
+        double? SourceVisibleHeightMm,
         double? SourceHeightMm)
     {
         public static SourceEvidence Empty(string candidateId)
             => new(
                 candidateId,
                 string.Empty,
+                null,
                 null,
                 null,
                 null,
