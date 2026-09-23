@@ -19,12 +19,14 @@ public static class DwgEntityFingerprint
                 Point(dimension.FirstPoint),
                 Point(dimension.SecondPoint),
                 Point(dimension.DefinitionPoint),
-                Number(dimension.Rotation)),
+                Number(dimension.Rotation),
+                DimensionTextGeometry(dimension)),
             DimensionAligned dimension => Join(
                 "DimensionAligned",
                 Point(dimension.FirstPoint),
                 Point(dimension.SecondPoint),
-                Point(dimension.DefinitionPoint)),
+                Point(dimension.DefinitionPoint),
+                DimensionTextGeometry(dimension)),
             DimensionArc dimension => Join(
                 "DimensionArc",
                 Point(dimension.Center),
@@ -32,11 +34,13 @@ public static class DwgEntityFingerprint
                 Point(dimension.SecondPoint),
                 Point(dimension.DefinitionPoint),
                 Number(dimension.StartAngle),
-                Number(dimension.EndAngle)),
+                Number(dimension.EndAngle),
+                DimensionTextGeometry(dimension)),
             Dimension dimension => Join(
                 "Dimension",
                 Point(dimension.DefinitionPoint),
-                Number(dimension.Measurement)),
+                Number(dimension.Measurement),
+                DimensionTextGeometry(dimension)),
             Leader leader => Join(
                 "Leader",
                 string.Join(";", leader.Vertices.Select(Point)),
@@ -180,6 +184,16 @@ public static class DwgEntityFingerprint
             candidateMetadata,
             sourceMetadata);
     }
+
+    private static string DimensionTextGeometry(Dimension dimension)
+        => Join(
+            dimension.IsTextUserDefinedLocation ? "1" : "0",
+            dimension.IsTextUserDefinedLocation
+                ? Point(dimension.TextMiddlePoint)
+                : "<auto>",
+            Number(dimension.TextRotation),
+            dimension.FlipArrow1 ? "1" : "0",
+            dimension.FlipArrow2 ? "1" : "0");
 
     private static string Point(XYZ point)
         => Number(point.X) + "," + Number(point.Y) + "," + Number(point.Z);
