@@ -338,9 +338,9 @@ public sealed class DwgDocumentWriterTests
         Assert.Equal(Color.FromTrueColor(0x112233).ToString(), style.TextColor.ToString());
         Assert.Equal((LineWeightType)25, style.DimensionLineWeight);
         Assert.Equal((LineWeightType)35, style.ExtensionLineWeight);
-        Assert.Equal([4d, -2d], style.LineType.Segments.Select(segment => segment.Length).ToArray());
-        Assert.Equal([1d, -1d], style.LineTypeExt1.Segments.Select(segment => segment.Length).ToArray());
-        Assert.Equal([1d, -1d], style.LineTypeExt2.Segments.Select(segment => segment.Length).ToArray());
+        Assert.Equal(new[] { 4d, -2d }, style.LineType.Segments.Select(segment => segment.Length).ToArray());
+        Assert.Equal(new[] { 1d, -1d }, style.LineTypeExt1.Segments.Select(segment => segment.Length).ToArray());
+        Assert.Equal(new[] { 1d, -1d }, style.LineTypeExt2.Segments.Select(segment => segment.Length).ToArray());
         Assert.Equal(0d, style.ExtensionLineOffset, 6);
         Assert.Equal(1d, style.ExtensionLineExtension, 6);
     }
