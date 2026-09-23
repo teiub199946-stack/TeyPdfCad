@@ -126,6 +126,10 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(-Math.PI / 2d, texts[0].RotationRadians, 6);
         Assert.Equal(0x000000, texts[0].Style.RgbColor);
         Assert.Equal("Helvetica", texts[0].FontName);
+        Assert.True(texts[0].VisualCenter.HasValue);
+        Assert.True(double.IsFinite(texts[0].VisualCenter!.Value.X));
+        Assert.True(double.IsFinite(texts[0].VisualCenter!.Value.Y));
+        Assert.NotEqual(texts[0].InsertionPoint, texts[0].VisualCenter!.Value);
         var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
         Assert.Equal(20 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
         Assert.Equal((595.276 - 10) * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
