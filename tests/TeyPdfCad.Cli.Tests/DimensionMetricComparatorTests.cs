@@ -527,6 +527,36 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_exploded_line_outside_source_wcs_plane()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"entityHandle\": \"explode-0\",\n              \"geometryKind\": \"line\",\n              \"startX\": 0,\n              \"startY\": 5,\n              \"startZ\": 0,\n              \"endX\": 10,\n              \"endY\": 5,\n              \"endZ\": 0,\n              \"minX\": 0,\n              \"minY\": 5,\n              \"minZ\": 0,\n              \"maxX\": 10,\n              \"maxY\": 5,\n              \"maxZ\": 0",
+                "\"entityHandle\": \"explode-0\",\n              \"geometryKind\": \"line\",\n              \"startX\": 0,\n              \"startY\": 5,\n              \"startZ\": 5,\n              \"endX\": 10,\n              \"endY\": 5,\n              \"endZ\": 5,\n              \"minX\": 0,\n              \"minY\": 5,\n              \"minZ\": 5,\n              \"maxX\": 10,\n              \"maxY\": 5,\n              \"maxZ\": 5",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "native-exploded-line-not-in-source-plane",
+            candidate.Blockers);
+        Assert.Equal(0, candidate.MatchedSourceDimensionLineCount);
+        Assert.Contains("source-dimension-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_exploded_text_that_disagrees_with_regenerated_block_text()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
