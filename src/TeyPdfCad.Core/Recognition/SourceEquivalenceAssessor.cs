@@ -226,8 +226,7 @@ public static class SourceEquivalenceAssessor
         var remainingBlockers = new[]
         {
             DescribeUnprovenDimensionTextMapping(appearance),
-            DescribeUnprovenDimensionArrowMapping(appearance),
-            "Dimension/extension line style mapping is not yet independently proven equivalent."
+            DescribeUnprovenDimensionArrowMapping(appearance)
         }
         .Where(reason => !string.IsNullOrWhiteSpace(reason))
         .ToArray();
@@ -258,7 +257,98 @@ public static class SourceEquivalenceAssessor
             }
         }
 
+        var lineAppearances = new[]
+            {
+                appearance.DimensionLine,
+                appearance.ExtensionLines[0],
+                appearance.ExtensionLines[1]
+            }
+            .Concat(appearance.ArrowLines)
+            .ToArray();
+
+        foreach (var line in lineAppearances)
+        {
+            if (!line.StrokeWidthMm.HasValue
+                || !IsExactlyRepresentableAutoCadLineWeight(line.StrokeWidthMm.Value))
+            {
+                var value = line.StrokeWidthMm?.ToString(
+                    "R",
+                    System.Globalization.CultureInfo.InvariantCulture) ?? "<missing>";
+                return $"Dimension source lineweight {value} mm is not exactly representable by a standard native AutoCAD LineWeight; nearest-value substitution is forbidden for source equivalence.";
+            }
+        }
+
+        if (lineAppearances.Any(line => line.DashPatternMm.Count > 0))
+        {
+            return "Dimension source uses a dashed line pattern, but PDF dash phase is not captured in the source-appearance snapshot; exact native linetype equivalence remains fail-closed until dash phase is preserved.";
+        }
+
+        var firstExtension = ExtensionBeyondDimensionLine(
+            appearance.ExtensionLines[0],
+            appearance.DimensionLine);
+        var secondExtension = ExtensionBeyondDimensionLine(
+            appearance.ExtensionLines[1],
+            appearance.DimensionLine);
+        if (!firstExtension.HasValue || !secondExtension.HasValue)
+        {
+            return "Dimension source extension geometry does not cross/touch the dimension line in a form that one native DIMSTYLE can reproduce exactly.";
+        }
+
+        if (!AlmostEqual(firstExtension.Value, secondExtension.Value))
+        {
+            return "Dimension source extension lines do not extend the same distance beyond the dimension line; one native DIMSTYLE ExtensionLineExtension cannot reproduce both exactly.";
+        }
+
         return null;
+    }
+
+    private static bool IsExactlyRepresentableAutoCadLineWeight(double millimetres)
+    {
+        if (!double.IsFinite(millimetres) || millimetres < 0d)
+            return false;
+
+        double[] supported =
+        [
+            0.00d, 0.05d, 0.09d, 0.13d, 0.15d, 0.18d, 0.20d, 0.25d,
+            0.30d, 0.35d, 0.40d, 0.50d, 0.53d, 0.60d, 0.70d, 0.80d,
+            0.90d, 1.00d, 1.06d, 1.20d, 1.40d, 1.58d, 2.00d, 2.11d
+        ];
+
+        return supported.Any(value => Math.Abs(value - millimetres) <= 1e-6);
+    }
+
+    private static double? ExtensionBeyondDimensionLine(
+        DimensionSourceLineAppearance extension,
+        DimensionSourceLineAppearance dimensionLine)
+    {
+        var dimensionVector = GeometryMath.Subtract(dimensionLine.End, dimensionLine.Start);
+        var extensionVector = GeometryMath.Subtract(extension.End, extension.Start);
+        var dimensionLength = GeometryMath.Length(dimensionVector);
+        if (dimensionLength <= 1e-9 || GeometryMath.Length(extensionVector) <= 1e-9)
+            return null;
+
+        var first = SignedDistance(extension.Start, dimensionLine.Start, dimensionVector, dimensionLength);
+        var second = SignedDistance(extension.End, dimensionLine.Start, dimensionVector, dimensionLength);
+        if (!double.IsFinite(first) || !double.IsFinite(second))
+            return null;
+
+        if (Math.Abs(first) <= 1e-9 || Math.Abs(second) <= 1e-9)
+            return 0d;
+
+        if (Math.Sign(first) == Math.Sign(second))
+            return null;
+
+        return Math.Min(Math.Abs(first), Math.Abs(second));
+    }
+
+    private static double SignedDistance(
+        Point2 point,
+        Point2 lineStart,
+        Point2 lineVector,
+        double lineLength)
+    {
+        var relative = GeometryMath.Subtract(point, lineStart);
+        return (lineVector.X * relative.Y - lineVector.Y * relative.X) / lineLength;
     }
 
     private static bool LineAppearanceStyleEqual(
