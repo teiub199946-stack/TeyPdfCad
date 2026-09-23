@@ -284,6 +284,7 @@ public sealed class ReconstructionCommands
                 var textMetrics = new List<DimensionTextMetric>();
                 string? error = null;
                 var dimBlockHandle = string.Empty;
+                var candidateIdentity = ReadCandidateIdentity(dimension);
 
                 try
                 {
@@ -373,7 +374,9 @@ public sealed class ReconstructionCommands
                     dimension.DimensionText ?? string.Empty,
                     dimBlockHandle,
                     textMetrics,
-                    error));
+                    error,
+                    candidateIdentity.CandidateId,
+                    candidateIdentity.Role));
             }
 
             // RecomputeDimensionBlock can update the anonymous display block.
@@ -415,6 +418,37 @@ public sealed class ReconstructionCommands
         {
             editor.WriteMessage(
                 $"\nTeyPdfCad dimension metrics export failed: {ex.Message}\n");
+        }
+    }
+
+    private const string NativeCandidateAppId = "TEYCONVERT_CANDIDATE_V1";
+
+    private static (string CandidateId, string Role) ReadCandidateIdentity(
+        Dimension dimension)
+    {
+        try
+        {
+            using var xdata = dimension.GetXDataForApplication(NativeCandidateAppId);
+            if (xdata is null)
+                return (string.Empty, string.Empty);
+
+            var values = xdata.AsArray()
+                .Where(value => value.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
+                .Select(value => value.Value as string)
+                .ToArray();
+
+            if (values.Length != 2
+                || string.IsNullOrWhiteSpace(values[0])
+                || string.IsNullOrWhiteSpace(values[1]))
+            {
+                return (string.Empty, string.Empty);
+            }
+
+            return (values[0]!, values[1]!);
+        }
+        catch (System.Exception)
+        {
+            return (string.Empty, string.Empty);
         }
     }
 
