@@ -320,14 +320,13 @@ internal static class DimensionMetricComparator
     }
 
     private static bool IsSupportedMetricKind(string value)
+        // MText.ActualWidth is a text-layout width. DBText.GeometricExtents is
+        // an axis-aligned box in dimension-block coordinates and is not a safe
+        // baseline-visible-width proof for rotated text.
         => string.Equals(
-                value,
-                "mtext-actual-bounds-dimblock-mcs",
-                StringComparison.Ordinal)
-            || string.Equals(
-                value,
-                "dbtext-geometric-extents-dimblock-mcs",
-                StringComparison.Ordinal);
+            value,
+            "mtext-actual-bounds-dimblock-mcs",
+            StringComparison.Ordinal);
 
     private static bool IsSha256(string? value)
         => value is { Length: 64 }
