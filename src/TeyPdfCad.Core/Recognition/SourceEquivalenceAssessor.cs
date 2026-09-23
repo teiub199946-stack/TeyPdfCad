@@ -257,6 +257,11 @@ public static class SourceEquivalenceAssessor
             }
         }
 
+        if (!DimensionLineEndpointsBindToExtensions(appearance))
+        {
+            return "Dimension source dimension-line endpoint is not bound to one distinct source extension line at each end; native DIMSTYLE geometry cannot be proven equivalent.";
+        }
+
         var lineAppearances = new[]
             {
                 appearance.DimensionLine,
@@ -300,6 +305,34 @@ public static class SourceEquivalenceAssessor
         }
 
         return null;
+    }
+
+    private static bool DimensionLineEndpointsBindToExtensions(
+        DimensionSourceAppearance appearance)
+    {
+        if (appearance.ExtensionLines.Count != 2)
+            return false;
+
+        const double tolerance = 1e-6;
+        var firstToFirst = GeometryMath.DistancePointToSegment(
+            appearance.DimensionLine.Start,
+            appearance.ExtensionLines[0].Start,
+            appearance.ExtensionLines[0].End) <= tolerance;
+        var firstToSecond = GeometryMath.DistancePointToSegment(
+            appearance.DimensionLine.Start,
+            appearance.ExtensionLines[1].Start,
+            appearance.ExtensionLines[1].End) <= tolerance;
+        var secondToFirst = GeometryMath.DistancePointToSegment(
+            appearance.DimensionLine.End,
+            appearance.ExtensionLines[0].Start,
+            appearance.ExtensionLines[0].End) <= tolerance;
+        var secondToSecond = GeometryMath.DistancePointToSegment(
+            appearance.DimensionLine.End,
+            appearance.ExtensionLines[1].Start,
+            appearance.ExtensionLines[1].End) <= tolerance;
+
+        return (firstToFirst && secondToSecond)
+            || (firstToSecond && secondToFirst);
     }
 
     private static bool IsExactlyRepresentableAutoCadLineWeight(double millimetres)
@@ -588,6 +621,12 @@ public static class SourceEquivalenceAssessor
             || !ParallelAngleEqual(candidate.RotationRadians.Value, sourceRotation))
         {
             return "Dimension semantic geometry differs from the source-appearance dimension-line rotation.";
+        }
+
+        var sourceTextRotation = appearance.Text.RotationDegrees * Math.PI / 180d;
+        if (!ParallelAngleEqual(sourceTextRotation, sourceRotation))
+        {
+            return "Dimension source text rotation is not parallel to the source dimension line; explicit native TextRotation mapping is not yet independently proven.";
         }
 
         var normalizedDegrees = Math.Abs(sourceRotation * 180d / Math.PI) % 180d;
