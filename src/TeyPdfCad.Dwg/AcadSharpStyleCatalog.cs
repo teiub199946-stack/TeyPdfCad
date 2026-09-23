@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.Tables;
@@ -66,42 +69,227 @@ internal sealed class AcadSharpStyleCatalog
     {
         ArgumentNullException.ThrowIfNull(candidate);
         var tickSize = TryGetObliqueTickSize(candidate.SourceAppearance);
-        return GetDimensionStyle(candidate.DrawingScale, tickSize);
+        return GetDimensionStyle(candidate.DrawingScale, tickSize, candidate.SourceAppearance);
     }
 
     public DimensionStyle GetDimensionStyle(double linearScale)
-        => GetDimensionStyle(linearScale, tickSize: null);
+        => GetDimensionStyle(linearScale, tickSize: null, appearance: null);
 
-    private DimensionStyle GetDimensionStyle(double linearScale, double? tickSize)
+    private DimensionStyle GetDimensionStyle(
+        double linearScale,
+        double? tickSize,
+        DimensionSourceAppearance? appearance)
     {
         var canonicalScale = Math.Round(linearScale, 6);
-        var scaleToken = canonicalScale.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture).Replace('.', '_');
+        var scaleToken = canonicalScale.ToString("0.######", CultureInfo.InvariantCulture).Replace('.', '_');
         var tickToken = tickSize.HasValue
             ? "_TICK_" + Math.Round(tickSize.Value, 6)
-                .ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+                .ToString("0.######", CultureInfo.InvariantCulture)
                 .Replace('.', '_')
             : string.Empty;
-        var name = $"TEYPDFCAD_SCALE_{scaleToken}{tickToken}";
-        if (_dimensionStyles.TryGetValue(name, out var cached)) return cached;
+        var appearanceToken = appearance is null
+            ? string.Empty
+            : "_SRC_" + BuildDimensionAppearanceToken(appearance);
+        var name = $"TEYPDFCAD_SCALE_{scaleToken}{tickToken}{appearanceToken}";
+
+        if (_dimensionStyles.TryGetValue(name, out var cached))
+            return cached;
+
         if (!_document.DimensionStyles.TryGetValue(name, out var style))
         {
             style = new DimensionStyle(name)
             {
                 LinearScaleFactor = canonicalScale,
-                TextHeight = 2.5d,
+                TextHeight = GetTextHeight(appearance),
                 ArrowSize = 2.5d,
                 TickSize = tickSize ?? 0d,
                 DimensionLineExtension = 0d,
-                ExtensionLineOffset = 0.75d,
-                ExtensionLineExtension = 1.25d,
+                ExtensionLineOffset = 0d,
+                ExtensionLineExtension = GetExtensionBeyondDimensionLine(appearance) ?? 0d,
                 ScaleFactor = 1d,
                 Style = GetPdfTextStyle()
             };
+
+            if (appearance is not null)
+                ApplyDimensionAppearance(style, appearance);
+
             _document.DimensionStyles.Add(style);
         }
+
         _dimensionStyles.Add(name, style);
         return style;
     }
+
+    private void ApplyDimensionAppearance(
+        DimensionStyle style,
+        DimensionSourceAppearance appearance)
+    {
+        style.DimensionLineColor = PdfColor(appearance.DimensionLine.RgbColor);
+        style.TextColor = PdfColor(appearance.Text.RgbColor);
+
+        if (appearance.ExtensionLines.Count == 2)
+            style.ExtensionLineColor = PdfColor(appearance.ExtensionLines[0].RgbColor);
+
+        if (appearance.DimensionLine.StrokeWidthMm is { } dimensionWidth)
+            style.DimensionLineWeight = GetLineWeightMillimetres(dimensionWidth);
+
+        if (appearance.ExtensionLines.Count == 2
+            && appearance.ExtensionLines[0].StrokeWidthMm is { } extensionWidth)
+        {
+            style.ExtensionLineWeight = GetLineWeightMillimetres(extensionWidth);
+        }
+
+        style.LineType = GetDimensionLineType(appearance.DimensionLine.DashPatternMm);
+        if (appearance.ExtensionLines.Count == 2)
+        {
+            style.LineTypeExt1 = GetDimensionLineType(appearance.ExtensionLines[0].DashPatternMm);
+            style.LineTypeExt2 = GetDimensionLineType(appearance.ExtensionLines[1].DashPatternMm);
+        }
+    }
+
+    private LineType GetDimensionLineType(IReadOnlyList<double> patternMm)
+    {
+        var normalized = NormalizePdfDashPattern(patternMm);
+        if (normalized.Count == 0)
+            return _document.LineTypes.Continuous;
+
+        var canonicalPattern = normalized.Select(value =>
+            Math.Abs(value).ToString("0.######", CultureInfo.InvariantCulture));
+        var name = $"PDF_DASH_MM_{string.Join("_", canonicalPattern)}";
+        if (_lineTypes.TryGetValue(name, out var cached))
+            return cached;
+
+        if (!_document.LineTypes.TryGetValue(name, out var lineType))
+        {
+            lineType = new LineType(name)
+            {
+                Description = "PDF dimension source dash pattern"
+            };
+            for (var index = 0; index < normalized.Count; index++)
+            {
+                lineType.AddSegment(new LineType.Segment
+                {
+                    Length = index % 2 == 0
+                        ? Math.Abs(normalized[index])
+                        : -Math.Abs(normalized[index])
+                });
+            }
+            _document.LineTypes.Add(lineType);
+        }
+
+        _lineTypes.Add(name, lineType);
+        return lineType;
+    }
+
+    private static IReadOnlyList<double> NormalizePdfDashPattern(IReadOnlyList<double> pattern)
+    {
+        if (pattern.Count == 0)
+            return [];
+
+        var values = pattern
+            .Select(value => Math.Abs(value))
+            .ToArray();
+        if (values.Length % 2 == 0)
+            return values;
+
+        return [..values, ..values];
+    }
+
+    private static double GetTextHeight(DimensionSourceAppearance? appearance)
+        => appearance?.Text.HeightMm is > 1e-9 and var height
+            ? height
+            : 2.5d;
+
+    private static double? GetExtensionBeyondDimensionLine(DimensionSourceAppearance? appearance)
+    {
+        if (appearance is null || appearance.ExtensionLines.Count != 2)
+            return null;
+
+        var first = GetExtensionBeyondDimensionLine(
+            appearance.ExtensionLines[0],
+            appearance.DimensionLine);
+        var second = GetExtensionBeyondDimensionLine(
+            appearance.ExtensionLines[1],
+            appearance.DimensionLine);
+        if (!first.HasValue || !second.HasValue)
+            return null;
+        if (Math.Abs(first.Value - second.Value) > 1e-6)
+            return null;
+        return (first.Value + second.Value) / 2d;
+    }
+
+    private static double? GetExtensionBeyondDimensionLine(
+        DimensionSourceLineAppearance extension,
+        DimensionSourceLineAppearance dimensionLine)
+    {
+        var dimensionVector = GeometryMath.Subtract(dimensionLine.End, dimensionLine.Start);
+        var extensionVector = GeometryMath.Subtract(extension.End, extension.Start);
+        if (GeometryMath.Length(dimensionVector) <= 1e-9
+            || GeometryMath.Length(extensionVector) <= 1e-9)
+            return null;
+
+        var firstSigned = SignedDistanceToLine(extension.Start, dimensionLine);
+        var secondSigned = SignedDistanceToLine(extension.End, dimensionLine);
+        if (Math.Abs(firstSigned) <= 1e-9 || Math.Abs(secondSigned) <= 1e-9)
+            return 0d;
+        if (Math.Sign(firstSigned) == Math.Sign(secondSigned))
+            return null;
+
+        return Math.Min(Math.Abs(firstSigned), Math.Abs(secondSigned));
+    }
+
+    private static double SignedDistanceToLine(
+        Point2 point,
+        DimensionSourceLineAppearance line)
+    {
+        var vector = GeometryMath.Subtract(line.End, line.Start);
+        var length = GeometryMath.Length(vector);
+        if (length <= 1e-12)
+            return double.NaN;
+        var relative = GeometryMath.Subtract(point, line.Start);
+        return (vector.X * relative.Y - vector.Y * relative.X) / length;
+    }
+
+    private static Color PdfColor(int? rgb)
+        => Color.FromTrueColor((uint)(rgb ?? 0));
+
+    private static LineWeightType GetLineWeightMillimetres(double millimetres)
+    {
+        var targetHundredths = millimetres * 100d;
+        return Enum.GetValues<LineWeightType>()
+            .Where(value => value is not LineWeightType.ByBlock
+                and not LineWeightType.ByLayer
+                and not LineWeightType.ByDIPs
+                and not LineWeightType.Default)
+            .MinBy(value => Math.Abs((int)value - targetHundredths));
+    }
+
+    private static string BuildDimensionAppearanceToken(DimensionSourceAppearance appearance)
+    {
+        var canonical = string.Join("|",
+            appearance.DimensionLine.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
+            appearance.DimensionLine.StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null",
+            DashToken(appearance.DimensionLine.DashPatternMm),
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[0].RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black"
+                : "ext-color-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? appearance.ExtensionLines[0].StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null"
+                : "ext-width-unknown",
+            appearance.ExtensionLines.Count == 2
+                ? DashToken(appearance.ExtensionLines[0].DashPatternMm)
+                : "ext-dash-unknown",
+            appearance.Text.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
+            appearance.Text.HeightMm.ToString("R", CultureInfo.InvariantCulture),
+            (GetExtensionBeyondDimensionLine(appearance) ?? 0d).ToString("R", CultureInfo.InvariantCulture));
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
+        return Convert.ToHexString(hash.AsSpan(0, 8));
+    }
+
+    private static string DashToken(IReadOnlyList<double> pattern)
+        => string.Join(",", NormalizePdfDashPattern(pattern)
+            .Select(value => value.ToString("R", CultureInfo.InvariantCulture)));
 
     private static double? TryGetObliqueTickSize(DimensionSourceAppearance? appearance)
     {
