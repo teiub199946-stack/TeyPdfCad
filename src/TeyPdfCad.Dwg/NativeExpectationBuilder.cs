@@ -418,6 +418,23 @@ internal static class NativeExpectationBuilder
         {
             style.DimensionLineColor = IndependentPdfColor(appearance.DimensionLine.RgbColor);
             style.TextColor = IndependentPdfColor(appearance.Text.RgbColor);
+            style.AlternateUnitDimensioning = false;
+            style.GenerateTolerances = false;
+            style.LimitsGeneration = false;
+            style.AlternateDimensioningSuffix = string.Empty;
+            style.PostFix = string.Empty;
+            style.TextInsideExtensions = false;
+            style.ZeroHandling = default;
+
+            if (IndependentPlainNumericFormat(
+                    appearance.Text.Value,
+                    out var decimalPlaces,
+                    out var decimalSeparator))
+            {
+                style.DecimalPlaces = decimalPlaces;
+                style.DecimalSeparator = decimalSeparator;
+            }
+
             if (appearance.ExtensionLines.Count == 2)
                 style.ExtensionLineColor = IndependentPdfColor(appearance.ExtensionLines[0].RgbColor);
 
@@ -540,6 +557,7 @@ internal static class NativeExpectationBuilder
     private static string IndependentDimensionAppearanceToken(DimensionSourceAppearance appearance)
     {
         var canonical = string.Join("|",
+            appearance.Text.Value,
             appearance.DimensionLine.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
             appearance.DimensionLine.StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null",
             IndependentDashToken(appearance.DimensionLine.DashPatternMm),
@@ -568,6 +586,47 @@ internal static class NativeExpectationBuilder
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexString(hash.AsSpan(0, 8));
+    }
+
+    private static bool IndependentPlainNumericFormat(
+        string value,
+        out short decimalPlaces,
+        out char decimalSeparator)
+    {
+        decimalPlaces = 0;
+        decimalSeparator = '.';
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        var separatorIndex = -1;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character >= '0' && character <= '9')
+                continue;
+
+            if ((character == '.' || character == ',')
+                && separatorIndex < 0
+                && index > 0
+                && index < value.Length - 1)
+            {
+                separatorIndex = index;
+                decimalSeparator = character;
+                continue;
+            }
+
+            return false;
+        }
+
+        if (separatorIndex >= 0)
+        {
+            var places = value.Length - separatorIndex - 1;
+            if (places > short.MaxValue)
+                return false;
+            decimalPlaces = (short)places;
+        }
+
+        return true;
     }
 
     private static string IndependentDashToken(IReadOnlyList<double> pattern)
