@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -316,7 +315,7 @@ public sealed class ReconstructionCommands
                                     "MText",
                                     mtext.Handle.ToString(),
                                     mtext.Contents ?? string.Empty,
-                                    "mtext-actual-bounds",
+                                    "mtext-actual-bounds-dimblock-mcs",
                                     mtext.ActualWidth,
                                     mtext.ActualHeight,
                                     mtext.Rotation,
@@ -327,7 +326,9 @@ public sealed class ReconstructionCommands
                                     style.FontFile,
                                     style.WidthFactor,
                                     style.FontResolvedPath,
-                                    style.FontSha256));
+                                    style.FontSha256,
+                                    mtext.TextHeight,
+                                    style.WidthFactor));
                             }
                             else if (entity is DBText dbText)
                             {
@@ -337,7 +338,7 @@ public sealed class ReconstructionCommands
                                     "DBText",
                                     dbText.Handle.ToString(),
                                     dbText.TextString ?? string.Empty,
-                                    "dbtext-geometric-extents",
+                                    "dbtext-geometric-extents-dimblock-mcs",
                                     Math.Abs(extents.MaxPoint.X - extents.MinPoint.X),
                                     Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y),
                                     dbText.Rotation,
@@ -348,8 +349,15 @@ public sealed class ReconstructionCommands
                                     style.FontFile,
                                     style.WidthFactor,
                                     style.FontResolvedPath,
-                                    style.FontSha256));
+                                    style.FontSha256,
+                                    dbText.Height,
+                                    dbText.WidthFactor));
                             }
+                        }
+
+                        if (textMetrics.Count == 0)
+                        {
+                            error = "Dimension display block contains no MText/DBText entity; rendered text metrics are unavailable.";
                         }
                     }
                 }
@@ -436,7 +444,7 @@ public sealed class ReconstructionCommands
             fontFile,
             style.XScale,
             resolvedPath,
-            ComputeFileSha256(resolvedPath));
+            DimensionMetricsFileIdentity.ComputeSha256(resolvedPath));
     }
 
     private static string ResolveFontPath(Database database, string fontFile)
@@ -451,24 +459,6 @@ public sealed class ReconstructionCommands
                 database,
                 FindFileHint.FontFile);
             return File.Exists(path) ? Path.GetFullPath(path) : string.Empty;
-        }
-        catch (System.Exception)
-        {
-            return string.Empty;
-        }
-    }
-
-    private static string ComputeFileSha256(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            return string.Empty;
-
-        try
-        {
-            using var sha256 = SHA256.Create();
-            using var stream = File.OpenRead(path);
-            return BitConverter.ToString(sha256.ComputeHash(stream))
-                .Replace("-", string.Empty);
         }
         catch (System.Exception)
         {
