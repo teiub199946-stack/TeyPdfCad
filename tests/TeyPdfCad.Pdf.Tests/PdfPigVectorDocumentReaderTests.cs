@@ -127,6 +127,10 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(0x000000, texts[0].Style.RgbColor);
         Assert.Equal("Helvetica", texts[0].FontName);
         Assert.Null(texts[0].FontProgramSha256);
+        Assert.Null(texts[0].FontProgramSubtype);
+        Assert.Null(texts[0].FontEncodingName);
+        Assert.Null(texts[0].FontHasToUnicode);
+        Assert.Null(texts[0].FontIsSubset);
         Assert.True(texts[0].AdvanceWidthPoints > 0d);
         Assert.True(texts[0].VisibleWidthPoints > 0d);
         Assert.True(double.IsFinite(texts[0].VisibleWidthPoints));
