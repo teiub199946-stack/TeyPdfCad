@@ -37,7 +37,9 @@ internal sealed record DimensionMetricComparisonCandidate(
     double? SourceHeightMm,
     double? NativeNominalTextHeightMm,
     double? NativeTextStyleWidthFactor,
-    double? NativeEntityWidthFactor);
+    double? NativeEntityWidthFactor,
+    int NativeBlockGeometryCount,
+    IReadOnlyList<string> NativeBlockGeometryKinds);
 
 internal static class DimensionMetricComparator
 {
@@ -76,7 +78,7 @@ internal static class DimensionMetricComparator
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
         var globalBlockers = new List<string>();
 
-        if (!string.Equals(nativeSchemaVersion, "3", StringComparison.Ordinal))
+        if (!string.Equals(nativeSchemaVersion, "4", StringComparison.Ordinal))
             globalBlockers.Add("unsupported-native-metrics-schema");
         if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
             globalBlockers.Add("source-report-pages-missing");
@@ -152,6 +154,48 @@ internal static class DimensionMetricComparator
                 && !string.IsNullOrEmpty(native.DimensionText))
             {
                 blockers.Add("native-text-override-present");
+            }
+        }
+
+        if (natives.Count == 1)
+        {
+            if (native.BlockGeometry.Count == 0)
+            {
+                blockers.Add("native-block-geometry-missing");
+            }
+            else
+            {
+                foreach (var geometry in native.BlockGeometry)
+                {
+                    if (string.IsNullOrWhiteSpace(geometry.EntityType)
+                        || string.IsNullOrWhiteSpace(geometry.EntityHandle)
+                        || string.IsNullOrWhiteSpace(geometry.GeometryKind))
+                    {
+                        blockers.Add("native-block-geometry-identity-invalid");
+                        continue;
+                    }
+
+                    if (!HasValidExtents(geometry))
+                        blockers.Add("native-block-geometry-extents-invalid");
+
+                    if (string.Equals(geometry.GeometryKind, "line", StringComparison.Ordinal)
+                        && !HasValidLineGeometry(geometry))
+                    {
+                        blockers.Add("native-block-line-geometry-invalid");
+                    }
+
+                    if (string.Equals(geometry.GeometryKind, "polyline", StringComparison.Ordinal)
+                        && geometry.VertexCount < 2)
+                    {
+                        blockers.Add("native-block-polyline-geometry-invalid");
+                    }
+
+                    if (string.Equals(geometry.GeometryKind, "block-reference", StringComparison.Ordinal)
+                        && string.IsNullOrWhiteSpace(geometry.NestedBlockName))
+                    {
+                        blockers.Add("native-block-reference-name-missing");
+                    }
+                }
             }
         }
 
@@ -319,6 +363,7 @@ internal static class DimensionMetricComparator
         // that AutoCAD's generated anonymous-block text carries the same glyph
         // outlines/fallback behavior after REGEN.
         blockers.Add("rendered-glyph-equivalence-not-yet-authorized");
+        blockers.Add("anonymous-block-structural-equivalence-not-yet-authorized");
 
         var distinctBlockers = blockers
             .Distinct(StringComparer.Ordinal)
@@ -329,6 +374,7 @@ internal static class DimensionMetricComparator
             && sources.Count == 1
             && natives.Count == 1
             && native.TextMetrics.Count == 1
+            && native.BlockGeometry.Count > 0
             && metric.Fragments.Count == 1
             && string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase)
             && IsPositiveFinite(source.SourceVisibleWidthMm)
@@ -340,7 +386,9 @@ internal static class DimensionMetricComparator
             && IsSupportedMetricKind(metric.MetricKind)
             && !distinctBlockers.Contains("native-dimension-metrics-error", StringComparer.Ordinal)
             && !distinctBlockers.Any(blocker =>
-                blocker.StartsWith("native-fragment-", StringComparison.Ordinal));
+                blocker.StartsWith("native-fragment-", StringComparison.Ordinal))
+            && !distinctBlockers.Any(blocker =>
+                blocker.StartsWith("native-block-", StringComparison.Ordinal));
 
         return new DimensionMetricComparisonCandidate(
             candidateId,
@@ -369,7 +417,12 @@ internal static class DimensionMetricComparator
             source.SourceHeightMm,
             metric.NominalTextHeight,
             metric.TextStyleWidthFactor,
-            metric.EntityWidthFactor);
+            metric.EntityWidthFactor,
+            native.BlockGeometry.Count,
+            native.BlockGeometry
+                .Select(item => item.GeometryKind)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToArray());
     }
 
     private static IReadOnlyList<SourceEvidence> ReadSourceEvidence(JsonElement root)
@@ -464,12 +517,39 @@ internal static class DimensionMetricComparator
                 }
             }
 
+            var blockGeometry = new List<NativeBlockGeometry>();
+            if (TryGetArray(dimension, "blockGeometry", out var geometryArray))
+            {
+                foreach (var geometry in geometryArray.EnumerateArray())
+                {
+                    blockGeometry.Add(new NativeBlockGeometry(
+                        GetString(geometry, "entityType") ?? string.Empty,
+                        GetString(geometry, "entityHandle") ?? string.Empty,
+                        GetString(geometry, "geometryKind") ?? string.Empty,
+                        GetNullableDouble(geometry, "startX"),
+                        GetNullableDouble(geometry, "startY"),
+                        GetNullableDouble(geometry, "startZ"),
+                        GetNullableDouble(geometry, "endX"),
+                        GetNullableDouble(geometry, "endY"),
+                        GetNullableDouble(geometry, "endZ"),
+                        GetNullableDouble(geometry, "minX"),
+                        GetNullableDouble(geometry, "minY"),
+                        GetNullableDouble(geometry, "minZ"),
+                        GetNullableDouble(geometry, "maxX"),
+                        GetNullableDouble(geometry, "maxY"),
+                        GetNullableDouble(geometry, "maxZ"),
+                        GetString(geometry, "nestedBlockName") ?? string.Empty,
+                        GetNullableInt(geometry, "vertexCount") ?? 0));
+                }
+            }
+
             output.Add(new NativeDimensionEvidence(
                 GetString(dimension, "candidateId") ?? string.Empty,
                 GetString(dimension, "candidateRole") ?? string.Empty,
                 GetString(dimension, "dimensionText") ?? string.Empty,
                 GetString(dimension, "error"),
-                textMetrics));
+                textMetrics,
+                blockGeometry));
         }
 
         return output;
@@ -509,6 +589,53 @@ internal static class DimensionMetricComparator
         }
 
         return true;
+    }
+
+    private static bool HasValidExtents(NativeBlockGeometry geometry)
+        => geometry.MinX.HasValue
+            && geometry.MinY.HasValue
+            && geometry.MinZ.HasValue
+            && geometry.MaxX.HasValue
+            && geometry.MaxY.HasValue
+            && geometry.MaxZ.HasValue
+            && double.IsFinite(geometry.MinX.Value)
+            && double.IsFinite(geometry.MinY.Value)
+            && double.IsFinite(geometry.MinZ.Value)
+            && double.IsFinite(geometry.MaxX.Value)
+            && double.IsFinite(geometry.MaxY.Value)
+            && double.IsFinite(geometry.MaxZ.Value)
+            && geometry.MaxX.Value >= geometry.MinX.Value
+            && geometry.MaxY.Value >= geometry.MinY.Value
+            && geometry.MaxZ.Value >= geometry.MinZ.Value;
+
+    private static bool HasValidLineGeometry(NativeBlockGeometry geometry)
+    {
+        if (!geometry.StartX.HasValue
+            || !geometry.StartY.HasValue
+            || !geometry.StartZ.HasValue
+            || !geometry.EndX.HasValue
+            || !geometry.EndY.HasValue
+            || !geometry.EndZ.HasValue)
+        {
+            return false;
+        }
+
+        var values = new[]
+        {
+            geometry.StartX.Value,
+            geometry.StartY.Value,
+            geometry.StartZ.Value,
+            geometry.EndX.Value,
+            geometry.EndY.Value,
+            geometry.EndZ.Value
+        };
+        if (values.Any(value => !double.IsFinite(value)))
+            return false;
+
+        var dx = geometry.EndX.Value - geometry.StartX.Value;
+        var dy = geometry.EndY.Value - geometry.StartY.Value;
+        var dz = geometry.EndZ.Value - geometry.StartZ.Value;
+        return dx * dx + dy * dy + dz * dz > 1e-18;
     }
 
     private static bool AlmostEqual(double? actual, double expected)
@@ -584,6 +711,21 @@ internal static class DimensionMetricComparator
                 : null;
     }
 
+    private static int? GetNullableInt(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(name, out var value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt32(out var parsed)
+                ? parsed
+                : null;
+    }
+
     private sealed record SourceEvidence(
         string CandidateId,
         string SourceText,
@@ -614,15 +756,35 @@ internal static class DimensionMetricComparator
                 null);
     }
 
+    private sealed record NativeBlockGeometry(
+        string EntityType,
+        string EntityHandle,
+        string GeometryKind,
+        double? StartX,
+        double? StartY,
+        double? StartZ,
+        double? EndX,
+        double? EndY,
+        double? EndZ,
+        double? MinX,
+        double? MinY,
+        double? MinZ,
+        double? MaxX,
+        double? MaxY,
+        double? MaxZ,
+        string NestedBlockName,
+        int VertexCount);
+
     private sealed record NativeDimensionEvidence(
         string CandidateId,
         string CandidateRole,
         string DimensionText,
         string? Error,
-        IReadOnlyList<NativeTextMetric> TextMetrics)
+        IReadOnlyList<NativeTextMetric> TextMetrics,
+        IReadOnlyList<NativeBlockGeometry> BlockGeometry)
     {
         public static NativeDimensionEvidence Empty(string candidateId)
-            => new(candidateId, string.Empty, string.Empty, null, []);
+            => new(candidateId, string.Empty, string.Empty, null, [], []);
     }
 
     private sealed record NativeFragmentMetric(
