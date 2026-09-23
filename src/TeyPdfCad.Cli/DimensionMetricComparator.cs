@@ -84,7 +84,7 @@ internal static class DimensionMetricComparator
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
         var globalBlockers = new List<string>();
 
-        if (!string.Equals(nativeSchemaVersion, "6", StringComparison.Ordinal))
+        if (!string.Equals(nativeSchemaVersion, "7", StringComparison.Ordinal))
             globalBlockers.Add("unsupported-native-metrics-schema");
         if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
             globalBlockers.Add("source-report-pages-missing");
@@ -222,6 +222,14 @@ internal static class DimensionMetricComparator
                     blockers.Add("native-text-style-width-factor-invalid");
                 if (!IsPositiveFinite(metric.EntityWidthFactor))
                     blockers.Add("native-entity-width-factor-invalid");
+                if (metric.BackgroundFill)
+                    blockers.Add("native-mtext-background-fill-present");
+                if (metric.UseBackgroundColor)
+                    blockers.Add("native-mtext-background-color-present");
+                if (metric.ShowBorders)
+                    blockers.Add("native-mtext-border-present");
+                if (string.IsNullOrWhiteSpace(metric.Attachment))
+                    blockers.Add("native-mtext-attachment-missing");
 
                 if (metric.Fragments.Count != 1)
                 {
@@ -444,6 +452,8 @@ internal static class DimensionMetricComparator
             && !distinctBlockers.Any(blocker =>
                 blocker.StartsWith("native-fragment-", StringComparison.Ordinal))
             && !distinctBlockers.Any(blocker =>
+                blocker.StartsWith("native-mtext-", StringComparison.Ordinal))
+            && !distinctBlockers.Any(blocker =>
                 blocker.StartsWith("native-block-", StringComparison.Ordinal))
             && !distinctBlockers.Any(blocker =>
                 blocker.StartsWith("native-exploded-", StringComparison.Ordinal));
@@ -597,6 +607,11 @@ internal static class DimensionMetricComparator
                         GetNullableDouble(metric, "nominalTextHeight"),
                         GetNullableDouble(metric, "textStyleWidthFactor"),
                         GetNullableDouble(metric, "entityWidthFactor"),
+                        GetNullableBool(metric, "backgroundFill") ?? false,
+                        GetNullableBool(metric, "useBackgroundColor") ?? false,
+                        GetNullableDouble(metric, "backgroundScaleFactor"),
+                        GetNullableBool(metric, "showBorders") ?? false,
+                        GetString(metric, "attachment") ?? string.Empty,
                         fragments));
                 }
             }
@@ -1069,6 +1084,11 @@ internal static class DimensionMetricComparator
         double? NominalTextHeight,
         double? TextStyleWidthFactor,
         double? EntityWidthFactor,
+        bool BackgroundFill,
+        bool UseBackgroundColor,
+        double? BackgroundScaleFactor,
+        bool ShowBorders,
+        string Attachment,
         IReadOnlyList<NativeFragmentMetric> Fragments)
     {
         public static NativeTextMetric Empty { get; } = new(
@@ -1083,6 +1103,11 @@ internal static class DimensionMetricComparator
             null,
             null,
             null,
+            false,
+            false,
+            null,
+            false,
+            string.Empty,
             []);
     }
 }
