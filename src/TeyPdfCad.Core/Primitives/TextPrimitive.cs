@@ -9,7 +9,8 @@ public sealed record TextPrimitive(
     double Rotation,
     string? Layer = null,
     IReadOnlyList<string>? SourceIds = null,
-    int? RgbColor = null)
+    int? RgbColor = null,
+    string? FontName = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourceIds ?? [];
 }
