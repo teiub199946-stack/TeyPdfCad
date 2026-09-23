@@ -57,6 +57,28 @@ public sealed class DwgEntityFingerprintTests
     }
 
     [Fact]
+    public void Dimension_style_fingerprint_covers_linetype_segment_content_not_only_name()
+    {
+        var first = CreateStyle();
+        var firstLineType = new LineType("PDF_DASH_TEST");
+        firstLineType.AddSegment(new LineType.Segment { Length = 4d });
+        firstLineType.AddSegment(new LineType.Segment { Length = -2d });
+        first.LineType = firstLineType;
+        first.LineTypeExt1 = firstLineType;
+        first.LineTypeExt2 = firstLineType;
+
+        var second = CreateStyle();
+        var secondLineType = new LineType("PDF_DASH_TEST");
+        secondLineType.AddSegment(new LineType.Segment { Length = 5d });
+        secondLineType.AddSegment(new LineType.Segment { Length = -1d });
+        second.LineType = secondLineType;
+        second.LineTypeExt1 = secondLineType;
+        second.LineTypeExt2 = secondLineType;
+
+        Assert.NotEqual(Fingerprint(first), Fingerprint(second));
+    }
+
+    [Fact]
     public void Dimension_geometry_fingerprint_covers_native_text_placement_and_rotation()
     {
         var baseline = new DimensionAligned(
