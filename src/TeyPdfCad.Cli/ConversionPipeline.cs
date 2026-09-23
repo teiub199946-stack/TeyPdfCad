@@ -457,7 +457,8 @@ public sealed class ConversionPipeline
             text.FontName,
             text.AdvanceWidthPoints > 0d
                 ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
-                : null)));
+                : null,
+            text.VisualCenter)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -855,7 +856,8 @@ public sealed class ConversionPipeline
             text.FontName,
             text.AdvanceWidthPoints > 0d
                 ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
-                : null)).ToArray();
+                : null,
+            text.VisualCenter)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
