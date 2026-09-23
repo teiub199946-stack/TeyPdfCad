@@ -169,6 +169,9 @@ public sealed class ConversionPipelineTests
         Assert.Equal(
             "Helvetica",
             evidence.GetProperty("sourceFontName").GetString());
+        Assert.Equal(
+            JsonValueKind.Null,
+            evidence.GetProperty("sourceFontSha256").ValueKind);
         Assert.True(
             evidence.GetProperty("sourceAdvanceWidthMm").GetDouble() > 0d);
         Assert.True(
