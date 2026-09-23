@@ -69,7 +69,7 @@ internal sealed class PdfEmbeddedFontProgramCatalog
         if (fontDictionary is null)
         {
             return new PdfEmbeddedFontProgramCatalog(
-                new Dictionary<string, string?>(StringComparer.Ordinal));
+                new Dictionary<string, PdfFontProgramIdentity?>(StringComparer.Ordinal));
         }
 
         foreach (var resource in fontDictionary.Data
