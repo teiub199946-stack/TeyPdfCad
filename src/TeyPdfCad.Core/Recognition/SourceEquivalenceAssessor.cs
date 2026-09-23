@@ -584,6 +584,32 @@ public static class SourceEquivalenceAssessor
             return "Dimension source embedded font-program SHA-256 is unavailable or ambiguous; exact native font binary equivalence cannot be proven.";
         }
 
+        if (!string.Equals(
+                appearance.Text.FontProgramSubtype,
+                "TrueType",
+                StringComparison.Ordinal))
+        {
+            return "Dimension source font is not the first-safe-subset simple TrueType font; Type0/CID/Type1/custom font programs remain fail-closed.";
+        }
+
+        if (!string.Equals(
+                appearance.Text.FontEncodingName,
+                "WinAnsiEncoding",
+                StringComparison.Ordinal))
+        {
+            return "Dimension source font encoding is not WinAnsiEncoding; custom, absent and CID encodings remain fail-closed until glyph-code mapping is independently proven.";
+        }
+
+        if (appearance.Text.FontHasToUnicode != false)
+        {
+            return "Dimension source font has a ToUnicode mapping (or its state is unknown); the first safe subset requires no ToUnicode override until PDF character-code to glyph identity is independently proven.";
+        }
+
+        if (appearance.Text.FontIsSubset != false)
+        {
+            return "Dimension source font is subsetted (or subset state is unknown); the first safe subset requires a full embedded font program before native glyph equivalence can be considered.";
+        }
+
         if (!appearance.Text.AdvanceWidthMm.HasValue
             || !double.IsFinite(appearance.Text.AdvanceWidthMm.Value)
             || appearance.Text.AdvanceWidthMm.Value <= 0d)
@@ -756,6 +782,16 @@ public static class SourceEquivalenceAssessor
                 sourceText.FontProgramSha256,
                 appearance.Text.FontProgramSha256,
                 StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(
+                sourceText.FontProgramSubtype,
+                appearance.Text.FontProgramSubtype,
+                StringComparison.Ordinal)
+            || !string.Equals(
+                sourceText.FontEncodingName,
+                appearance.Text.FontEncodingName,
+                StringComparison.Ordinal)
+            || sourceText.FontHasToUnicode != appearance.Text.FontHasToUnicode
+            || sourceText.FontIsSubset != appearance.Text.FontIsSubset
             || !NullableAlmostEqual(
                 sourceText.AdvanceWidthPoints > 0d
                     ? sourceText.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
