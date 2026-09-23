@@ -550,7 +550,8 @@ public sealed class LinearDimensionRecognizer
             text.RgbColor,
             text.ProvenanceIds.ToArray(),
             text.FontName,
-            text.AdvanceWidth);
+            text.AdvanceWidth,
+            text.VisualCenter);
 
     private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
         => groups
