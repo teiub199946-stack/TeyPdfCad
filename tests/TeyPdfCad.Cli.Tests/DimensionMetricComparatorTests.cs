@@ -25,6 +25,8 @@ public sealed class DimensionMetricComparatorTests
                   "sourceAdvanceWidthMm": 8.0,
                   "sourceVisibleWidthMm": 7.5,
                   "sourceVisibleHeightMm": 2.5,
+                  "sourceGlyphInkWidthMm": 7.5,
+                  "sourceGlyphInkHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
@@ -605,6 +607,32 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_detects_source_glyph_ink_width_drift()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5)
+            .Replace(
+                "\"sourceGlyphInkWidthMm\": 7.5",
+                "\"sourceGlyphInkWidthMm\": 7.2",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "7",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.True(candidate.GlyphInkWidthDeltaMm.HasValue);
+        Assert.Equal(0.3d, candidate.GlyphInkWidthDeltaMm.Value, 9);
+        Assert.Contains("glyph-ink-width-mismatch", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_detects_projected_height_drift_against_native_fragment()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -808,6 +836,8 @@ public sealed class DimensionMetricComparatorTests
                   "sourceAdvanceWidthMm": 7.5,
                   "sourceVisibleWidthMm": 7.5,
                   "sourceVisibleHeightMm": 2.5,
+                  "sourceGlyphInkWidthMm": 7.5,
+                  "sourceGlyphInkHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
@@ -909,6 +939,8 @@ public sealed class DimensionMetricComparatorTests
                   "sourceAdvanceWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceVisibleWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceVisibleHeightMm": 2.5,
+                  "sourceGlyphInkWidthMm": 7.5,
+                  "sourceGlyphInkHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
