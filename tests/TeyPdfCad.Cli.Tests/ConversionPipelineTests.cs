@@ -172,6 +172,18 @@ public sealed class ConversionPipelineTests
         Assert.Equal(
             JsonValueKind.Null,
             evidence.GetProperty("sourceFontSha256").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            evidence.GetProperty("sourceFontSubtype").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            evidence.GetProperty("sourceFontEncodingName").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            evidence.GetProperty("sourceFontHasToUnicode").ValueKind);
+        Assert.Equal(
+            JsonValueKind.Null,
+            evidence.GetProperty("sourceFontIsSubset").ValueKind);
         Assert.True(
             evidence.GetProperty("sourceAdvanceWidthMm").GetDouble() > 0d);
         Assert.True(
