@@ -123,7 +123,6 @@ internal static class NativeExpectationBuilder
                     continue;
 
                 var dimension = BuildExpectedDimension(
-                    styles,
                     sheet,
                     candidate);
                 AddExpected(
@@ -314,7 +313,6 @@ internal static class NativeExpectationBuilder
     }
 
     private static Dimension BuildExpectedDimension(
-        AcadSharpStyleCatalog styles,
         SheetPlan sheet,
         DimensionCandidate candidate)
     {
@@ -342,11 +340,30 @@ internal static class NativeExpectationBuilder
             : new DimensionAligned(first, second);
 
         dimension.DefinitionPoint = definition;
-        dimension.Style = styles.GetDimensionStyle(candidate.DrawingScale);
+
+        // Intentionally do not call AcadSharpStyleCatalog.GetDimensionStyle here.
+        // This is the independent pre-write proof path: a defect in the writer's
+        // style helper must not automatically reproduce itself in the manifest.
+        dimension.Style = BuildIndependentExpectedDimensionStyle(candidate.DrawingScale);
         dimension.Text = NativeDimensionTextBuilder.Build(
             candidate.SourceText,
             candidate.DisplayedValue);
         return dimension;
+    }
+
+    private static DimensionStyle BuildIndependentExpectedDimensionStyle(double linearScale)
+    {
+        var canonicalScale = Math.Round(linearScale, 6);
+        var name = $"TEYPDFCAD_SCALE_{canonicalScale.ToString("0.######", CultureInfo.InvariantCulture).Replace('.', '_')}";
+        return new DimensionStyle(name)
+        {
+            LinearScaleFactor = canonicalScale,
+            TextHeight = 2.5d,
+            ArrowSize = 2.5d,
+            ExtensionLineOffset = 0.75d,
+            ExtensionLineExtension = 1.25d,
+            ScaleFactor = 1d
+        };
     }
 
     private static DimensionArc BuildExpectedArcDimension(
