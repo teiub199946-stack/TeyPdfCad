@@ -434,6 +434,31 @@ public sealed class DwgReadBackVerifier
                 error = "expectedDimensionText requires Dimension";
                 return false;
 
+            case "expectedTextMiddlePoint":
+                if (entity is Dimension middlePointDimension
+                    && TryPoint(expectedValue, out var expectedPoint))
+                {
+                    var actual = middlePointDimension.TextMiddlePoint;
+                    if (PointEqual(actual, expectedPoint))
+                        return true;
+                    error = $"text middle point {Point(actual)} != {Point(expectedPoint)}";
+                    return false;
+                }
+                error = "expectedTextMiddlePoint requires Dimension and x,y,z numeric value";
+                return false;
+
+            case "expectedTextUserDefinedLocation":
+                if (entity is Dimension userLocatedDimension
+                    && bool.TryParse(expectedValue, out var expectedUserDefined))
+                {
+                    if (userLocatedDimension.IsTextUserDefinedLocation == expectedUserDefined)
+                        return true;
+                    error = $"IsTextUserDefinedLocation {userLocatedDimension.IsTextUserDefinedLocation} != {expectedUserDefined}";
+                    return false;
+                }
+                error = "expectedTextUserDefinedLocation requires Dimension and boolean value";
+                return false;
+
             case "expectedText":
                 if (entity is TextEntity expectedTextEntity)
                 {
@@ -596,6 +621,30 @@ public sealed class DwgReadBackVerifier
                 return false;
         }
     }
+
+    private static bool TryPoint(string value, out XYZ point)
+    {
+        point = default;
+        var parts = value.Split(',');
+        if (parts.Length != 3
+            || !TryDouble(parts[0], out var x)
+            || !TryDouble(parts[1], out var y)
+            || !TryDouble(parts[2], out var z))
+            return false;
+        point = new XYZ(x, y, z);
+        return true;
+    }
+
+    private static bool PointEqual(XYZ first, XYZ second)
+        => Math.Abs(first.X - second.X) <= 1e-6
+            && Math.Abs(first.Y - second.Y) <= 1e-6
+            && Math.Abs(first.Z - second.Z) <= 1e-6;
+
+    private static string Point(XYZ point)
+        => string.Join(",",
+            point.X.ToString("R", CultureInfo.InvariantCulture),
+            point.Y.ToString("R", CultureInfo.InvariantCulture),
+            point.Z.ToString("R", CultureInfo.InvariantCulture));
 
     private static bool TryDouble(string value, out double parsed)
         => double.TryParse(
