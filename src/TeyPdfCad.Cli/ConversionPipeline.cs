@@ -453,7 +453,8 @@ public sealed class ConversionPipeline
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
             [text.SourceId],
-            text.Style.RgbColor)));
+            text.Style.RgbColor,
+            text.FontName)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -847,7 +848,8 @@ public sealed class ConversionPipeline
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
             [text.SourceId],
-            text.Style.RgbColor)).ToArray();
+            text.Style.RgbColor,
+            text.FontName)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
