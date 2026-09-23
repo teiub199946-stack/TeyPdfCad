@@ -135,6 +135,47 @@ public sealed class ConversionPipelineTests
     }
 
     [Fact]
+    public async Task Pipeline_reports_source_text_metric_evidence_keyed_by_candidate_id()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "dimension-metrics.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        const string contents =
+            "20 50 m 120 50 l S " +
+            "20 38 m 20 51 l S " +
+            "120 38 m 120 51 l S " +
+            "19 49 m 21 51 l S " +
+            "119 49 m 121 51 l S " +
+            "BT /F1 12 Tf 60 53 Td (35.28) Tj ET";
+        await File.WriteAllBytesAsync(
+            input,
+            CreateMinimalPdfWithHelvetica(contents, 160, 100));
+
+        _ = await new ConversionPipeline().ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.True(page.GetProperty("dimensionCandidateCount").GetInt32() > 0);
+        var evidence = Assert.Single(
+            page.GetProperty("dimensionMetricEvidence").EnumerateArray());
+
+        Assert.False(string.IsNullOrWhiteSpace(
+            evidence.GetProperty("candidateId").GetString()));
+        Assert.Equal(
+            "Helvetica",
+            evidence.GetProperty("sourceFontName").GetString());
+        Assert.True(
+            evidence.GetProperty("sourceAdvanceWidthMm").GetDouble() > 0d);
+        Assert.True(
+            evidence.GetProperty("sourceHeightMm").GetDouble() > 0d);
+    }
+
+    [Fact]
     public async Task Pipeline_preserves_uncertain_pattern_geometry_without_native_hatch()
     {
         var directory = Path.Combine(Path.GetTempPath(), "TeyPdfCad.Tests", Guid.NewGuid().ToString("N"));
@@ -770,6 +811,53 @@ public sealed class ConversionPipelineTests
 
         builder
             .Append("trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n")
+            .Append(startXref)
+            .Append("\n%%EOF");
+        return Encoding.ASCII.GetBytes(builder.ToString());
+    }
+
+    private static byte[] CreateMinimalPdfWithHelvetica(
+        string contents,
+        int widthPoints,
+        int heightPoints)
+    {
+        var objects = new[]
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {widthPoints} {heightPoints}] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+            $"<< /Length {Encoding.ASCII.GetByteCount(contents)} >>\nstream\n{contents}\nendstream",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+        };
+
+        var builder = new StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int> { 0 };
+        for (var index = 0; index < objects.Length; index++)
+        {
+            offsets.Add(Encoding.ASCII.GetByteCount(builder.ToString()));
+            builder
+                .Append(index + 1)
+                .Append(" 0 obj\n")
+                .Append(objects[index])
+                .Append("\nendobj\n");
+        }
+
+        var startXref = Encoding.ASCII.GetByteCount(builder.ToString());
+        builder
+            .Append("xref\n0 ")
+            .Append(objects.Length + 1)
+            .Append("\n0000000000 65535 f \n");
+        foreach (var offset in offsets.Skip(1))
+        {
+            builder
+                .Append(offset.ToString("D10"))
+                .Append(" 00000 n \n");
+        }
+
+        builder
+            .Append("trailer\n<< /Size ")
+            .Append(objects.Length + 1)
+            .Append(" /Root 1 0 R >>\nstartxref\n")
             .Append(startXref)
             .Append("\n%%EOF");
         return Encoding.ASCII.GetBytes(builder.ToString());
