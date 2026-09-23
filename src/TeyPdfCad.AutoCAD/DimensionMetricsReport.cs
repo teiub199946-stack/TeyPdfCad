@@ -1,5 +1,6 @@
 using System.Globalization;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace TeyPdfCad.AutoCAD;
 
@@ -16,7 +17,9 @@ internal sealed record DimensionTextMetric(
     double PositionZ,
     string TextStyleName,
     string FontFile,
-    double TextStyleWidthFactor);
+    double TextStyleWidthFactor,
+    string FontResolvedPath = "",
+    string FontSha256 = "");
 
 internal sealed record DimensionMetric(
     string DimensionHandle,
@@ -35,7 +38,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "1";
+    public const string SchemaVersion = "2";
 
     public static string Format(DimensionMetricsReport report)
     {
@@ -61,7 +64,8 @@ internal static class DimensionMetricsReportFormatter
             new JsonSerializerSettings
             {
                 Culture = CultureInfo.InvariantCulture,
-                NullValueHandling = NullValueHandling.Include
+                NullValueHandling = NullValueHandling.Include,
+                ContractResolver = new CamelCasePropertyNamesContractResolver()
             });
     }
 }
