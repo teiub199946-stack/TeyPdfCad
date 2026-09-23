@@ -465,11 +465,14 @@ public static class SourceEquivalenceAssessor
         DimensionSourceAppearance appearance)
     {
         var sourceFont = appearance.Text.FontName ?? "<unknown>";
-        var sourceWidth = appearance.Text.AdvanceWidthMm.HasValue
+        var sourceAdvance = appearance.Text.AdvanceWidthMm.HasValue
             ? appearance.Text.AdvanceWidthMm.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
             : "<unknown>";
+        var sourceVisible = appearance.Text.VisibleWidthMm.HasValue
+            ? appearance.Text.VisibleWidthMm.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+            : "<unknown>";
 
-        return $"Native DIMENSION text is now deterministically bound to TEYPDFCAD_TEXT/arial.ttf, but raw PDF font '{sourceFont}' has not been proven to resolve to the same font binary/glyph metrics, and native rendered advance width has not been independently measured against the source advance width {sourceWidth} mm.";
+        return $"Native DIMENSION text is deterministically bound to TEYPDFCAD_TEXT/arial.ttf, but raw PDF font '{sourceFont}' has not been proven to resolve to the same font binary/glyph metrics. PDF baseline advance ({sourceAdvance} mm) and visible bounding width ({sourceVisible} mm) are now captured separately; AutoCAD-native rendered width must be compared only to the visible-width metric before equivalence can be completed.";
     }
 
     private static string? DescribeUnprovenDimensionArrowMapping(
@@ -580,6 +583,13 @@ public static class SourceEquivalenceAssessor
             || appearance.Text.AdvanceWidthMm.Value <= 0d)
         {
             return "Dimension source text advance width is unavailable; native text-metric equivalence cannot be proven.";
+        }
+
+        if (!appearance.Text.VisibleWidthMm.HasValue
+            || !double.IsFinite(appearance.Text.VisibleWidthMm.Value)
+            || appearance.Text.VisibleWidthMm.Value <= 0d)
+        {
+            return "Dimension source visible text width is unavailable; native rendered-width equivalence cannot be proven.";
         }
 
         if (!appearance.Text.VisualCenter.HasValue)
@@ -741,6 +751,11 @@ public static class SourceEquivalenceAssessor
                     ? sourceText.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
                     : null,
                 appearance.Text.AdvanceWidthMm)
+            || !NullableAlmostEqual(
+                sourceText.VisibleWidthPoints > 0d
+                    ? sourceText.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
+                    : null,
+                appearance.Text.VisibleWidthMm)
             || !NullablePointEqual(sourceText.VisualCenter, appearance.Text.VisualCenter))
         {
             return "Dimension source text appearance differs from the raw VectorPdfPage evidence.";
