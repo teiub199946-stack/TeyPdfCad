@@ -346,6 +346,105 @@ public sealed class DwgDocumentWriterTests
     }
 
     [Fact]
+    public void Writer_keeps_source_dimension_styles_isolated_at_the_same_scale()
+    {
+        var entities = new List<VectorEntity>();
+
+        DimensionCandidate Build(string prefix, double y, int rgb, double widthMm)
+        {
+            var dimStyle = new VectorStyle(
+                RgbColor: rgb,
+                StrokeWidthPoints: widthMm / VectorPdfPage.MillimetresPerPoint);
+            var extStyle = new VectorStyle(
+                RgbColor: rgb,
+                StrokeWidthPoints: widthMm / VectorPdfPage.MillimetresPerPoint);
+            var textStyle = new VectorStyle(RgbColor: rgb);
+
+            entities.Add(new VectorLine($"{prefix}-dim", new(0, y + 5), new(10, y + 5), dimStyle));
+            entities.Add(new VectorLine($"{prefix}-ext-1", new(0, y), new(0, y + 6), extStyle));
+            entities.Add(new VectorLine($"{prefix}-ext-2", new(10, y), new(10, y + 6), extStyle));
+            entities.Add(new VectorLine($"{prefix}-arrow-1", new(0, y + 5), new(1, y + 6), dimStyle));
+            entities.Add(new VectorLine($"{prefix}-arrow-2", new(10, y + 5), new(9, y + 6), dimStyle));
+            entities.Add(new VectorText(
+                $"{prefix}-text",
+                "10",
+                new(5, y + 5),
+                2.5 / VectorPdfPage.MillimetresPerPoint,
+                textStyle));
+
+            return new DimensionCandidate(
+                DimensionKind.Rotated,
+                new(0, y),
+                new(10, y),
+                new(5, y + 5),
+                10,
+                10,
+                1,
+                0.95,
+                "10",
+                1,
+                [
+                    $"{prefix}-dim",
+                    $"{prefix}-ext-1",
+                    $"{prefix}-ext-2",
+                    $"{prefix}-arrow-1",
+                    $"{prefix}-arrow-2",
+                    $"{prefix}-text"
+                ])
+            {
+                RotationRadians = 0,
+                SourceClaims =
+                [
+                    new($"{prefix}-dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                    new($"{prefix}-ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                    new($"{prefix}-ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                    new($"{prefix}-arrow-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                    new($"{prefix}-arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                    new($"{prefix}-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+                ],
+                SourceAppearance = new DimensionSourceAppearance(
+                    new DimensionSourceTextAppearance(
+                        "10", new(5, y + 5), 2.5, 0, null, rgb, [$"{prefix}-text"]),
+                    new DimensionSourceLineAppearance(
+                        new(0, y + 5), new(10, y + 5), null, rgb, widthMm, [], [$"{prefix}-dim"]),
+                    [
+                        new DimensionSourceLineAppearance(
+                            new(0, y), new(0, y + 6), null, rgb, widthMm, [], [$"{prefix}-ext-1"]),
+                        new DimensionSourceLineAppearance(
+                            new(10, y), new(10, y + 6), null, rgb, widthMm, [], [$"{prefix}-ext-2"])
+                    ],
+                    [
+                        new DimensionSourceLineAppearance(
+                            new(0, y + 5), new(1, y + 6), null, rgb, widthMm, [], [$"{prefix}-arrow-1"]),
+                        new DimensionSourceLineAppearance(
+                            new(10, y + 5), new(9, y + 6), null, rgb, widthMm, [], [$"{prefix}-arrow-2"])
+                    ])
+            };
+        }
+
+        var first = Build("a", 0, 0x112233, 0.25);
+        var second = Build("b", 20, 0xAA5500, 0.35);
+        var page = new VectorPdfPage(1, 72, 72, 0, entities);
+        var document = new VectorPdfDocument([page]);
+        var semantics = new SemanticReconstructionResult([first, second], [], 1, 0.95);
+
+        var drawing = DwgReader.Read(new MemoryStream(new AcadSharpDwgWriter().Write(
+            document,
+            new DocumentLayoutPlanner().Create(document),
+            semanticRecognitionByPage: new Dictionary<int, SemanticReconstructionResult> { [1] = semantics })));
+
+        var dimensions = drawing.Entities.OfType<ACadSharp.Entities.Dimension>().ToArray();
+        Assert.Equal(2, dimensions.Length);
+        Assert.Equal(2, dimensions.Select(dimension => dimension.Style.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains(dimensions, dimension =>
+            dimension.Style.DimensionLineColor.ToString() == Color.FromTrueColor(0x112233).ToString()
+            && dimension.Style.DimensionLineWeight == (LineWeightType)25);
+        Assert.Contains(dimensions, dimension =>
+            dimension.Style.DimensionLineColor.ToString() == Color.FromTrueColor(0xAA5500).ToString()
+            && dimension.Style.DimensionLineWeight == (LineWeightType)35);
+    }
+
+    [Fact]
     public void Writer_maps_strict_crossing_oblique_ticks_to_isolated_dimension_style()
     {
         var page = new VectorPdfPage(1, 72, 72, 0,
