@@ -41,7 +41,9 @@ internal sealed record DimensionMetricComparisonCandidate(
     int NativeBlockGeometryCount,
     IReadOnlyList<string> NativeBlockGeometryKinds,
     int NativeExplodedGeometryCount,
-    IReadOnlyList<string> NativeExplodedGeometryKinds);
+    IReadOnlyList<string> NativeExplodedGeometryKinds,
+    int SourceExtensionLineCount,
+    int MatchedSourceExtensionLineCount);
 
 internal static class DimensionMetricComparator
 {
@@ -267,6 +269,38 @@ internal static class DimensionMetricComparator
         if (!IsPositiveFinite(source.SourceHeightMm))
             blockers.Add("source-height-invalid");
 
+        if (!string.Equals(
+                source.SourceCoordinateFrame,
+                "drawing-wcs-model-mm",
+                StringComparison.Ordinal))
+        {
+            blockers.Add("source-geometry-coordinate-frame-unsupported");
+        }
+
+        var sourceExtensionLines = source.SourceLineGeometry
+            .Where(item => string.Equals(
+                item.Role,
+                "extension-line",
+                StringComparison.Ordinal))
+            .ToArray();
+        if (sourceExtensionLines.Length != 2)
+            blockers.Add("source-extension-line-count-not-two");
+
+        var explodedLines = native.ExplodedGeometry
+            .Where(item => string.Equals(
+                item.GeometryKind,
+                "line",
+                StringComparison.Ordinal))
+            .ToArray();
+        var matchedSourceExtensionLineCount = sourceExtensionLines.Count(sourceLine =>
+            explodedLines.Any(nativeLine =>
+                LinesEqual(sourceLine, nativeLine, NumericalWidthToleranceMm)));
+        if (sourceExtensionLines.Length > 0
+            && matchedSourceExtensionLineCount != sourceExtensionLines.Length)
+        {
+            blockers.Add("source-extension-line-unmatched");
+        }
+
         if (!IsFirstSafeNumericDimensionText(source.SourceText))
             blockers.Add("source-text-outside-safe-numeric-subset");
 
@@ -357,6 +391,12 @@ internal static class DimensionMetricComparator
             && IsPositiveFinite(source.SourceVisibleHeightMm)
             && IsPositiveFinite(source.SourceAdvanceWidthMm)
             && IsPositiveFinite(source.SourceHeightMm)
+            && string.Equals(
+                source.SourceCoordinateFrame,
+                "drawing-wcs-model-mm",
+                StringComparison.Ordinal)
+            && sourceExtensionLines.Length == 2
+            && matchedSourceExtensionLineCount == 2
             && IsPositiveFinite(metric.Width)
             && IsPositiveFinite(metric.Height)
             && IsSupportedMetricKind(metric.MetricKind)
@@ -405,7 +445,9 @@ internal static class DimensionMetricComparator
             native.ExplodedGeometry
                 .Select(item => item.GeometryKind)
                 .OrderBy(value => value, StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(),
+            sourceExtensionLines.Length,
+            matchedSourceExtensionLineCount);
     }
 
     private static IReadOnlyList<SourceEvidence> ReadSourceEvidence(JsonElement root)
@@ -422,6 +464,20 @@ internal static class DimensionMetricComparator
             foreach (var item in evidence.EnumerateArray())
             {
                 var candidateId = GetString(item, "candidateId") ?? string.Empty;
+                var sourceLineGeometry = new List<SourceLineGeometry>();
+                if (TryGetArray(item, "sourceLineGeometry", out var sourceGeometryArray))
+                {
+                    foreach (var line in sourceGeometryArray.EnumerateArray())
+                    {
+                        sourceLineGeometry.Add(new SourceLineGeometry(
+                            GetString(line, "role") ?? string.Empty,
+                            GetNullableDouble(line, "startX"),
+                            GetNullableDouble(line, "startY"),
+                            GetNullableDouble(line, "endX"),
+                            GetNullableDouble(line, "endY")));
+                    }
+                }
+
                 output.Add(new SourceEvidence(
                     candidateId,
                     GetString(item, "sourceText") ?? string.Empty,
@@ -434,7 +490,9 @@ internal static class DimensionMetricComparator
                     GetNullableDouble(item, "sourceAdvanceWidthMm"),
                     GetNullableDouble(item, "sourceVisibleWidthMm"),
                     GetNullableDouble(item, "sourceVisibleHeightMm"),
-                    GetNullableDouble(item, "sourceHeightMm")));
+                    GetNullableDouble(item, "sourceHeightMm"),
+                    GetString(item, "sourceCoordinateFrame") ?? string.Empty,
+                    sourceLineGeometry));
             }
         }
 
@@ -578,6 +636,61 @@ internal static class DimensionMetricComparator
         }
 
         return true;
+    }
+
+    private static bool LinesEqual(
+        SourceLineGeometry source,
+        NativeBlockGeometry native,
+        double tolerance)
+    {
+        if (!source.StartX.HasValue
+            || !source.StartY.HasValue
+            || !source.EndX.HasValue
+            || !source.EndY.HasValue
+            || !native.StartX.HasValue
+            || !native.StartY.HasValue
+            || !native.EndX.HasValue
+            || !native.EndY.HasValue)
+        {
+            return false;
+        }
+
+        static bool PointEqual(
+            double ax,
+            double ay,
+            double bx,
+            double by,
+            double tolerance)
+            => Math.Abs(ax - bx) <= tolerance
+                && Math.Abs(ay - by) <= tolerance;
+
+        var sameDirection =
+            PointEqual(
+                source.StartX.Value,
+                source.StartY.Value,
+                native.StartX.Value,
+                native.StartY.Value,
+                tolerance)
+            && PointEqual(
+                source.EndX.Value,
+                source.EndY.Value,
+                native.EndX.Value,
+                native.EndY.Value,
+                tolerance);
+        var reverseDirection =
+            PointEqual(
+                source.StartX.Value,
+                source.StartY.Value,
+                native.EndX.Value,
+                native.EndY.Value,
+                tolerance)
+            && PointEqual(
+                source.EndX.Value,
+                source.EndY.Value,
+                native.StartX.Value,
+                native.StartY.Value,
+                tolerance);
+        return sameDirection || reverseDirection;
     }
 
     private static IReadOnlyList<NativeBlockGeometry> ReadGeometryEvidence(
@@ -792,6 +905,13 @@ internal static class DimensionMetricComparator
                 : null;
     }
 
+    private sealed record SourceLineGeometry(
+        string Role,
+        double? StartX,
+        double? StartY,
+        double? EndX,
+        double? EndY);
+
     private sealed record SourceEvidence(
         string CandidateId,
         string SourceText,
@@ -804,7 +924,9 @@ internal static class DimensionMetricComparator
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
         double? SourceVisibleHeightMm,
-        double? SourceHeightMm)
+        double? SourceHeightMm,
+        string SourceCoordinateFrame,
+        IReadOnlyList<SourceLineGeometry> SourceLineGeometry)
     {
         public static SourceEvidence Empty(string candidateId)
             => new(
@@ -819,7 +941,9 @@ internal static class DimensionMetricComparator
                 null,
                 null,
                 null,
-                null);
+                null,
+                string.Empty,
+                []);
     }
 
     private sealed record NativeBlockGeometry(
