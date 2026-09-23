@@ -629,6 +629,23 @@ public static class SourceEquivalenceAssessor
             return "Dimension source visible text width is unavailable; native rendered-width equivalence cannot be proven.";
         }
 
+        if (!appearance.Text.VisibleHeightMm.HasValue
+            || !double.IsFinite(appearance.Text.VisibleHeightMm.Value)
+            || appearance.Text.VisibleHeightMm.Value <= 0d)
+        {
+            return "Dimension source visible text height is unavailable; native rendered-height equivalence cannot be proven.";
+        }
+
+        if (!appearance.Text.GlyphInkWidthMm.HasValue
+            || !double.IsFinite(appearance.Text.GlyphInkWidthMm.Value)
+            || appearance.Text.GlyphInkWidthMm.Value <= 0d
+            || !appearance.Text.GlyphInkHeightMm.HasValue
+            || !double.IsFinite(appearance.Text.GlyphInkHeightMm.Value)
+            || appearance.Text.GlyphInkHeightMm.Value <= 0d)
+        {
+            return "Dimension source glyph-outline ink extents are unavailable; native glyph appearance equivalence cannot be proven.";
+        }
+
         if (!appearance.Text.VisualCenter.HasValue)
         {
             return "Dimension source visual text center is unavailable; native text-placement equivalence cannot be proven.";
@@ -807,6 +824,21 @@ public static class SourceEquivalenceAssessor
                     ? sourceText.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
                     : null,
                 appearance.Text.VisibleWidthMm)
+            || !NullableAlmostEqual(
+                sourceText.VisibleHeightPoints > 0d
+                    ? sourceText.VisibleHeightPoints * VectorPdfPage.MillimetresPerPoint
+                    : null,
+                appearance.Text.VisibleHeightMm)
+            || !NullableAlmostEqual(
+                sourceText.GlyphInkWidthPoints > 0d
+                    ? sourceText.GlyphInkWidthPoints * VectorPdfPage.MillimetresPerPoint
+                    : null,
+                appearance.Text.GlyphInkWidthMm)
+            || !NullableAlmostEqual(
+                sourceText.GlyphInkHeightPoints > 0d
+                    ? sourceText.GlyphInkHeightPoints * VectorPdfPage.MillimetresPerPoint
+                    : null,
+                appearance.Text.GlyphInkHeightMm)
             || !NullablePointEqual(sourceText.VisualCenter, appearance.Text.VisualCenter))
         {
             return "Dimension source text appearance differs from the raw VectorPdfPage evidence.";
