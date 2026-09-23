@@ -228,6 +228,11 @@ public static class SourceEquivalenceAssessor
                 return "Dimension source line appearance is not independently traceable to exactly one raw source entity.";
 
             var source = sourceMatches[0];
+            if (source is VectorPolyline)
+            {
+                return "Dimension source line appearance references a VectorPolyline source; P0 whole-source suppression cannot prove that unrelated polyline segments are replaced.";
+            }
+
             if (!LineGeometryMatches(source, lineAppearance)
                 || !LineStyleMatches(source.Style, lineAppearance))
             {
@@ -241,19 +246,12 @@ public static class SourceEquivalenceAssessor
     private static bool LineGeometryMatches(
         VectorEntity source,
         TeyPdfCad.Core.Semantics.Dimensions.DimensionSourceLineAppearance appearance)
-        => source switch
-        {
-            VectorLine line => SegmentEqual(
+        => source is VectorLine line
+            && SegmentEqual(
                 line.Start,
                 line.End,
                 appearance.Start,
-                appearance.End),
-            VectorPolyline polyline => PolylineContainsSegment(
-                polyline,
-                appearance.Start,
-                appearance.End),
-            _ => false
-        };
+                appearance.End);
 
     private static bool LineStyleMatches(
         VectorStyle source,
@@ -280,30 +278,6 @@ public static class SourceEquivalenceAssessor
                 return false;
 
         return true;
-    }
-
-    private static bool PolylineContainsSegment(
-        VectorPolyline polyline,
-        TeyPdfCad.Core.Geometry.Point2 start,
-        TeyPdfCad.Core.Geometry.Point2 end)
-    {
-        for (var index = 1; index < polyline.Vertices.Count; index++)
-        {
-            if (SegmentEqual(
-                    polyline.Vertices[index - 1],
-                    polyline.Vertices[index],
-                    start,
-                    end))
-                return true;
-        }
-
-        return polyline.IsClosed
-            && polyline.Vertices.Count > 2
-            && SegmentEqual(
-                polyline.Vertices[^1],
-                polyline.Vertices[0],
-                start,
-                end);
     }
 
     private static bool SegmentEqual(
