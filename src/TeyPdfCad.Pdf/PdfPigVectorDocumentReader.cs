@@ -67,7 +67,10 @@ public sealed class PdfPigVectorDocumentReader
                     Style: new VectorStyle(RgbColor: ToRgb(first.Color.ToRGBValues())),
                     RotationRadians: Math.Atan2(baselineY, baselineX),
                     AdvanceWidthPoints: advanceWidthPoints,
-                    FontName: GetWordFontName(word)));
+                    FontName: GetWordFontName(word),
+                    VisualCenter: new Point2(
+                        word.BoundingBox.Centroid.X * VectorPdfPage.MillimetresPerPoint,
+                        word.BoundingBox.Centroid.Y * VectorPdfPage.MillimetresPerPoint)));
             }
 
             if (skippedHiddenText)
