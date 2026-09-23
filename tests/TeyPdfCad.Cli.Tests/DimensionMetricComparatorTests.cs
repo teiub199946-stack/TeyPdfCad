@@ -28,6 +28,7 @@ public sealed class DimensionMetricComparatorTests
                   "sourceGlyphInkWidthMm": 7.5,
                   "sourceGlyphInkHeightMm": 2.5,
                   "sourceHeightMm": 2.5,
+                  "sourceNativeMeasurementMm": 100,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
                   "sourceVisualCenterY": 20,
@@ -409,6 +410,66 @@ public sealed class DimensionMetricComparatorTests
         Assert.True(candidate.BaselineDirectionDot.HasValue);
         Assert.True(candidate.BaselineDirectionDot.Value < -0.999999);
         Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_rejects_native_dimension_measurement_drift()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"measurement\": 100",
+                "\"measurement\": 101",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "source-native-measurement-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_compares_native_measurement_not_displayed_scaled_text()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5)
+            .Replace(
+                "\"sourceNativeMeasurementMm\": 100",
+                "\"sourceNativeMeasurementMm\": 50",
+                StringComparison.Ordinal);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"measurement\": 100",
+                "\"measurement\": 50",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.DoesNotContain(
+            "source-native-measurement-mismatch",
+            candidate.Blockers);
+        Assert.True(candidate.MeasurementsAreUsable);
         Assert.False(candidate.SourceToNativeEquivalenceProven);
     }
 
