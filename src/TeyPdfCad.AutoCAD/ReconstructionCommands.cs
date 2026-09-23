@@ -407,14 +407,33 @@ public sealed class ReconstructionCommands
             }
             else
             {
-                var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
-                Directory.CreateDirectory(outputDirectory);
-                var timestamp = DateTime.UtcNow.ToString(
-                    "yyyyMMdd_HHmmssfff",
-                    CultureInfo.InvariantCulture);
-                outputPath = Path.Combine(
-                    outputDirectory,
-                    $"DimensionMetrics_{timestamp}.json");
+                var drawingPath = document.Name;
+                var drawingDirectory = !string.IsNullOrWhiteSpace(drawingPath)
+                    ? Path.GetDirectoryName(drawingPath)
+                    : null;
+                var drawingBaseName = !string.IsNullOrWhiteSpace(drawingPath)
+                    ? Path.GetFileNameWithoutExtension(drawingPath)
+                    : null;
+
+                if (!string.IsNullOrWhiteSpace(drawingDirectory)
+                    && !string.IsNullOrWhiteSpace(drawingBaseName)
+                    && Directory.Exists(drawingDirectory))
+                {
+                    outputPath = Path.Combine(
+                        drawingDirectory,
+                        drawingBaseName + ".dimension-metrics.json");
+                }
+                else
+                {
+                    var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
+                    Directory.CreateDirectory(outputDirectory);
+                    var timestamp = DateTime.UtcNow.ToString(
+                        "yyyyMMdd_HHmmssfff",
+                        CultureInfo.InvariantCulture);
+                    outputPath = Path.Combine(
+                        outputDirectory,
+                        $"DimensionMetrics_{timestamp}.json");
+                }
             }
 
             File.WriteAllText(
