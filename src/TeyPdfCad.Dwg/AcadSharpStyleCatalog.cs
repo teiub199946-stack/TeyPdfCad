@@ -128,6 +128,22 @@ internal sealed class AcadSharpStyleCatalog
     {
         style.DimensionLineColor = PdfColor(appearance.DimensionLine.RgbColor);
         style.TextColor = PdfColor(appearance.Text.RgbColor);
+        style.AlternateUnitDimensioning = false;
+        style.GenerateTolerances = false;
+        style.LimitsGeneration = false;
+        style.AlternateDimensioningSuffix = string.Empty;
+        style.PostFix = string.Empty;
+        style.TextInsideExtensions = false;
+        style.ZeroHandling = default;
+
+        if (TryGetPlainNumericFormat(
+                appearance.Text.Value,
+                out var decimalPlaces,
+                out var decimalSeparator))
+        {
+            style.DecimalPlaces = decimalPlaces;
+            style.DecimalSeparator = decimalSeparator;
+        }
 
         if (appearance.ExtensionLines.Count == 2)
             style.ExtensionLineColor = PdfColor(appearance.ExtensionLines[0].RgbColor);
@@ -272,6 +288,7 @@ internal sealed class AcadSharpStyleCatalog
     private static string BuildDimensionAppearanceToken(DimensionSourceAppearance appearance)
     {
         var canonical = string.Join("|",
+            appearance.Text.Value,
             appearance.DimensionLine.RgbColor?.ToString(CultureInfo.InvariantCulture) ?? "default-black",
             appearance.DimensionLine.StrokeWidthMm?.ToString("R", CultureInfo.InvariantCulture) ?? "null",
             DashToken(appearance.DimensionLine.DashPatternMm),
@@ -299,6 +316,47 @@ internal sealed class AcadSharpStyleCatalog
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexString(hash.AsSpan(0, 8));
+    }
+
+    private static bool TryGetPlainNumericFormat(
+        string value,
+        out short decimalPlaces,
+        out char decimalSeparator)
+    {
+        decimalPlaces = 0;
+        decimalSeparator = '.';
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        var separatorIndex = -1;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character >= '0' && character <= '9')
+                continue;
+
+            if ((character == '.' || character == ',')
+                && separatorIndex < 0
+                && index > 0
+                && index < value.Length - 1)
+            {
+                separatorIndex = index;
+                decimalSeparator = character;
+                continue;
+            }
+
+            return false;
+        }
+
+        if (separatorIndex >= 0)
+        {
+            var places = value.Length - separatorIndex - 1;
+            if (places > short.MaxValue)
+                return false;
+            decimalPlaces = (short)places;
+        }
+
+        return true;
     }
 
     private static string DashToken(IReadOnlyList<double> pattern)
