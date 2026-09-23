@@ -298,6 +298,37 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_appearance_is_rejected_when_advance_width_differs_from_raw_page()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with
+                {
+                    AdvanceWidthMm = candidate.SourceAppearance.Text.AdvanceWidthMm!.Value + 1d
+                }
+            }
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains(
+            "differs from the raw VectorPdfPage evidence",
+            assessment.Reason,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_appearance_requires_exact_role_binding_not_only_source_id_set()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
@@ -398,7 +429,8 @@ public sealed class SourceEquivalenceAssessorTests
                     "DIM",
                     0,
                     ["d-text"],
-                    "Helvetica"),
+                    "Helvetica",
+                    5.0),
                 new DimensionSourceLineAppearance(
                     new(0, 5),
                     new(10, 5),
@@ -466,6 +498,7 @@ public sealed class SourceEquivalenceAssessorTests
                     new(5, 5),
                     2.5 / VectorPdfPage.MillimetresPerPoint,
                     new VectorStyle(SourceLayer: "DIM", RgbColor: 0),
+                    AdvanceWidthPoints: 5.0 / VectorPdfPage.MillimetresPerPoint,
                     FontName: "Helvetica")
             ]);
 
