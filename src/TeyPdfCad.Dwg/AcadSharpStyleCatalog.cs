@@ -74,7 +74,8 @@ internal sealed class AcadSharpStyleCatalog
                 ArrowSize = 2.5d,
                 ExtensionLineOffset = 0.75d,
                 ExtensionLineExtension = 1.25d,
-                ScaleFactor = 1d
+                ScaleFactor = 1d,
+                Style = GetPdfTextStyle()
             };
             _document.DimensionStyles.Add(style);
         }
