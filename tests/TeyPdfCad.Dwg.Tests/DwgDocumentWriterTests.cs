@@ -4,6 +4,7 @@ using TeyPdfCad.Dwg;
 using TeyPdfCad.Core.Geometry;
 using TeyPdfCad.Core.Recognition;
 using TeyPdfCad.Core.Semantics;
+using TeyPdfCad.Core.Semantics.Dimensions;
 using TeyPdfCad.Core.Templates;
 using ACadSharp.IO;
 using Xunit;
