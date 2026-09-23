@@ -524,7 +524,13 @@ public sealed class ConversionPipeline
             text.FontProgramSubtype,
             text.FontEncodingName,
             text.FontHasToUnicode,
-            text.FontIsSubset)));
+            text.FontIsSubset,
+            text.GlyphInkWidthPoints > 0d
+                ? text.GlyphInkWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.GlyphInkHeightPoints > 0d
+                ? text.GlyphInkHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -732,6 +738,8 @@ public sealed class ConversionPipeline
                     text.RotationDegrees,
                     text.VisualCenter?.X,
                     text.VisualCenter?.Y,
+                    text.GlyphInkWidthMm,
+                    text.GlyphInkHeightMm,
                     "drawing-wcs-model-mm",
                     sheet.ModelOriginX,
                     sheet.ModelOriginY,
@@ -1004,7 +1012,13 @@ public sealed class ConversionPipeline
             text.FontProgramSubtype,
             text.FontEncodingName,
             text.FontHasToUnicode,
-            text.FontIsSubset)).ToArray();
+            text.FontIsSubset,
+            text.GlyphInkWidthPoints > 0d
+                ? text.GlyphInkWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.GlyphInkHeightPoints > 0d
+                ? text.GlyphInkHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
@@ -1135,6 +1149,8 @@ public sealed class ConversionPipeline
         double SourceRotationDegrees,
         double? SourceVisualCenterX,
         double? SourceVisualCenterY,
+        double? SourceGlyphInkWidthMm,
+        double? SourceGlyphInkHeightMm,
         string SourceCoordinateFrame,
         double ModelOriginX,
         double ModelOriginY,
