@@ -28,7 +28,36 @@ public sealed class DimensionMetricComparatorTests
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
-                  "sourceVisualCenterY": 20
+                  "sourceVisualCenterY": 20,
+                  "sourceCoordinateFrame": "drawing-wcs-model-mm",
+                  "modelOriginX": 0,
+                  "modelOriginY": 0,
+                  "sourceLineGeometry": [
+                    {
+                      "role": "dimension-line",
+                      "sourceIds": ["dim"],
+                      "startX": 0,
+                      "startY": 5,
+                      "endX": 10,
+                      "endY": 5
+                    },
+                    {
+                      "role": "extension-line",
+                      "sourceIds": ["ext-1"],
+                      "startX": 0,
+                      "startY": 0,
+                      "endX": 0,
+                      "endY": 6.25
+                    },
+                    {
+                      "role": "extension-line",
+                      "sourceIds": ["ext-2"],
+                      "startX": 10,
+                      "startY": 0,
+                      "endX": 10,
+                      "endY": 6.25
+                    }
+                  ]
                 }
               ]
             }
@@ -216,6 +245,54 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_reports_exact_source_extension_line_matches_in_exploded_geometry()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var native = $"""
+        {
+          "schemaVersion": "5",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Equal(2, candidate.SourceExtensionLineCount);
+        Assert.Equal(2, candidate.MatchedSourceExtensionLineCount);
+        Assert.DoesNotContain("source-extension-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_fails_closed_when_source_extension_line_has_no_exploded_match()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"endY\": 6.25",
+                "\"endY\": 6.5",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "5",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.True(candidate.MatchedSourceExtensionLineCount < candidate.SourceExtensionLineCount);
+        Assert.Contains("source-extension-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_missing_exploded_dimension_geometry()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -237,6 +314,44 @@ public sealed class DimensionMetricComparatorTests
               "minZ": 0,
               "maxX": 10,
               "maxY": 5,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-1",
+              "geometryKind": "line",
+              "startX": 0,
+              "startY": 0,
+              "startZ": 0,
+              "endX": 0,
+              "endY": 6.25,
+              "endZ": 0,
+              "minX": 0,
+              "minY": 0,
+              "minZ": 0,
+              "maxX": 0,
+              "maxY": 6.25,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-2",
+              "geometryKind": "line",
+              "startX": 10,
+              "startY": 0,
+              "startZ": 0,
+              "endX": 10,
+              "endY": 6.25,
+              "endZ": 0,
+              "minX": 10,
+              "minY": 0,
+              "minZ": 0,
+              "maxX": 10,
+              "maxY": 6.25,
               "maxZ": 0,
               "nestedBlockName": "",
               "vertexCount": 0
@@ -632,7 +747,36 @@ public sealed class DimensionMetricComparatorTests
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
-                  "sourceVisualCenterY": 20
+                  "sourceVisualCenterY": 20,
+                  "sourceCoordinateFrame": "drawing-wcs-model-mm",
+                  "modelOriginX": 0,
+                  "modelOriginY": 0,
+                  "sourceLineGeometry": [
+                    {
+                      "role": "dimension-line",
+                      "sourceIds": ["dim"],
+                      "startX": 0,
+                      "startY": 5,
+                      "endX": 10,
+                      "endY": 5
+                    },
+                    {
+                      "role": "extension-line",
+                      "sourceIds": ["ext-1"],
+                      "startX": 0,
+                      "startY": 0,
+                      "endX": 0,
+                      "endY": 6.25
+                    },
+                    {
+                      "role": "extension-line",
+                      "sourceIds": ["ext-2"],
+                      "startX": 10,
+                      "startY": 0,
+                      "endX": 10,
+                      "endY": 6.25
+                    }
+                  ]
                 }
               ]
             }
@@ -688,7 +832,36 @@ public sealed class DimensionMetricComparatorTests
                   "sourceHeightMm": 2.5,
                   "sourceRotationDegrees": 0,
                   "sourceVisualCenterX": 15,
-                  "sourceVisualCenterY": 20
+                  "sourceVisualCenterY": 20,
+                  "sourceCoordinateFrame": "drawing-wcs-model-mm",
+                  "modelOriginX": 0,
+                  "modelOriginY": 0,
+                  "sourceLineGeometry": [
+                    {
+                      "role": "dimension-line",
+                      "sourceIds": ["dim"],
+                      "startX": 0,
+                      "startY": 5,
+                      "endX": 10,
+                      "endY": 5
+                    },
+                    {
+                      "role": "extension-line",
+                      "sourceIds": ["ext-1"],
+                      "startX": 0,
+                      "startY": 0,
+                      "endX": 0,
+                      "endY": 6.25
+                    },
+                    {
+                      "role": "extension-line",
+                      "sourceIds": ["ext-2"],
+                      "startX": 10,
+                      "startY": 0,
+                      "endX": 10,
+                      "endY": 6.25
+                    }
+                  ]
                 }
               ]
             }
@@ -794,6 +967,44 @@ public sealed class DimensionMetricComparatorTests
               "minZ": 0,
               "maxX": 10,
               "maxY": 5,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-1",
+              "geometryKind": "line",
+              "startX": 0,
+              "startY": 0,
+              "startZ": 0,
+              "endX": 0,
+              "endY": 6.25,
+              "endZ": 0,
+              "minX": 0,
+              "minY": 0,
+              "minZ": 0,
+              "maxX": 0,
+              "maxY": 6.25,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "explode-2",
+              "geometryKind": "line",
+              "startX": 10,
+              "startY": 0,
+              "startZ": 0,
+              "endX": 10,
+              "endY": 6.25,
+              "endZ": 0,
+              "minX": 10,
+              "minY": 0,
+              "minZ": 0,
+              "maxX": 10,
+              "maxY": 6.25,
               "maxZ": 0,
               "nestedBlockName": "",
               "vertexCount": 0
