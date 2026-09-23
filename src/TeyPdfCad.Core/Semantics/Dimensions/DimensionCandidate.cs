@@ -31,7 +31,8 @@ public sealed record DimensionSourceTextAppearance(
     IReadOnlyList<string> SourceIds,
     string? FontName = null,
     double? AdvanceWidthMm = null,
-    Point2? VisualCenter = null);
+    Point2? VisualCenter = null,
+    double? VisibleWidthMm = null);
 
 public sealed record DimensionSourceAppearance(
     DimensionSourceTextAppearance Text,
