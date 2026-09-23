@@ -30,7 +30,8 @@ public sealed record DimensionSourceTextAppearance(
     int? RgbColor,
     IReadOnlyList<string> SourceIds,
     string? FontName = null,
-    double? AdvanceWidthMm = null);
+    double? AdvanceWidthMm = null,
+    Point2? VisualCenter = null);
 
 public sealed record DimensionSourceAppearance(
     DimensionSourceTextAppearance Text,
