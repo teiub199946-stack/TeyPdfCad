@@ -304,12 +304,12 @@ public static class SourceEquivalenceAssessor
 
     private static bool IsExactlyRepresentableAutoCadLineWeight(double millimetres)
     {
-        if (!double.IsFinite(millimetres) || millimetres < 0d)
+        if (!double.IsFinite(millimetres) || millimetres <= 0d)
             return false;
 
         double[] supported =
         [
-            0.00d, 0.05d, 0.09d, 0.13d, 0.15d, 0.18d, 0.20d, 0.25d,
+            0.05d, 0.09d, 0.13d, 0.15d, 0.18d, 0.20d, 0.25d,
             0.30d, 0.35d, 0.40d, 0.50d, 0.53d, 0.60d, 0.70d, 0.80d,
             0.90d, 1.00d, 1.06d, 1.20d, 1.40d, 1.58d, 2.00d, 2.11d
         ];
