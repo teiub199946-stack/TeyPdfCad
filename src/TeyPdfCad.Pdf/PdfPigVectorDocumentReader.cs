@@ -42,6 +42,7 @@ public sealed class PdfPigVectorDocumentReader
             var encounteredTextClipping = false;
             var encounteredAmbiguousFontIdentity = false;
             var encounteredMissingAdvanceWidth = false;
+            var encounteredMissingVisibleWidth = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
                 textSequence++;
@@ -66,11 +67,18 @@ public sealed class PdfPigVectorDocumentReader
                 }
                 var heightPoints = MeasureWordHeightPoints(word);
                 var advanceWidthPoints = Math.Sqrt(baselineX * baselineX + baselineY * baselineY);
+                var visibleWidthPoints = MeasureVisibleWidthAlongBaseline(
+                    word.BoundingBox,
+                    baselineX,
+                    baselineY,
+                    advanceWidthPoints);
                 var fontName = GetWordFontName(word);
                 if (string.IsNullOrWhiteSpace(fontName))
                     encounteredAmbiguousFontIdentity = true;
                 if (advanceWidthPoints <= 1e-9)
                     encounteredMissingAdvanceWidth = true;
+                if (visibleWidthPoints <= 1e-9)
+                    encounteredMissingVisibleWidth = true;
 
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
@@ -85,7 +93,8 @@ public sealed class PdfPigVectorDocumentReader
                     FontName: fontName,
                     VisualCenter: new Point2(
                         word.BoundingBox.Centroid.X * VectorPdfPage.MillimetresPerPoint,
-                        word.BoundingBox.Centroid.Y * VectorPdfPage.MillimetresPerPoint)));
+                        word.BoundingBox.Centroid.Y * VectorPdfPage.MillimetresPerPoint),
+                    VisibleWidthPoints: visibleWidthPoints));
             }
 
             if (skippedHiddenText)
@@ -116,6 +125,13 @@ public sealed class PdfPigVectorDocumentReader
                     $"One or more visible PDF words on page {sourcePage.Number} have no usable baseline advance width; exact text-width equivalence is not proven."));
             }
 
+            if (encounteredMissingVisibleWidth)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "missing-pdf-text-visible-width",
+                    $"One or more visible PDF words on page {sourcePage.Number} have no usable visible bounding width along the text baseline; exact rendered-width equivalence is not proven."));
+            }
+
             pages.Add(new VectorPdfPage(
                 Number: sourcePage.Number,
                 WidthPoints: sourcePage.Width,
@@ -126,6 +142,32 @@ public sealed class PdfPigVectorDocumentReader
         }
 
         return Task.FromResult(new VectorPdfDocument(pages));
+    }
+
+    private static double MeasureVisibleWidthAlongBaseline(
+        PdfRectangle boundingBox,
+        double baselineX,
+        double baselineY,
+        double advanceWidth)
+    {
+        if (!double.IsFinite(advanceWidth) || advanceWidth <= 1e-9)
+            return 0d;
+
+        var unitX = baselineX / advanceWidth;
+        var unitY = baselineY / advanceWidth;
+        var corners = new[]
+        {
+            boundingBox.BottomLeft,
+            boundingBox.BottomRight,
+            boundingBox.TopLeft,
+            boundingBox.TopRight
+        };
+
+        var projections = corners
+            .Select(point => point.X * unitX + point.Y * unitY)
+            .ToArray();
+        var width = projections.Max() - projections.Min();
+        return double.IsFinite(width) && width > 0d ? width : 0d;
     }
 
     private static (double Left, double Bottom)? TryGetDirectRawMediaBoxOrigin(
