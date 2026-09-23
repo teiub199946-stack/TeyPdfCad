@@ -86,7 +86,11 @@ public sealed class LinearDimensionRecognizerTests
             AdvanceWidth: 5.0,
             VisualCenter: new Point2(26, 3),
             VisibleWidth: 4.5,
-            FontProgramSha256: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"));
+            FontProgramSha256: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            FontProgramSubtype: "TrueType",
+            FontEncodingName: "WinAnsiEncoding",
+            FontHasToUnicode: false,
+            FontIsSubset: false));
 
         var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
         var appearance = Assert.IsType<DimensionSourceAppearance>(dimension.SourceAppearance);
@@ -100,6 +104,10 @@ public sealed class LinearDimensionRecognizerTests
         Assert.Equal(5.0, appearance.Text.AdvanceWidthMm);
         Assert.Equal(4.5, appearance.Text.VisibleWidthMm);
         Assert.Equal("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", appearance.Text.FontProgramSha256);
+        Assert.Equal("TrueType", appearance.Text.FontProgramSubtype);
+        Assert.Equal("WinAnsiEncoding", appearance.Text.FontEncodingName);
+        Assert.False(appearance.Text.FontHasToUnicode);
+        Assert.False(appearance.Text.FontIsSubset);
 
         Assert.Equal(0.35, appearance.DimensionLine.StrokeWidthMm!.Value, 6);
         Assert.Equal([4.0, 1.0], appearance.DimensionLine.DashPatternMm);
