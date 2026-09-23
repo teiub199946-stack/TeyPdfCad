@@ -513,7 +513,11 @@ public sealed class ConversionPipeline
             text.AdvanceWidthPoints > 0d
                 ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
                 : null,
-            text.VisualCenter)));
+            text.VisualCenter,
+            text.VisibleWidthPoints > 0d
+                ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.FontProgramSha256)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
@@ -689,6 +693,7 @@ public sealed class ConversionPipeline
                     SourceReplacementPlanner.GetCandidateKey(candidate, pageNumber),
                     candidate.SourceText,
                     text.FontName,
+                    text.FontProgramSha256,
                     text.AdvanceWidthMm,
                     text.VisibleWidthMm,
                     text.HeightMm,
@@ -943,7 +948,8 @@ public sealed class ConversionPipeline
             text.VisualCenter,
             text.VisibleWidthPoints > 0d
                 ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
-                : null)).ToArray();
+                : null,
+            text.FontProgramSha256)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
@@ -1062,6 +1068,7 @@ public sealed class ConversionPipeline
         string CandidateId,
         string SourceText,
         string? SourceFontName,
+        string? SourceFontSha256,
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
         double SourceHeightMm,
