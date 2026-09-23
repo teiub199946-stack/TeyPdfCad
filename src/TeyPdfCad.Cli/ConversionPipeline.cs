@@ -722,6 +722,13 @@ public sealed class ConversionPipeline
                     appearance.ArrowLines.Select(line =>
                         ToDrawingLineEvidence("arrow-geometry", line, sheet)));
 
+                var sourceNativeMeasurementMm =
+                    double.IsFinite(candidate.ReconstructedMeasurement)
+                    && double.IsFinite(candidate.DrawingScale)
+                    && Math.Abs(candidate.DrawingScale) > 1e-12
+                        ? candidate.ReconstructedMeasurement / candidate.DrawingScale
+                        : (double?)null;
+
                 return new DimensionMetricEvidence(
                     SourceReplacementPlanner.GetCandidateKey(candidate, pageNumber),
                     candidate.SourceText,
@@ -735,6 +742,7 @@ public sealed class ConversionPipeline
                     text.VisibleWidthMm,
                     text.VisibleHeightMm,
                     text.HeightMm,
+                    sourceNativeMeasurementMm,
                     text.RotationDegrees,
                     text.VisualCenter?.X,
                     text.VisualCenter?.Y,
@@ -1146,6 +1154,7 @@ public sealed class ConversionPipeline
         double? SourceVisibleWidthMm,
         double? SourceVisibleHeightMm,
         double SourceHeightMm,
+        double? SourceNativeMeasurementMm,
         double SourceRotationDegrees,
         double? SourceVisualCenterX,
         double? SourceVisualCenterY,
