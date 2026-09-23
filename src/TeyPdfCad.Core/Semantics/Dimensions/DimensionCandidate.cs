@@ -28,7 +28,8 @@ public sealed record DimensionSourceTextAppearance(
     double RotationDegrees,
     string? Layer,
     int? RgbColor,
-    IReadOnlyList<string> SourceIds);
+    IReadOnlyList<string> SourceIds,
+    string? FontName = null);
 
 public sealed record DimensionSourceAppearance(
     DimensionSourceTextAppearance Text,
