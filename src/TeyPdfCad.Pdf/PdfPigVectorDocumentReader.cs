@@ -45,6 +45,7 @@ public sealed class PdfPigVectorDocumentReader
             var encounteredMissingAdvanceWidth = false;
             var encounteredMissingVisibleWidth = false;
             var encounteredMissingVisibleHeight = false;
+            var encounteredMissingGlyphInkExtents = false;
             foreach (var word in words.Where(word => !string.IsNullOrWhiteSpace(word.Text)))
             {
                 textSequence++;
@@ -79,6 +80,11 @@ public sealed class PdfPigVectorDocumentReader
                     baselineX,
                     baselineY,
                     advanceWidthPoints);
+                var glyphInk = MeasureGlyphInkExtents(
+                    word,
+                    baselineX,
+                    baselineY,
+                    advanceWidthPoints);
                 var fontName = GetWordFontName(word);
                 var fontProgramIdentity = fontPrograms.ResolveUnique(fontName);
                 if (string.IsNullOrWhiteSpace(fontName))
@@ -89,6 +95,8 @@ public sealed class PdfPigVectorDocumentReader
                     encounteredMissingVisibleWidth = true;
                 if (visibleHeightPoints <= 1e-9)
                     encounteredMissingVisibleHeight = true;
+                if (glyphInk.Width <= 1e-9 || glyphInk.Height <= 1e-9)
+                    encounteredMissingGlyphInkExtents = true;
 
                 entities.Add(new VectorText(
                     SourceId: $"page-{sourcePage.Number}-text-{textSequence}",
@@ -110,7 +118,9 @@ public sealed class PdfPigVectorDocumentReader
                     FontProgramSubtype: fontProgramIdentity?.FontSubtype,
                     FontEncodingName: fontProgramIdentity?.EncodingName,
                     FontHasToUnicode: fontProgramIdentity?.HasToUnicode,
-                    FontIsSubset: fontProgramIdentity?.IsSubset));
+                    FontIsSubset: fontProgramIdentity?.IsSubset,
+                    GlyphInkWidthPoints: glyphInk.Width,
+                    GlyphInkHeightPoints: glyphInk.Height));
             }
 
             if (skippedHiddenText)
@@ -153,6 +163,13 @@ public sealed class PdfPigVectorDocumentReader
                 diagnostics.Add(new VectorPageDiagnostic(
                     "missing-pdf-text-visible-height",
                     $"One or more visible PDF words on page {sourcePage.Number} have no usable visible bounding height perpendicular to the text baseline; exact rendered-height equivalence is not proven."));
+            }
+
+            if (encounteredMissingGlyphInkExtents)
+            {
+                diagnostics.Add(new VectorPageDiagnostic(
+                    "missing-pdf-glyph-ink-extents",
+                    $"One or more visible PDF words on page {sourcePage.Number} have no usable glyph-outline bounding extents; exact glyph appearance equivalence is not proven."));
             }
 
             pages.Add(new VectorPdfPage(
@@ -219,6 +236,50 @@ public sealed class PdfPigVectorDocumentReader
             .ToArray();
         var height = projections.Max() - projections.Min();
         return double.IsFinite(height) && height > 0d ? height : 0d;
+    }
+
+    private static (double Width, double Height) MeasureGlyphInkExtents(
+        UglyToad.PdfPig.Content.Word word,
+        double baselineX,
+        double baselineY,
+        double advanceWidth)
+    {
+        if (!double.IsFinite(advanceWidth) || advanceWidth <= 1e-9)
+            return (0d, 0d);
+
+        var unitX = baselineX / advanceWidth;
+        var unitY = baselineY / advanceWidth;
+        var normalX = -unitY;
+        var normalY = unitX;
+        var along = new List<double>();
+        var across = new List<double>();
+
+        foreach (var letter in word.Letters)
+        {
+            var rectangle = letter.GlyphRectangle;
+            var corners = new[]
+            {
+                rectangle.BottomLeft,
+                rectangle.BottomRight,
+                rectangle.TopLeft,
+                rectangle.TopRight
+            };
+
+            foreach (var point in corners)
+            {
+                along.Add(point.X * unitX + point.Y * unitY);
+                across.Add(point.X * normalX + point.Y * normalY);
+            }
+        }
+
+        if (along.Count == 0 || across.Count == 0)
+            return (0d, 0d);
+
+        var width = along.Max() - along.Min();
+        var height = across.Max() - across.Min();
+        return (
+            double.IsFinite(width) && width > 0d ? width : 0d,
+            double.IsFinite(height) && height > 0d ? height : 0d);
     }
 
     private static (double Left, double Bottom)? TryGetDirectRawMediaBoxOrigin(
