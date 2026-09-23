@@ -472,7 +472,8 @@ public static class SourceEquivalenceAssessor
             ? appearance.Text.VisibleWidthMm.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
             : "<unknown>";
 
-        return $"Native DIMENSION text is deterministically bound to TEYPDFCAD_TEXT/arial.ttf, but raw PDF font '{sourceFont}' has not been proven to resolve to the same font binary/glyph metrics. PDF baseline advance ({sourceAdvance} mm) and visible bounding width ({sourceVisible} mm) are now captured separately; AutoCAD-native rendered width must be compared only to the visible-width metric before equivalence can be completed.";
+        var sourceFontSha = appearance.Text.FontProgramSha256 ?? "<unknown>";
+        return $"Native DIMENSION text is deterministically bound to TEYPDFCAD_TEXT/arial.ttf. Raw PDF font '{sourceFont}' has decoded embedded-program SHA-256 '{sourceFontSha}', but equality with AutoCAD's resolved native font binary and rendered glyph geometry must still be independently established. PDF baseline advance ({sourceAdvance} mm) and visible bounding width ({sourceVisible} mm) are captured separately; AutoCAD-native rendered width must be compared only to the visible-width metric before equivalence can be completed.";
     }
 
     private static string? DescribeUnprovenDimensionArrowMapping(
@@ -576,6 +577,11 @@ public static class SourceEquivalenceAssessor
         if (string.IsNullOrWhiteSpace(appearance.Text.FontName))
         {
             return "Dimension source font identity is unavailable; native font equivalence cannot be proven.";
+        }
+
+        if (!IsSha256(appearance.Text.FontProgramSha256))
+        {
+            return "Dimension source embedded font-program SHA-256 is unavailable or ambiguous; exact native font binary equivalence cannot be proven.";
         }
 
         if (!appearance.Text.AdvanceWidthMm.HasValue
@@ -746,6 +752,10 @@ public static class SourceEquivalenceAssessor
             || !string.Equals(sourceText.Style.SourceLayer, appearance.Text.Layer, StringComparison.Ordinal)
             || sourceText.Style.RgbColor != appearance.Text.RgbColor
             || !string.Equals(sourceText.FontName, appearance.Text.FontName, StringComparison.Ordinal)
+            || !string.Equals(
+                sourceText.FontProgramSha256,
+                appearance.Text.FontProgramSha256,
+                StringComparison.OrdinalIgnoreCase)
             || !NullableAlmostEqual(
                 sourceText.AdvanceWidthPoints > 0d
                     ? sourceText.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
@@ -858,6 +868,13 @@ public static class SourceEquivalenceAssessor
         TeyPdfCad.Core.Geometry.Point2 second)
         => AlmostEqual(first.X, second.X)
             && AlmostEqual(first.Y, second.Y);
+
+    private static bool IsSha256(string? value)
+        => value is { Length: 64 }
+            && value.All(character =>
+                (character >= '0' && character <= '9')
+                || (character >= 'A' && character <= 'F')
+                || (character >= 'a' && character <= 'f'));
 
     private static bool NullablePointEqual(Point2? first, Point2? second)
         => first.HasValue == second.HasValue
