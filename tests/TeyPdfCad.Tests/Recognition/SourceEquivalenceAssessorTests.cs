@@ -56,101 +56,7 @@ public sealed class SourceEquivalenceAssessorTests
     [Fact]
     public void Dimension_with_captured_source_appearance_stays_fail_closed_until_native_mapping_is_proven()
     {
-        var candidate = new DimensionCandidate(
-            DimensionKind.Aligned,
-            new(0, 0),
-            new(10, 0),
-            new(0, 5),
-            10,
-            10,
-            1,
-            0.95,
-            "10",
-            1,
-            ["d-line", "d-ext", "d-arrow", "d-text"])
-        {
-            SourceClaims =
-            [
-                new("d-line", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
-                new("d-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
-                new("d-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
-                new("d-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
-            ],
-            SourceAppearance = new DimensionSourceAppearance(
-                new DimensionSourceTextAppearance(
-                    "10",
-                    new(5, 5),
-                    2.5,
-                    0,
-                    "DIM",
-                    0,
-                    ["d-text"]),
-                new DimensionSourceLineAppearance(
-                    new(0, 0),
-                    new(10, 0),
-                    "DIM",
-                    0,
-                    0.25,
-                    [],
-                    ["d-line"]),
-                [
-                    new DimensionSourceLineAppearance(
-                        new(0, 0),
-                        new(0, 5),
-                        "DIM",
-                        0,
-                        0.25,
-                        [],
-                        ["d-ext"])
-                ],
-                [
-                    new DimensionSourceLineAppearance(
-                        new(-1, -1),
-                        new(1, 1),
-                        "DIM",
-                        0,
-                        0.25,
-                        [],
-                        ["d-arrow"])
-                ])
-        };
-        var page = new VectorPdfPage(
-            1,
-            100,
-            100,
-            0,
-            [
-                new VectorLine(
-                    "d-line",
-                    new(0, 0),
-                    new(10, 0),
-                    new VectorStyle(
-                        SourceLayer: "DIM",
-                        RgbColor: 0,
-                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
-                new VectorLine(
-                    "d-ext",
-                    new(0, 0),
-                    new(0, 5),
-                    new VectorStyle(
-                        SourceLayer: "DIM",
-                        RgbColor: 0,
-                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
-                new VectorLine(
-                    "d-arrow",
-                    new(-1, -1),
-                    new(1, 1),
-                    new VectorStyle(
-                        SourceLayer: "DIM",
-                        RgbColor: 0,
-                        StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
-                new VectorText(
-                    "d-text",
-                    "10",
-                    new(5, 5),
-                    2.5 / VectorPdfPage.MillimetresPerPoint,
-                    new VectorStyle(SourceLayer: "DIM", RgbColor: 0))
-            ]);
+        var (candidate, page) = CreateDimensionAppearanceFixture();
         var semantics = EmptySemantics() with { Dimensions = [candidate] };
 
         var result = SourceEquivalenceAssessor.Build(
@@ -372,8 +278,10 @@ public sealed class SourceEquivalenceAssessorTests
             SourceClaims =
             [
                 new("d-line", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
-                new("d-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
-                new("d-arrow", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("d-ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-arrow-1", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("d-arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
                 new("d-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
             ]
         };
@@ -395,31 +303,24 @@ public sealed class SourceEquivalenceAssessorTests
     [Fact]
     public void Dimension_polyline_segment_source_is_fail_closed_for_whole_source_suppression()
     {
-        var (candidate, _) = CreateDimensionAppearanceFixture();
+        var (candidate, sourcePage) = CreateDimensionAppearanceFixture();
         var lineStyle = new VectorStyle(
             SourceLayer: "DIM",
             RgbColor: 0,
             StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint);
         var page = new VectorPdfPage(
-            1,
-            100,
-            100,
-            0,
-            [
-                new VectorPolyline(
+            sourcePage.Number,
+            sourcePage.WidthPoints,
+            sourcePage.HeightPoints,
+            sourcePage.RotationDegrees,
+            sourcePage.Entities
+                .Where(entity => !string.Equals(entity.SourceId, "d-line", StringComparison.Ordinal))
+                .Prepend((VectorEntity)new VectorPolyline(
                     "d-line",
-                    [new(0, 0), new(10, 0), new(10, 10)],
+                    [new(0, 5), new(10, 5), new(10, 10)],
                     false,
-                    lineStyle),
-                new VectorLine("d-ext", new(0, 0), new(0, 5), lineStyle),
-                new VectorLine("d-arrow", new(-1, -1), new(1, 1), lineStyle),
-                new VectorText(
-                    "d-text",
-                    "10",
-                    new(5, 5),
-                    2.5 / VectorPdfPage.MillimetresPerPoint,
-                    new VectorStyle(SourceLayer: "DIM", RgbColor: 0))
-            ]);
+                    lineStyle))
+                .ToArray());
         var semantics = EmptySemantics() with { Dimensions = [candidate] };
 
         var result = SourceEquivalenceAssessor.Build(
@@ -438,23 +339,26 @@ public sealed class SourceEquivalenceAssessorTests
     private static (DimensionCandidate Candidate, VectorPdfPage Page) CreateDimensionAppearanceFixture()
     {
         var candidate = new DimensionCandidate(
-            DimensionKind.Aligned,
+            DimensionKind.Rotated,
             new(0, 0),
             new(10, 0),
-            new(0, 5),
+            new(5, 5),
             10,
             10,
             1,
             0.95,
             "10",
             1,
-            ["d-line", "d-ext", "d-arrow", "d-text"])
+            ["d-line", "d-ext-1", "d-ext-2", "d-arrow-1", "d-arrow-2", "d-text"])
         {
+            RotationRadians = 0,
             SourceClaims =
             [
                 new("d-line", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
-                new("d-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
-                new("d-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("d-ext-1", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-ext-2", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("d-arrow-1", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("d-arrow-2", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
                 new("d-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
             ],
             SourceAppearance = new DimensionSourceAppearance(
@@ -467,8 +371,8 @@ public sealed class SourceEquivalenceAssessorTests
                     0,
                     ["d-text"]),
                 new DimensionSourceLineAppearance(
-                    new(0, 0),
-                    new(10, 0),
+                    new(0, 5),
+                    new(10, 5),
                     "DIM",
                     0,
                     0.25,
@@ -477,22 +381,38 @@ public sealed class SourceEquivalenceAssessorTests
                 [
                     new DimensionSourceLineAppearance(
                         new(0, 0),
-                        new(0, 5),
+                        new(0, 6.25),
                         "DIM",
                         0,
                         0.25,
                         [],
-                        ["d-ext"])
+                        ["d-ext-1"]),
+                    new DimensionSourceLineAppearance(
+                        new(10, 0),
+                        new(10, 6.25),
+                        "DIM",
+                        0,
+                        0.25,
+                        [],
+                        ["d-ext-2"])
                 ],
                 [
                     new DimensionSourceLineAppearance(
-                        new(-1, -1),
-                        new(1, 1),
+                        new(0, 5),
+                        new(1, 6),
                         "DIM",
                         0,
                         0.25,
                         [],
-                        ["d-arrow"])
+                        ["d-arrow-1"]),
+                    new DimensionSourceLineAppearance(
+                        new(10, 5),
+                        new(9, 6),
+                        "DIM",
+                        0,
+                        0.25,
+                        [],
+                        ["d-arrow-2"])
                 ])
         };
 
@@ -506,9 +426,11 @@ public sealed class SourceEquivalenceAssessorTests
             100,
             0,
             [
-                new VectorLine("d-line", new(0, 0), new(10, 0), lineStyle),
-                new VectorLine("d-ext", new(0, 0), new(0, 5), lineStyle),
-                new VectorLine("d-arrow", new(-1, -1), new(1, 1), lineStyle),
+                new VectorLine("d-line", new(0, 5), new(10, 5), lineStyle),
+                new VectorLine("d-ext-1", new(0, 0), new(0, 6.25), lineStyle),
+                new VectorLine("d-ext-2", new(10, 0), new(10, 6.25), lineStyle),
+                new VectorLine("d-arrow-1", new(0, 5), new(1, 6), lineStyle),
+                new VectorLine("d-arrow-2", new(10, 5), new(9, 6), lineStyle),
                 new VectorText(
                     "d-text",
                     "10",
