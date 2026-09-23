@@ -403,6 +403,13 @@ public sealed class DwgReadBackVerifier
         error = string.Empty;
         switch (key)
         {
+            case "expectedLayer":
+                var actualLayer = entity.Layer?.Name ?? string.Empty;
+                if (string.Equals(actualLayer, expectedValue, StringComparison.Ordinal))
+                    return true;
+                error = $"layer '{actualLayer}' != '{expectedValue}'";
+                return false;
+
             case "dimensionStyleFingerprint":
                 if (entity is Dimension styledDimension)
                 {
