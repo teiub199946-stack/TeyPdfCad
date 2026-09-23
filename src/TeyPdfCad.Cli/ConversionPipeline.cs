@@ -102,10 +102,11 @@ public sealed class ConversionPipeline
                     page => page.Number,
                     page => DeferUnverifiedTemplateReplacement(
                         SelectTemplate(page, templateLibrary)));
+            var plan = new DocumentLayoutPlanner().Create(document);
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
-                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), null, cancellationToken);
+                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, plan, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), null, cancellationToken);
                 return new ConversionResult(
                     ConversionOutcome.UnsupportedVectorContent,
                     reportPath,
@@ -113,7 +114,6 @@ public sealed class ConversionPipeline
                     null);
             }
 
-            var plan = new DocumentLayoutPlanner().Create(document);
             var semanticResults = semanticRecognition
                 .Where(pair => pair.Value.Result is not null)
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
@@ -363,7 +363,7 @@ public sealed class ConversionPipeline
                     report.ReadBackConfirmed
                     && report.CandidateNotVerifiedSourceIds.Count == 0
                     && !report.AnyGeometryLost);
-            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports, suppressionDecisions), readBackSummary, cancellationToken);
+            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, plan, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports, suppressionDecisions), readBackSummary, cancellationToken);
             return new ConversionResult(
                 complete ? ConversionOutcome.Complete : ConversionOutcome.Partial,
                 reportPath,
@@ -592,6 +592,7 @@ public sealed class ConversionPipeline
 
     private static IReadOnlyList<PageReport> CreatePageReports(
         TeyPdfCad.Core.Documents.VectorPdfDocument document,
+        DwgDocumentPlan plan,
         IReadOnlyDictionary<int, HatchRecognitionResult> hatchRecognition,
         IReadOnlyDictionary<int, PageSemanticSummary> semanticRecognition,
         IReadOnlyDictionary<int, SourceReplacementPlan> replacementPlans,
@@ -613,7 +614,10 @@ public sealed class ConversionPipeline
             semanticRecognition[page.Number].LevelCandidateCount,
             semanticRecognition[page.Number].ArcDimensionCandidateCount,
             semanticRecognition[page.Number].Warnings,
-            BuildDimensionMetricEvidence(page.Number, semanticRecognition[page.Number]),
+            BuildDimensionMetricEvidence(
+                page.Number,
+                semanticRecognition[page.Number],
+                plan.Sheets.Single(sheet => sheet.PageNumber == page.Number)),
             templateSelections is not null
                 && templateSelections.TryGetValue(page.Number, out var selection)
                 && selection.IsConfirmed,
@@ -686,7 +690,8 @@ public sealed class ConversionPipeline
 
     private static IReadOnlyList<DimensionMetricEvidence> BuildDimensionMetricEvidence(
         int pageNumber,
-        PageSemanticSummary semantic)
+        PageSemanticSummary semantic,
+        SheetPlan sheet)
     {
         if (semantic.Result is null)
             return [];
@@ -695,7 +700,22 @@ public sealed class ConversionPipeline
             .Where(candidate => candidate.SourceAppearance?.Text is not null)
             .Select(candidate =>
             {
-                var text = candidate.SourceAppearance!.Text;
+                var appearance = candidate.SourceAppearance!;
+                var text = appearance.Text;
+                var sourceLineGeometry = new List<DimensionSourceLineMetricEvidence>
+                {
+                    ToDrawingLineEvidence(
+                        "dimension-line",
+                        appearance.DimensionLine,
+                        sheet)
+                };
+                sourceLineGeometry.AddRange(
+                    appearance.ExtensionLines.Select(line =>
+                        ToDrawingLineEvidence("extension-line", line, sheet)));
+                sourceLineGeometry.AddRange(
+                    appearance.ArrowLines.Select(line =>
+                        ToDrawingLineEvidence("arrow-geometry", line, sheet)));
+
                 return new DimensionMetricEvidence(
                     SourceReplacementPlanner.GetCandidateKey(candidate, pageNumber),
                     candidate.SourceText,
@@ -711,11 +731,27 @@ public sealed class ConversionPipeline
                     text.HeightMm,
                     text.RotationDegrees,
                     text.VisualCenter?.X,
-                    text.VisualCenter?.Y);
+                    text.VisualCenter?.Y,
+                    "drawing-wcs-model-mm",
+                    sheet.ModelOriginX,
+                    sheet.ModelOriginY,
+                    sourceLineGeometry);
             })
             .OrderBy(item => item.CandidateId, StringComparer.Ordinal)
             .ToArray();
     }
+
+    private static DimensionSourceLineMetricEvidence ToDrawingLineEvidence(
+        string role,
+        TeyPdfCad.Core.Semantics.Dimensions.DimensionSourceLineAppearance line,
+        SheetPlan sheet)
+        => new(
+            role,
+            line.SourceIds.OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            sheet.ModelOriginX + line.Start.X,
+            sheet.ModelOriginY + line.Start.Y,
+            sheet.ModelOriginX + line.End.X,
+            sheet.ModelOriginY + line.End.Y);
 
     private static IReadOnlyList<ReplacementResidual> GetReportedResiduals(
         SourceReplacementPlan plan,
@@ -1098,7 +1134,19 @@ public sealed class ConversionPipeline
         double SourceHeightMm,
         double SourceRotationDegrees,
         double? SourceVisualCenterX,
-        double? SourceVisualCenterY);
+        double? SourceVisualCenterY,
+        string SourceCoordinateFrame,
+        double ModelOriginX,
+        double ModelOriginY,
+        IReadOnlyList<DimensionSourceLineMetricEvidence> SourceLineGeometry);
+
+    private sealed record DimensionSourceLineMetricEvidence(
+        string Role,
+        IReadOnlyList<string> SourceIds,
+        double StartX,
+        double StartY,
+        double EndX,
+        double EndY);
 
     private sealed record PageSemanticSummary(
         int DimensionCandidateCount,
