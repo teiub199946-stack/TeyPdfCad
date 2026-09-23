@@ -660,6 +660,69 @@ internal static class DimensionMetricComparator
             blockers.Add("native-exploded-line-not-in-source-plane");
         }
 
+        var blockLines = native.BlockGeometry
+            .Where(item => string.Equals(
+                item.GeometryKind,
+                "line",
+                StringComparison.Ordinal))
+            .ToArray();
+        var crossSnapshotStructuralTransformConsistent = false;
+        if (blockLines.Length != native.BlockGeometry.Count
+            || native.BlockGeometry.Count != explodedLines.Length)
+        {
+            blockers.Add("cross-snapshot-structural-transform-mismatch");
+        }
+        else if (!TryBuildCrossSnapshotTransform(
+                     metric,
+                     explodedTextMetric,
+                     NumericalWidthToleranceMm,
+                     out var crossSnapshotTransform))
+        {
+            blockers.Add("cross-snapshot-transform-evidence-invalid");
+        }
+        else
+        {
+            var transformedBlockLines = new List<SourceLineGeometry>(
+                blockLines.Length);
+            var transformUsable = true;
+            foreach (var blockLine in blockLines)
+            {
+                if (!TryTransformBlockLine(
+                        blockLine,
+                        crossSnapshotTransform,
+                        NumericalWidthToleranceMm,
+                        out var transformed))
+                {
+                    transformUsable = false;
+                    break;
+                }
+
+                transformedBlockLines.Add(transformed);
+            }
+
+            if (!transformUsable)
+            {
+                blockers.Add("cross-snapshot-transform-evidence-invalid");
+            }
+            else
+            {
+                var matchedBlockLines = MatchSourceLinesGlobally(
+                    transformedBlockLines,
+                    explodedLines,
+                    NumericalWidthToleranceMm);
+                crossSnapshotStructuralTransformConsistent =
+                    matchedBlockLines.Count(value => value)
+                        == transformedBlockLines.Count
+                    && transformedBlockLines.Count == explodedLines.Length;
+
+                if (!crossSnapshotStructuralTransformConsistent)
+                {
+                    blockers.Add(
+                        "cross-snapshot-structural-transform-mismatch");
+                }
+            }
+        }
+
         if (!IsFirstSafeNumericDimensionText(source.SourceText))
             blockers.Add("source-text-outside-safe-numeric-subset");
 
@@ -795,6 +858,7 @@ internal static class DimensionMetricComparator
             && sourceNativeMeasurementUsable
             && nativeMeasurementUsable
             && nativeMeasurementMatches
+            && crossSnapshotStructuralTransformConsistent
             && baselineDirectionDot.HasValue
             && baselineDirectionDot.Value > 0.999999
             && sourceVisualCenterUsable
@@ -1078,47 +1142,10 @@ internal static class DimensionMetricComparator
             .Concat(arrowLines.Select(line =>
                 new StructuralSourceLine(StructuralLineRole.Arrow, line)))
             .ToArray();
-
-        // Maximum-cardinality bipartite matching prevents one exploded entity
-        // from satisfying two source strokes, including across different roles.
-        // A simple per-role used[] set is insufficient because it is reset for
-        // the next role and can therefore double-count the same native line.
-        var nativeToSource = Enumerable.Repeat(-1, nativeLines.Count).ToArray();
-
-        bool TryAssign(int sourceIndex, bool[] visitedNative)
-        {
-            for (var nativeIndex = 0; nativeIndex < nativeLines.Count; nativeIndex++)
-            {
-                if (visitedNative[nativeIndex]
-                    || !LinesEqual(
-                        sources[sourceIndex].Geometry,
-                        nativeLines[nativeIndex],
-                        tolerance))
-                {
-                    continue;
-                }
-
-                visitedNative[nativeIndex] = true;
-                if (nativeToSource[nativeIndex] < 0
-                    || TryAssign(nativeToSource[nativeIndex], visitedNative))
-                {
-                    nativeToSource[nativeIndex] = sourceIndex;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        for (var sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
-            TryAssign(sourceIndex, new bool[nativeLines.Count]);
-
-        var matchedSources = new bool[sources.Length];
-        foreach (var sourceIndex in nativeToSource)
-        {
-            if (sourceIndex >= 0)
-                matchedSources[sourceIndex] = true;
-        }
+        var matchedSources = MatchSourceLinesGlobally(
+            sources.Select(source => source.Geometry).ToArray(),
+            nativeLines,
+            tolerance);
 
         var dimensionMatches = 0;
         var extensionMatches = 0;
@@ -1149,6 +1176,53 @@ internal static class DimensionMetricComparator
             matchedSources.Count(value => value));
     }
 
+    private static bool[] MatchSourceLinesGlobally(
+        IReadOnlyList<SourceLineGeometry> sourceLines,
+        IReadOnlyList<NativeBlockGeometry> nativeLines,
+        double tolerance)
+    {
+        // Maximum-cardinality bipartite matching prevents one native entity
+        // from satisfying more than one source/transformed line.
+        var nativeToSource = Enumerable.Repeat(-1, nativeLines.Count).ToArray();
+
+        bool TryAssign(int sourceIndex, bool[] visitedNative)
+        {
+            for (var nativeIndex = 0; nativeIndex < nativeLines.Count; nativeIndex++)
+            {
+                if (visitedNative[nativeIndex]
+                    || !LinesEqual(
+                        sourceLines[sourceIndex],
+                        nativeLines[nativeIndex],
+                        tolerance))
+                {
+                    continue;
+                }
+
+                visitedNative[nativeIndex] = true;
+                if (nativeToSource[nativeIndex] < 0
+                    || TryAssign(nativeToSource[nativeIndex], visitedNative))
+                {
+                    nativeToSource[nativeIndex] = sourceIndex;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        for (var sourceIndex = 0; sourceIndex < sourceLines.Count; sourceIndex++)
+            TryAssign(sourceIndex, new bool[nativeLines.Count]);
+
+        var matchedSources = new bool[sourceLines.Count];
+        foreach (var sourceIndex in nativeToSource)
+        {
+            if (sourceIndex >= 0)
+                matchedSources[sourceIndex] = true;
+        }
+
+        return matchedSources;
+    }
+
     private enum StructuralLineRole
     {
         Dimension,
@@ -1165,6 +1239,121 @@ internal static class DimensionMetricComparator
         int ExtensionLineMatches,
         int ArrowLineMatches,
         int TotalMatches);
+
+    private static bool TryBuildCrossSnapshotTransform(
+        NativeTextMetric blockText,
+        NativeTextMetric explodedText,
+        double tolerance,
+        out RigidTransform2D transform)
+    {
+        transform = default;
+        if (!blockText.PositionX.HasValue
+            || !blockText.PositionY.HasValue
+            || !blockText.PositionZ.HasValue
+            || !explodedText.PositionX.HasValue
+            || !explodedText.PositionY.HasValue
+            || !explodedText.PositionZ.HasValue
+            || !double.IsFinite(blockText.PositionX.Value)
+            || !double.IsFinite(blockText.PositionY.Value)
+            || !double.IsFinite(blockText.PositionZ.Value)
+            || !double.IsFinite(explodedText.PositionX.Value)
+            || !double.IsFinite(explodedText.PositionY.Value)
+            || !double.IsFinite(explodedText.PositionZ.Value)
+            || Math.Abs(blockText.PositionZ.Value) > tolerance
+            || Math.Abs(explodedText.PositionZ.Value) > tolerance
+            || blockText.Fragments.Count != 1
+            || explodedText.Fragments.Count != 1
+            || !TryGetPlanarUnitDirection(
+                blockText.Fragments[0],
+                out var blockX,
+                out var blockY)
+            || !TryGetPlanarUnitDirection(
+                explodedText.Fragments[0],
+                out var explodedX,
+                out var explodedY))
+        {
+            return false;
+        }
+
+        var cosine = blockX * explodedX + blockY * explodedY;
+        var sine = blockX * explodedY - blockY * explodedX;
+        if (!double.IsFinite(cosine)
+            || !double.IsFinite(sine)
+            || Math.Abs(cosine * cosine + sine * sine - 1d) > 1e-9)
+        {
+            return false;
+        }
+
+        var rotatedBlockX =
+            cosine * blockText.PositionX.Value
+            - sine * blockText.PositionY.Value;
+        var rotatedBlockY =
+            sine * blockText.PositionX.Value
+            + cosine * blockText.PositionY.Value;
+        var translateX = explodedText.PositionX.Value - rotatedBlockX;
+        var translateY = explodedText.PositionY.Value - rotatedBlockY;
+        if (!double.IsFinite(translateX) || !double.IsFinite(translateY))
+            return false;
+
+        transform = new RigidTransform2D(
+            cosine,
+            sine,
+            translateX,
+            translateY);
+        return true;
+    }
+
+    private static bool TryTransformBlockLine(
+        NativeBlockGeometry blockLine,
+        RigidTransform2D transform,
+        double tolerance,
+        out SourceLineGeometry transformed)
+    {
+        transformed = new SourceLineGeometry(
+            "cross-snapshot",
+            null,
+            null,
+            null,
+            null);
+        if (!string.Equals(
+                blockLine.GeometryKind,
+                "line",
+                StringComparison.Ordinal)
+            || !IsLineInSourcePlane(blockLine, tolerance)
+            || !blockLine.StartX.HasValue
+            || !blockLine.StartY.HasValue
+            || !blockLine.EndX.HasValue
+            || !blockLine.EndY.HasValue)
+        {
+            return false;
+        }
+
+        var start = transform.Apply(
+            blockLine.StartX.Value,
+            blockLine.StartY.Value);
+        var end = transform.Apply(
+            blockLine.EndX.Value,
+            blockLine.EndY.Value);
+        transformed = new SourceLineGeometry(
+            "cross-snapshot",
+            start.X,
+            start.Y,
+            end.X,
+            end.Y);
+        return true;
+    }
+
+    private readonly record struct RigidTransform2D(
+        double Cosine,
+        double Sine,
+        double TranslateX,
+        double TranslateY)
+    {
+        public (double X, double Y) Apply(double x, double y)
+            => (
+                Cosine * x - Sine * y + TranslateX,
+                Sine * x + Cosine * y + TranslateY);
+    }
 
     private static bool IsLineInSourcePlane(
         NativeBlockGeometry line,
