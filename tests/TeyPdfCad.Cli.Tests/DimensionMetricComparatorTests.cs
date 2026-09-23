@@ -413,6 +413,89 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_exploded_wcs_text_center_drift()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = ReplaceLast(
+            NativeDimension("candidate-1", "100", 7.5),
+            "\"positionX\": 15,\n              \"positionY\": 20,\n              \"positionZ\": 0",
+            "\"positionX\": 16,\n              \"positionY\": 20,\n              \"positionZ\": 0");
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "source-native-text-center-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_uses_exploded_wcs_text_center_not_block_mcs_position()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"positionX\": 15,\n              \"positionY\": 20,\n              \"positionZ\": 0",
+                "\"positionX\": 999,\n              \"positionY\": 999,\n              \"positionZ\": 0",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.DoesNotContain(
+            "source-native-text-center-mismatch",
+            candidate.Blockers);
+        Assert.True(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_rejects_non_middle_center_exploded_text_attachment()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"attachment\": \"MiddleCenter\"",
+                "\"attachment\": \"TopLeft\"",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "native-mtext-attachment-not-middle-center",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_requires_one_dimension_line_two_extensions_and_two_unique_arrow_strokes()
     {
         var source = SourceReport("candidate-1", "100", 7.5)
