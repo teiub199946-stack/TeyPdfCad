@@ -384,7 +384,13 @@ internal static class NativeExpectationBuilder
             ArrowSize = 2.5d,
             ExtensionLineOffset = 0.75d,
             ExtensionLineExtension = 1.25d,
-            ScaleFactor = 1d
+            ScaleFactor = 1d,
+            Style = new TextStyle("TEYPDFCAD_TEXT")
+            {
+                Filename = "arial.ttf",
+                Height = 0d,
+                Width = 1d
+            }
         };
     }
 
