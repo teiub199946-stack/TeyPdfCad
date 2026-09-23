@@ -37,6 +37,26 @@ public sealed class DwgEntityFingerprintTests
         var dimensionLineExtension = CreateStyle();
         dimensionLineExtension.DimensionLineExtension = 1.25d;
 
+        var alternateUnits = CreateStyle();
+        alternateUnits.AlternateUnitDimensioning = true;
+
+        var alternateSuffix = CreateStyle();
+        alternateSuffix.AlternateDimensioningSuffix = "[<>]";
+
+        var tolerances = CreateStyle();
+        tolerances.GenerateTolerances = true;
+        tolerances.PlusTolerance = 0.2d;
+        tolerances.MinusTolerance = 0.1d;
+
+        var limits = CreateStyle();
+        limits.LimitsGeneration = true;
+
+        var textInside = CreateStyle();
+        textInside.TextInsideExtensions = true;
+
+        var decimalSeparator = CreateStyle();
+        decimalSeparator.DecimalSeparator = ',';
+
         var differentTextStyle = CreateStyle();
         differentTextStyle.Style = new TextStyle("TEYPDFCAD_OTHER_TEXT")
         {
@@ -53,6 +73,12 @@ public sealed class DwgEntityFingerprintTests
         Assert.NotEqual(baseline, Fingerprint(separateArrows));
         Assert.NotEqual(baseline, Fingerprint(tickSize));
         Assert.NotEqual(baseline, Fingerprint(dimensionLineExtension));
+        Assert.NotEqual(baseline, Fingerprint(alternateUnits));
+        Assert.NotEqual(baseline, Fingerprint(alternateSuffix));
+        Assert.NotEqual(baseline, Fingerprint(tolerances));
+        Assert.NotEqual(baseline, Fingerprint(limits));
+        Assert.NotEqual(baseline, Fingerprint(textInside));
+        Assert.NotEqual(baseline, Fingerprint(decimalSeparator));
         Assert.NotEqual(baseline, Fingerprint(differentTextStyle));
     }
 
