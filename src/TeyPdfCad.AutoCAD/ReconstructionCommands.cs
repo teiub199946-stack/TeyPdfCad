@@ -611,34 +611,26 @@ public sealed class ReconstructionCommands
             foreach (DBObject item in exploded)
             {
                 if (item is not Entity entity)
-                {
-                    item.Dispose();
                     continue;
-                }
 
-                try
-                {
-                    output.Add(ReadDimensionBlockGeometry(
-                        transaction,
-                        entity,
-                        "explode-" + ordinal.ToString(CultureInfo.InvariantCulture)));
-                }
-                finally
-                {
-                    entity.Dispose();
-                }
-
+                output.Add(ReadDimensionBlockGeometry(
+                    transaction,
+                    entity,
+                    "explode-" + ordinal.ToString(CultureInfo.InvariantCulture)));
                 ordinal++;
             }
+
+            return output;
         }
         catch (System.Exception)
         {
-            foreach (DBObject item in exploded)
-                item.Dispose();
             return [];
         }
-
-        return output;
+        finally
+        {
+            foreach (DBObject item in exploded)
+                item.Dispose();
+        }
     }
 
     private static string SafeEntityIdentity(Entity entity)
