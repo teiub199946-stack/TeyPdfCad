@@ -200,6 +200,14 @@ public static class SourceEquivalenceAssessor
                 semanticMismatch);
         }
 
+        var styleRepresentabilityMismatch = ValidateDimensionNativeStyleRepresentability(appearance);
+        if (styleRepresentabilityMismatch is not null)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                styleRepresentabilityMismatch);
+        }
+
         var arrowTopologyMismatch = ValidateDimensionArrowEndpointEvidence(appearance);
         if (arrowTopologyMismatch is not null)
         {
@@ -227,6 +235,54 @@ public static class SourceEquivalenceAssessor
         return new SourceEquivalenceAssessmentResult(
             false,
             string.Join(" ", remainingBlockers));
+    }
+
+    private static string? ValidateDimensionNativeStyleRepresentability(
+        DimensionSourceAppearance appearance)
+    {
+        if (appearance.ExtensionLines.Count != 2)
+            return null;
+
+        if (!LineAppearanceStyleEqual(
+                appearance.ExtensionLines[0],
+                appearance.ExtensionLines[1]))
+        {
+            return "Dimension source extension lines use different visual styles that one native DIMSTYLE cannot represent exactly.";
+        }
+
+        foreach (var arrow in appearance.ArrowLines)
+        {
+            if (!LineAppearanceStyleEqual(appearance.DimensionLine, arrow))
+            {
+                return "Dimension source arrow visual style differs from the dimension-line style; native DIMENSION arrow appearance would inherit a different DIMSTYLE contract.";
+            }
+        }
+
+        return null;
+    }
+
+    private static bool LineAppearanceStyleEqual(
+        DimensionSourceLineAppearance first,
+        DimensionSourceLineAppearance second)
+    {
+        if (first.RgbColor != second.RgbColor)
+            return false;
+
+        if (first.StrokeWidthMm.HasValue != second.StrokeWidthMm.HasValue)
+            return false;
+        if (first.StrokeWidthMm.HasValue
+            && !AlmostEqual(first.StrokeWidthMm.Value, second.StrokeWidthMm!.Value))
+            return false;
+
+        if (first.DashPatternMm.Count != second.DashPatternMm.Count)
+            return false;
+        for (var index = 0; index < first.DashPatternMm.Count; index++)
+        {
+            if (!AlmostEqual(first.DashPatternMm[index], second.DashPatternMm[index]))
+                return false;
+        }
+
+        return true;
     }
 
     private static string? ValidateDimensionArrowEndpointEvidence(
