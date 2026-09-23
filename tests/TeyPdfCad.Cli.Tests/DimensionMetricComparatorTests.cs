@@ -82,7 +82,7 @@ public sealed class DimensionMetricComparatorTests
         """;
         var native = $$"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension(
@@ -114,7 +114,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = """
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -149,7 +149,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -170,7 +170,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -197,7 +197,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -218,7 +218,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -245,7 +245,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -271,7 +271,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -395,7 +395,7 @@ public sealed class DimensionMetricComparatorTests
             .Replace(exploded, string.Empty, StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -455,7 +455,7 @@ public sealed class DimensionMetricComparatorTests
         var oneNative = NativeDimension("candidate-1", "100", 7.5);
         var native = $$"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{oneNative}}, {{oneNative}}]
@@ -485,7 +485,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{dbTextNative}}]
@@ -519,7 +519,7 @@ public sealed class DimensionMetricComparatorTests
                 nativePath,
                 $"""
                 {
-                  "schemaVersion": "6",
+                  "schemaVersion": "7",
                   "drawingName": "probe.dwg",
                   "drawingUnits": "Millimeters",
                   "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -562,7 +562,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var native = $$"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 8.0)}}]
@@ -590,7 +590,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -615,7 +615,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -635,7 +635,7 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "10 mm", 7.5);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "10 mm", 7.5)}}]
@@ -661,7 +661,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
@@ -686,7 +686,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -701,6 +701,37 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_regenerated_mtext_background_mask_or_border()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"backgroundFill\": false",
+                "\"backgroundFill\": true",
+                StringComparison.Ordinal)
+            .Replace(
+                "\"showBorders\": false",
+                "\"showBorders\": true",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "7",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.Contains("native-mtext-background-fill-present", candidate.Blockers);
+        Assert.Contains("native-mtext-border-present", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_fragment_width_factor_override()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
@@ -711,7 +742,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{nativeDimension}}]
@@ -741,7 +772,7 @@ public sealed class DimensionMetricComparatorTests
                 StringComparison.Ordinal);
         var native = $"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [{{formatted}}]
@@ -834,7 +865,7 @@ public sealed class DimensionMetricComparatorTests
         """;
         var native = $$"""
         {
-          "schemaVersion": "6",
+          "schemaVersion": "7",
           "drawingName": "probe.dwg",
           "drawingUnits": "Millimeters",
           "dimensions": [
@@ -967,6 +998,11 @@ public sealed class DimensionMetricComparatorTests
               "fontSha256": "{{fontSha}}",
               "nominalTextHeight": 2.5,
               "entityWidthFactor": 1,
+              "backgroundFill": false,
+              "useBackgroundColor": false,
+              "backgroundScaleFactor": 0,
+              "showBorders": false,
+              "attachment": "MiddleCenter",
               "fragments": [
                 {
                   "text": "{{text}}",
