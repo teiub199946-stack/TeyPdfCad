@@ -176,6 +176,34 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_cross_snapshot_fragment_location_drift()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"locationX\": 15,\n                  \"locationY\": 20,\n                  \"locationZ\": 0",
+                "\"locationX\": 16,\n                  \"locationY\": 20,\n                  \"locationZ\": 0",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "cross-snapshot-text-fragment-transform-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_rejects_cross_snapshot_structural_transform_drift()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
