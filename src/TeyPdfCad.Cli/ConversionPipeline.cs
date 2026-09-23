@@ -517,6 +517,9 @@ public sealed class ConversionPipeline
             text.VisibleWidthPoints > 0d
                 ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
                 : null,
+            text.VisibleHeightPoints > 0d
+                ? text.VisibleHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
             text.FontProgramSha256,
             text.FontProgramSubtype,
             text.FontEncodingName,
@@ -704,6 +707,7 @@ public sealed class ConversionPipeline
                     text.FontIsSubset,
                     text.AdvanceWidthMm,
                     text.VisibleWidthMm,
+                    text.VisibleHeightMm,
                     text.HeightMm,
                     text.RotationDegrees,
                     text.VisualCenter?.X,
@@ -957,6 +961,9 @@ public sealed class ConversionPipeline
             text.VisibleWidthPoints > 0d
                 ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
                 : null,
+            text.VisibleHeightPoints > 0d
+                ? text.VisibleHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
             text.FontProgramSha256,
             text.FontProgramSubtype,
             text.FontEncodingName,
@@ -1087,6 +1094,7 @@ public sealed class ConversionPipeline
         bool? SourceFontIsSubset,
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
+        double? SourceVisibleHeightMm,
         double SourceHeightMm,
         double SourceRotationDegrees,
         double? SourceVisualCenterX,
