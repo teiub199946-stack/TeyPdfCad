@@ -29,7 +29,8 @@ public sealed record DimensionSourceTextAppearance(
     string? Layer,
     int? RgbColor,
     IReadOnlyList<string> SourceIds,
-    string? FontName = null);
+    string? FontName = null,
+    double? AdvanceWidthMm = null);
 
 public sealed record DimensionSourceAppearance(
     DimensionSourceTextAppearance Text,
