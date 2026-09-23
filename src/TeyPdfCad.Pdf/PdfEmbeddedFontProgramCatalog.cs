@@ -10,19 +10,22 @@ internal sealed class PdfEmbeddedFontProgramCatalog
 {
     private const int MaximumReferenceDepth = 16;
     private const int MaximumParentDepth = 32;
-    private readonly IReadOnlyDictionary<string, string?> _shaByExactFontName;
+    private readonly IReadOnlyDictionary<string, PdfFontProgramIdentity?> _identityByExactFontName;
 
     private PdfEmbeddedFontProgramCatalog(
-        IReadOnlyDictionary<string, string?> shaByExactFontName)
+        IReadOnlyDictionary<string, PdfFontProgramIdentity?> identityByExactFontName)
     {
-        _shaByExactFontName = shaByExactFontName;
+        _identityByExactFontName = identityByExactFontName;
     }
 
-    public string? ResolveUniqueSha256(string? exactFontName)
+    public PdfFontProgramIdentity? ResolveUnique(string? exactFontName)
         => !string.IsNullOrWhiteSpace(exactFontName)
-            && _shaByExactFontName.TryGetValue(exactFontName, out var sha)
-                ? sha
+            && _identityByExactFontName.TryGetValue(exactFontName, out var identity)
+                ? identity
                 : null;
+
+    public string? ResolveUniqueSha256(string? exactFontName)
+        => ResolveUnique(exactFontName)?.Sha256;
 
     public static PdfEmbeddedFontProgramCatalog Create(
         PdfDocument document,
@@ -38,7 +41,7 @@ internal sealed class PdfEmbeddedFontProgramCatalog
                 token => ResolveDocumentToken(document, token));
             return resources is null
                 ? new PdfEmbeddedFontProgramCatalog(
-                    new Dictionary<string, string?>(StringComparer.Ordinal))
+                    new Dictionary<string, PdfFontProgramIdentity?>(StringComparer.Ordinal))
                 : CreateFromResources(
                     resources,
                     token => ResolveDocumentToken(document, token));
@@ -49,7 +52,7 @@ internal sealed class PdfEmbeddedFontProgramCatalog
             // unsupported or encrypted font resource must never turn into a
             // guessed identity or abort the whole PDF conversion.
             return new PdfEmbeddedFontProgramCatalog(
-                new Dictionary<string, string?>(StringComparer.Ordinal));
+                new Dictionary<string, PdfFontProgramIdentity?>(StringComparer.Ordinal));
         }
     }
 
@@ -86,7 +89,7 @@ internal sealed class PdfEmbeddedFontProgramCatalog
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
 
-        var resolved = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var resolved = new Dictionary<string, PdfFontProgramIdentity?>(StringComparer.Ordinal);
         foreach (var name in names)
         {
             var matches = candidates
@@ -96,23 +99,22 @@ internal sealed class PdfEmbeddedFontProgramCatalog
                 .ToArray();
 
             // Exact identity is accepted only when every resource with that
-            // exact name is embedded/resolvable and all resolve to one decoded
-            // font-program SHA. An unembedded duplicate keeps the name
-            // ambiguous and therefore fail-closed.
+            // exact name is embedded/resolvable AND the font program plus
+            // rendering-relevant font dictionary identity is the same.
+            // Same binary with a different Encoding is still ambiguous.
             if (matches.Length == 0
-                || matches.Any(candidate =>
-                    string.IsNullOrWhiteSpace(candidate.FontProgramSha256)))
+                || matches.Any(candidate => candidate.Identity is null))
             {
                 resolved[name] = null;
                 continue;
             }
 
-            var hashes = matches
-                .Select(candidate => candidate.FontProgramSha256!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var identities = matches
+                .Select(candidate => candidate.Identity!)
+                .Distinct()
                 .ToArray();
-            resolved[name] = hashes.Length == 1
-                ? hashes[0]
+            resolved[name] = identities.Length == 1
+                ? identities[0]
                 : null;
         }
 
@@ -127,7 +129,13 @@ internal sealed class PdfEmbeddedFontProgramCatalog
         AddName(fontDictionary, "BaseFont", names);
 
         var descriptorOwner = fontDictionary;
-        var subtype = ResolveName(Get(fontDictionary, "Subtype"), resolver);
+        var subtype = ResolveName(Get(fontDictionary, "Subtype"), resolver)
+            ?? "<unknown>";
+        var descendantSubtype = string.Empty;
+        var encodingName = DescribeEncoding(
+            Get(fontDictionary, "Encoding"),
+            resolver);
+        var hasToUnicode = Get(fontDictionary, "ToUnicode") is not null;
         if (string.Equals(subtype, "Type0", StringComparison.Ordinal))
         {
             var descendants = ResolveArray(
@@ -142,6 +150,9 @@ internal sealed class PdfEmbeddedFontProgramCatalog
 
             descriptorOwner = descendant;
             AddName(descendant, "BaseFont", names);
+            descendantSubtype = ResolveName(
+                Get(descendant, "Subtype"),
+                resolver) ?? "<unknown>";
         }
 
         var descriptor = ResolveDictionary(
@@ -171,14 +182,59 @@ internal sealed class PdfEmbeddedFontProgramCatalog
                 return new FontProgramCandidate(names.ToArray(), null);
 
             var hash = SHA256.HashData(decoded.Span);
+            var programSubtype = string.Equals(
+                subtype,
+                "Type0",
+                StringComparison.Ordinal)
+                    ? $"Type0/{descendantSubtype}"
+                    : subtype;
+            var identity = new PdfFontProgramIdentity(
+                Convert.ToHexString(hash),
+                programSubtype,
+                encodingName,
+                hasToUnicode,
+                names.Any(IsSubsetFontName));
             return new FontProgramCandidate(
                 names.ToArray(),
-                Convert.ToHexString(hash));
+                identity);
         }
         catch
         {
             return new FontProgramCandidate(names.ToArray(), null);
         }
+    }
+
+    private static string DescribeEncoding(
+        IToken? token,
+        Func<IToken, IToken?> resolver)
+    {
+        var resolved = Resolve(token, resolver);
+        return resolved switch
+        {
+            null => "<absent>",
+            NameToken name => name.Data,
+            DictionaryToken => "<custom-dictionary>",
+            StreamToken => "<custom-stream>",
+            _ => "<unsupported>"
+        };
+    }
+
+    private static bool IsSubsetFontName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)
+            || name.Length < 8
+            || name[6] != '+')
+        {
+            return false;
+        }
+
+        for (var index = 0; index < 6; index++)
+        {
+            if (name[index] < 'A' || name[index] > 'Z')
+                return false;
+        }
+
+        return true;
     }
 
     private static StreamToken? ResolveFontProgramStream(
@@ -309,7 +365,14 @@ internal sealed class PdfEmbeddedFontProgramCatalog
         }
     }
 
+    internal sealed record PdfFontProgramIdentity(
+        string Sha256,
+        string FontSubtype,
+        string EncodingName,
+        bool HasToUnicode,
+        bool IsSubset);
+
     private sealed record FontProgramCandidate(
         IReadOnlyList<string> ExactNames,
-        string? FontProgramSha256);
+        PdfFontProgramIdentity? Identity);
 }
