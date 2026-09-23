@@ -393,14 +393,29 @@ public sealed class ReconstructionCommands
 
         try
         {
-            var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
-            Directory.CreateDirectory(outputDirectory);
-            var timestamp = DateTime.UtcNow.ToString(
-                "yyyyMMdd_HHmmssfff",
-                CultureInfo.InvariantCulture);
-            var outputPath = Path.Combine(
-                outputDirectory,
-                $"DimensionMetrics_{timestamp}.json");
+            var configuredOutput = Environment.GetEnvironmentVariable(
+                "TEYPDFCAD_DIM_METRICS_OUTPUT");
+            string outputPath;
+            if (!string.IsNullOrWhiteSpace(configuredOutput))
+            {
+                outputPath = Path.GetFullPath(configuredOutput);
+                var outputDirectory = Path.GetDirectoryName(outputPath);
+                if (string.IsNullOrWhiteSpace(outputDirectory))
+                    throw new InvalidOperationException(
+                        "Configured dimension metrics output has no directory.");
+                Directory.CreateDirectory(outputDirectory);
+            }
+            else
+            {
+                var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
+                Directory.CreateDirectory(outputDirectory);
+                var timestamp = DateTime.UtcNow.ToString(
+                    "yyyyMMdd_HHmmssfff",
+                    CultureInfo.InvariantCulture);
+                outputPath = Path.Combine(
+                    outputDirectory,
+                    $"DimensionMetrics_{timestamp}.json");
+            }
 
             File.WriteAllText(
                 outputPath,
