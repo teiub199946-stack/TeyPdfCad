@@ -290,6 +290,98 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_rejects_reversed_native_text_baseline_direction()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"directionX\": 1,\n                  \"directionY\": 0",
+                "\"directionX\": -1,\n                  \"directionY\": 0",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "7",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.False(candidate.MeasurementsAreUsable);
+        Assert.Contains(
+            "source-native-baseline-direction-mismatch",
+            candidate.Blockers);
+        Assert.True(candidate.BaselineDirectionDot.HasValue);
+        Assert.True(candidate.BaselineDirectionDot.Value < -0.999999);
+    }
+
+    [Fact]
+    public void Comparator_accepts_matching_rotated_baseline_direction_as_diagnostic_evidence()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5)
+            .Replace(
+                "\"sourceRotationDegrees\": 0",
+                "\"sourceRotationDegrees\": 45",
+                StringComparison.Ordinal);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"directionX\": 1,\n                  \"directionY\": 0",
+                "\"directionX\": 0.7071067811865476,\n                  \"directionY\": 0.7071067811865476",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "7",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.DoesNotContain(
+            "source-native-baseline-direction-mismatch",
+            candidate.Blockers);
+        Assert.True(candidate.BaselineDirectionDot.HasValue);
+        Assert.True(candidate.BaselineDirectionDot.Value > 0.999999);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_requires_one_dimension_line_two_extensions_and_two_unique_arrow_strokes()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5)
+            .Replace(
+                "\"role\": \"arrow-geometry\",\n                      \"sourceIds\": [\"arrow-2\"],\n                      \"startX\": 9,\n                      \"startY\": 6,\n                      \"endX\": 11,\n                      \"endY\": 4",
+                "\"role\": \"arrow-geometry\",\n                      \"sourceIds\": [\"arrow-2\"],\n                      \"startX\": -1,\n                      \"startY\": 4,\n                      \"endX\": 1,\n                      \"endY\": 6",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "7",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Equal(1, candidate.SourceDimensionLineCount);
+        Assert.Equal(1, candidate.MatchedSourceDimensionLineCount);
+        Assert.Equal(2, candidate.SourceExtensionLineCount);
+        Assert.Equal(2, candidate.MatchedSourceExtensionLineCount);
+        Assert.Equal(2, candidate.SourceArrowLineCount);
+        Assert.Equal(1, candidate.MatchedSourceArrowLineCount);
+        Assert.Contains("source-arrow-line-unmatched", candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
+    }
+
+    [Fact]
     public void Comparator_rejects_missing_exploded_dimension_geometry()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
