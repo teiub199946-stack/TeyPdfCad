@@ -47,7 +47,8 @@ internal static class DimensionMetricsReportFormatter
 
     public static string Format(DimensionMetricsReport report)
     {
-        ArgumentNullException.ThrowIfNull(report);
+        if (report is null)
+            throw new ArgumentNullException(nameof(report));
 
         var normalized = report with
         {
@@ -82,9 +83,18 @@ internal static class DimensionMetricsFileIdentity
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return string.Empty;
 
-        using var sha256 = SHA256.Create();
-        using var stream = File.OpenRead(path);
-        return BitConverter.ToString(sha256.ComputeHash(stream))
-            .Replace("-", string.Empty);
+        try
+        {
+            using var sha256 = SHA256.Create();
+            using var stream = File.OpenRead(path);
+            return BitConverter.ToString(sha256.ComputeHash(stream))
+                .Replace("-", string.Empty);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+            || exception is UnauthorizedAccessException)
+        {
+            return string.Empty;
+        }
     }
 }
