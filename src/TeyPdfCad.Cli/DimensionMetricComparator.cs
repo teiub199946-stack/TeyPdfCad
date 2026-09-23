@@ -359,6 +359,94 @@ internal static class DimensionMetricComparator
                 {
                     blockers.Add("cross-snapshot-text-extents-mismatch");
                 }
+                if (!ScalarEqual(
+                        metric.NominalTextHeight,
+                        explodedTextMetric.NominalTextHeight,
+                        1e-6)
+                    || !ScalarEqual(
+                        metric.TextStyleWidthFactor,
+                        explodedTextMetric.TextStyleWidthFactor,
+                        1e-9)
+                    || !ScalarEqual(
+                        metric.EntityWidthFactor,
+                        explodedTextMetric.EntityWidthFactor,
+                        1e-9))
+                {
+                    blockers.Add("cross-snapshot-text-style-mismatch");
+                }
+                if (metric.BackgroundFill != explodedTextMetric.BackgroundFill
+                    || metric.UseBackgroundColor != explodedTextMetric.UseBackgroundColor
+                    || metric.ShowBorders != explodedTextMetric.ShowBorders
+                    || !string.Equals(
+                        metric.Attachment,
+                        explodedTextMetric.Attachment,
+                        StringComparison.Ordinal))
+                {
+                    blockers.Add("cross-snapshot-text-decoration-mismatch");
+                }
+
+                if (metric.Fragments.Count != 1
+                    || explodedTextMetric.Fragments.Count != 1)
+                {
+                    blockers.Add("cross-snapshot-fragment-count-not-one");
+                }
+                else
+                {
+                    var blockFragment = metric.Fragments[0];
+                    var explodedFragment = explodedTextMetric.Fragments[0];
+                    if (!string.Equals(
+                            blockFragment.Text,
+                            explodedFragment.Text,
+                            StringComparison.Ordinal)
+                        || !string.Equals(
+                            blockFragment.TrueTypeFont,
+                            explodedFragment.TrueTypeFont,
+                            StringComparison.Ordinal)
+                        || !string.Equals(
+                            blockFragment.ShxFont,
+                            explodedFragment.ShxFont,
+                            StringComparison.Ordinal))
+                    {
+                        blockers.Add("cross-snapshot-fragment-identity-mismatch");
+                    }
+                    if (!ScalarEqual(
+                            blockFragment.ExtentWidth,
+                            explodedFragment.ExtentWidth,
+                            1e-6)
+                        || !ScalarEqual(
+                            blockFragment.ExtentHeight,
+                            explodedFragment.ExtentHeight,
+                            1e-6)
+                        || !ScalarEqual(
+                            blockFragment.CapsHeight,
+                            explodedFragment.CapsHeight,
+                            1e-6)
+                        || !ScalarEqual(
+                            blockFragment.TrackingFactor,
+                            explodedFragment.TrackingFactor,
+                            1e-9)
+                        || !ScalarEqual(
+                            blockFragment.WidthFactor,
+                            explodedFragment.WidthFactor,
+                            1e-9)
+                        || !ScalarEqual(
+                            blockFragment.ObliqueAngle,
+                            explodedFragment.ObliqueAngle,
+                            1e-9))
+                    {
+                        blockers.Add("cross-snapshot-fragment-metrics-mismatch");
+                    }
+                    if (blockFragment.Bold != explodedFragment.Bold
+                        || blockFragment.Italic != explodedFragment.Italic
+                        || blockFragment.StackTop != explodedFragment.StackTop
+                        || blockFragment.StackBottom != explodedFragment.StackBottom
+                        || blockFragment.Underlined != explodedFragment.Underlined
+                        || blockFragment.Overlined != explodedFragment.Overlined
+                        || blockFragment.Strikethrough != explodedFragment.Strikethrough)
+                    {
+                        blockers.Add("cross-snapshot-fragment-formatting-mismatch");
+                    }
+                }
             }
         }
 
