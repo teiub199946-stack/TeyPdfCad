@@ -13,6 +13,7 @@ internal sealed record DimensionMetricComparisonReport(
 internal sealed record DimensionMetricComparisonCandidate(
     string CandidateId,
     bool MeasurementsAreUsable,
+    bool LineAppearanceEvidenceUsable,
     bool SourceToNativeEquivalenceProven,
     IReadOnlyList<string> Blockers,
     string SourceText,
@@ -678,6 +679,30 @@ internal static class DimensionMetricComparator
                 "native-exploded-line-appearance-inherited-or-unresolved");
         }
 
+        var sourceLineAppearanceComplete =
+            source.SourceLineGeometry.Count == sourceStructuralLineCount
+            && source.SourceLineGeometry.All(HasUsableSourceLineAppearance);
+        if (!sourceLineAppearanceComplete)
+            blockers.Add("source-line-appearance-evidence-incomplete");
+
+        var lineAppearanceEvidenceUsable = false;
+        if (sourceLineAppearanceComplete
+            && explodedLines.Length == sourceStructuralLineCount
+            && explodedLines.All(HasUnambiguousRawLineAppearance))
+        {
+            var appearanceMatches = MatchSourceLinesGlobally(
+                source.SourceLineGeometry,
+                explodedLines,
+                NumericalWidthToleranceMm,
+                LineAppearanceEqual);
+            lineAppearanceEvidenceUsable =
+                appearanceMatches.Count(value => value)
+                    == source.SourceLineGeometry.Count;
+
+            if (!lineAppearanceEvidenceUsable)
+                blockers.Add("source-native-line-appearance-mismatch");
+        }
+
         var blockLines = native.BlockGeometry
             .Where(item => string.Equals(
                 item.GeometryKind,
@@ -925,6 +950,7 @@ internal static class DimensionMetricComparator
         return new DimensionMetricComparisonCandidate(
             candidateId,
             measurementsUsable,
+            lineAppearanceEvidenceUsable,
             SourceToNativeEquivalenceProven: false,
             distinctBlockers,
             source.SourceText,
@@ -997,7 +1023,10 @@ internal static class DimensionMetricComparator
                             GetNullableDouble(line, "startX"),
                             GetNullableDouble(line, "startY"),
                             GetNullableDouble(line, "endX"),
-                            GetNullableDouble(line, "endY")));
+                            GetNullableDouble(line, "endY"),
+                            GetNullableInt(line, "rgbColor"),
+                            GetNullableDouble(line, "strokeWidthMm"),
+                            GetNullableDoubleArray(line, "dashPatternMm")));
                     }
                 }
 
@@ -1217,7 +1246,8 @@ internal static class DimensionMetricComparator
     private static bool[] MatchSourceLinesGlobally(
         IReadOnlyList<SourceLineGeometry> sourceLines,
         IReadOnlyList<NativeBlockGeometry> nativeLines,
-        double tolerance)
+        double tolerance,
+        Func<SourceLineGeometry, NativeBlockGeometry, bool>? additionalMatch = null)
     {
         // Maximum-cardinality bipartite matching prevents one native entity
         // from satisfying more than one source/transformed line.
@@ -1231,7 +1261,11 @@ internal static class DimensionMetricComparator
                     || !LinesEqual(
                         sourceLines[sourceIndex],
                         nativeLines[nativeIndex],
-                        tolerance))
+                        tolerance)
+                    || (additionalMatch is not null
+                        && !additionalMatch(
+                            sourceLines[sourceIndex],
+                            nativeLines[nativeIndex])))
                 {
                     continue;
                 }
@@ -1430,6 +1464,73 @@ internal static class DimensionMetricComparator
             => (
                 Cosine * x - Sine * y + TranslateX,
                 Sine * x + Cosine * y + TranslateY);
+    }
+
+    private static bool HasUsableSourceLineAppearance(
+        SourceLineGeometry line)
+    {
+        if (!line.RgbColor.HasValue
+            || line.RgbColor.Value < 0
+            || line.RgbColor.Value > 0xFFFFFF
+            || !line.StrokeWidthMm.HasValue
+            || !double.IsFinite(line.StrokeWidthMm.Value)
+            || line.StrokeWidthMm.Value <= 0d
+            || line.DashPatternMm is null
+            || line.DashPatternMm.Any(value =>
+                !double.IsFinite(value) || value < 0d))
+        {
+            return false;
+        }
+
+        var hundredths = line.StrokeWidthMm.Value * 100d;
+        return Math.Abs(hundredths - Math.Round(hundredths)) <= 1e-9;
+    }
+
+    private static bool LineAppearanceEqual(
+        SourceLineGeometry source,
+        NativeBlockGeometry native)
+    {
+        if (!HasUsableSourceLineAppearance(source)
+            || !HasUnambiguousRawLineAppearance(native))
+        {
+            return false;
+        }
+
+        var expectedLineWeight =
+            (int)Math.Round(source.StrokeWidthMm!.Value * 100d);
+        if (native.RgbColor != source.RgbColor
+            || native.LineWeightHundredthsMm != expectedLineWeight)
+        {
+            return false;
+        }
+
+        var expectedLinetype = ExpectedLinetypeName(
+            source.DashPatternMm!);
+        return string.Equals(
+            native.Linetype,
+            expectedLinetype,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExpectedLinetypeName(
+        IReadOnlyList<double> dashPatternMm)
+    {
+        if (dashPatternMm.Count == 0)
+            return "CONTINUOUS";
+
+        var normalized = dashPatternMm
+            .Select(Math.Abs)
+            .ToArray();
+        if (normalized.Length % 2 != 0)
+            normalized = [.. normalized, .. normalized];
+
+        var token = string.Join(
+            "_",
+            normalized.Select(value =>
+                value.ToString(
+                    "0.######",
+                    CultureInfo.InvariantCulture)));
+        return "PDF_DASH_MM_" + token.Replace('.', '_');
     }
 
     private static bool HasUnambiguousRawLineAppearance(
@@ -1832,6 +1933,33 @@ internal static class DimensionMetricComparator
                 : null;
     }
 
+    private static IReadOnlyList<double>? GetNullableDoubleArray(
+        JsonElement element,
+        string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(name, out var value)
+            || value.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var result = new List<double>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Number
+                || !item.TryGetDouble(out var parsed)
+                || !double.IsFinite(parsed))
+            {
+                return null;
+            }
+
+            result.Add(parsed);
+        }
+
+        return result;
+    }
+
     private static int? GetNullableInt(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object
@@ -1852,7 +1980,10 @@ internal static class DimensionMetricComparator
         double? StartX,
         double? StartY,
         double? EndX,
-        double? EndY);
+        double? EndY,
+        int? RgbColor = null,
+        double? StrokeWidthMm = null,
+        IReadOnlyList<double>? DashPatternMm = null);
 
     private sealed record SourceEvidence(
         string CandidateId,
