@@ -56,6 +56,10 @@ public sealed class DimensionMetricsReportFormatterTests
                             10, 0, 0,
                             string.Empty,
                             0)
+                    ],
+                    ExplodedTextMetrics:
+                    [
+                        Metric("explode-text-0", "MText", 8.25, 2.5)
                     ])
             ]);
 
@@ -69,7 +73,7 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Equal(
             ["A2", "F2"],
             parsed.Dimensions[1].TextMetrics.Select(item => item.EntityHandle).ToArray());
-        Assert.Contains("\"schemaVersion\": \"7\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"schemaVersion\": \"8\"", first, StringComparison.Ordinal);
         Assert.Contains("\"width\": 8.25", first, StringComparison.Ordinal);
         Assert.Contains("\"fontSha256\": \"\"", first, StringComparison.Ordinal);
         Assert.Contains("\"backgroundFill\": false", first, StringComparison.Ordinal);
@@ -79,6 +83,7 @@ public sealed class DimensionMetricsReportFormatterTests
         Assert.Contains("\"trackingFactor\": 1.0", first, StringComparison.Ordinal);
         Assert.Contains("\"blockGeometry\":", first, StringComparison.Ordinal);
         Assert.Contains("\"geometryKind\": \"line\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"explodedTextMetrics\":", first, StringComparison.Ordinal);
     }
 
     [Fact]
