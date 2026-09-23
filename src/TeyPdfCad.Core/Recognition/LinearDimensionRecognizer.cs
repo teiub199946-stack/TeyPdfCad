@@ -551,7 +551,8 @@ public sealed class LinearDimensionRecognizer
             text.ProvenanceIds.ToArray(),
             text.FontName,
             text.AdvanceWidth,
-            text.VisualCenter);
+            text.VisualCenter,
+            text.VisibleWidth);
 
     private static IReadOnlyList<string> MergeProvenance(params IReadOnlyList<string>[] groups)
         => groups
