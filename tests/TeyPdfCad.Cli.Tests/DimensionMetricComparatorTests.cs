@@ -445,8 +445,8 @@ public sealed class DimensionMetricComparatorTests
         var source = SourceReport("candidate-1", "100", 7.5);
         var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
             .Replace(
-                "\"positionX\": 15,\n              \"positionY\": 20,\n              \"positionZ\": 0",
-                "\"positionX\": 999,\n              \"positionY\": 999,\n              \"positionZ\": 0",
+                "\"metricKind\": \"mtext-actual-bounds-dimblock-mcs\",\n              \"width\": 7.5,\n              \"height\": 2.5,\n              \"rotationRadians\": 0,\n              \"positionX\": 15,\n              \"positionY\": 20,\n              \"positionZ\": 0",
+                "\"metricKind\": \"mtext-actual-bounds-dimblock-mcs\",\n              \"width\": 7.5,\n              \"height\": 2.5,\n              \"rotationRadians\": 0,\n              \"positionX\": 999,\n              \"positionY\": 999,\n              \"positionZ\": 0",
                 StringComparison.Ordinal);
         var native = $"""
         {
