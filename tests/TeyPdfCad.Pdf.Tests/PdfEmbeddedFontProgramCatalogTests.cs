@@ -26,6 +26,12 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
         Assert.Equal(
             Convert.ToHexString(SHA256.HashData(fontBytes)),
             catalog.ResolveUniqueSha256("ABCDEF+ArialMT"));
+        var identity = Assert.IsType<PdfEmbeddedFontProgramCatalog.PdfFontProgramIdentity>(
+            catalog.ResolveUnique("ABCDEF+ArialMT"));
+        Assert.Equal("TrueType", identity.FontSubtype);
+        Assert.Equal("WinAnsiEncoding", identity.EncodingName);
+        Assert.False(identity.HasToUnicode);
+        Assert.True(identity.IsSubset);
         Assert.Null(catalog.ResolveUniqueSha256("ArialMT"));
     }
 
@@ -75,6 +81,31 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
     }
 
     [Fact]
+    public void Same_font_program_with_different_encodings_is_ambiguous()
+    {
+        var fontBytes = Encoding.ASCII.GetBytes("same-font-program");
+        var resources = Resources(
+            ("F1", Font(
+                "ArialMT",
+                Descriptor(
+                    "ArialMT",
+                    new StreamToken(EmptyDictionary(), fontBytes)),
+                "WinAnsiEncoding")),
+            ("F2", Font(
+                "ArialMT",
+                Descriptor(
+                    "ArialMT",
+                    new StreamToken(EmptyDictionary(), fontBytes)),
+                "MacRomanEncoding")));
+
+        var catalog = PdfEmbeddedFontProgramCatalog.CreateFromResources(
+            resources,
+            token => token);
+
+        Assert.Null(catalog.ResolveUnique("ArialMT"));
+    }
+
+    [Fact]
     public void Descriptor_with_multiple_font_program_entries_is_fail_closed()
     {
         var descriptor = Dictionary(
@@ -113,6 +144,7 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
             ("Type", Name("Font")),
             ("Subtype", Name("Type0")),
             ("BaseFont", Name("ArialUnicodeMS")),
+            ("Encoding", Name("Identity-H")),
             ("DescendantFonts", new ArrayToken([descendant1, descendant2])));
         var resources = Resources(("F1", type0));
 
@@ -136,6 +168,7 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
             ("Type", Name("Font")),
             ("Subtype", Name("Type0")),
             ("BaseFont", Name("ABCDEF+ArialUnicodeMS")),
+            ("Encoding", Name("Identity-H")),
             ("DescendantFonts", new ArrayToken([descendant])));
         var resources = Resources(("F1", type0));
 
@@ -158,7 +191,8 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
 
     private static DictionaryToken Font(
         string baseFont,
-        DictionaryToken? descriptor)
+        DictionaryToken? descriptor,
+        string? encoding = "WinAnsiEncoding")
     {
         var entries = new List<(string Key, IToken Value)>
         {
@@ -166,6 +200,8 @@ public sealed class PdfEmbeddedFontProgramCatalogTests
             ("Subtype", Name("TrueType")),
             ("BaseFont", Name(baseFont))
         };
+        if (!string.IsNullOrWhiteSpace(encoding))
+            entries.Add(("Encoding", Name(encoding)));
         if (descriptor is not null)
             entries.Add(("FontDescriptor", descriptor));
         return Dictionary(entries.ToArray());
