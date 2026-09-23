@@ -215,9 +215,17 @@ public static class SourceEquivalenceAssessor
                 "Dimension source appearance is captured and source-linked, but the dimension-line observation is composite (for example split around text); raw source segments must be compared independently before suppression.");
         }
 
+        var arrowMappingBlocker = DescribeUnprovenDimensionArrowMapping(appearance);
+        if (arrowMappingBlocker is not null)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                arrowMappingBlocker);
+        }
+
         return new SourceEquivalenceAssessmentResult(
             false,
-            "Dimension source appearance is captured before DWG emission (text metrics/color and line geometry/stroke/dash/color), but native DIMENSION font metrics, arrow topology/type and dimension/extension line style mapping are not yet independently proven equivalent.");
+            "Dimension source appearance is captured before DWG emission, but native DIMENSION font/advance-width metrics and dimension/extension line style mapping are not yet independently proven equivalent.");
     }
 
     private static string? ValidateDimensionArrowEndpointEvidence(
@@ -271,6 +279,95 @@ public static class SourceEquivalenceAssessor
         }
 
         return null;
+    }
+
+    private static string? DescribeUnprovenDimensionArrowMapping(
+        DimensionSourceAppearance appearance)
+    {
+        var firstEndpoint = appearance.DimensionLine.Start;
+        var secondEndpoint = appearance.DimensionLine.End;
+        var contactTolerance = Math.Max(appearance.Text.HeightMm * 0.5d, 0.5d);
+        var first = new List<DimensionSourceLineAppearance>();
+        var second = new List<DimensionSourceLineAppearance>();
+
+        foreach (var arrow in appearance.ArrowLines)
+        {
+            var touchesFirst = GeometryMath.DistancePointToSegment(
+                firstEndpoint, arrow.Start, arrow.End) <= contactTolerance;
+            var touchesSecond = GeometryMath.DistancePointToSegment(
+                secondEndpoint, arrow.Start, arrow.End) <= contactTolerance;
+            if (touchesFirst == touchesSecond)
+                return null;
+            (touchesFirst ? first : second).Add(arrow);
+        }
+
+        var firstTopology = ClassifyArrowEndpointTopology(firstEndpoint, first, appearance.Text.HeightMm);
+        var secondTopology = ClassifyArrowEndpointTopology(secondEndpoint, second, appearance.Text.HeightMm);
+        if (firstTopology != secondTopology)
+        {
+            return $"Dimension source arrow topology differs between endpoints ({firstTopology} vs {secondTopology}); native arrow mapping remains fail-closed.";
+        }
+
+        return firstTopology switch
+        {
+            DimensionArrowEndpointTopology.CrossingObliqueStroke =>
+                "Dimension source arrows are endpoint-crossing oblique strokes, but ACadSharp/AutoCAD DIMSTYLE TickSize visual-length calibration against the raw PDF stroke is not yet independently proven.",
+            DimensionArrowEndpointTopology.EndpointSingleWing =>
+                "Dimension source arrows are endpoint single-wing linework; no native DIMENSION arrow type has been independently proven visually equivalent to this source topology.",
+            DimensionArrowEndpointTopology.MultiStroke =>
+                "Dimension source arrows use multi-stroke linework; open-V/dot/filled-arrow topology has not yet been independently mapped to a native DIMENSION arrow type.",
+            _ =>
+                "Dimension source arrow topology/type cannot yet be independently mapped to the native DIMENSION style."
+        };
+    }
+
+    private static DimensionArrowEndpointTopology ClassifyArrowEndpointTopology(
+        Point2 endpoint,
+        IReadOnlyList<DimensionSourceLineAppearance> lines,
+        double textHeight)
+    {
+        if (lines.Count == 0)
+            return DimensionArrowEndpointTopology.Unknown;
+        if (lines.Count > 1)
+            return DimensionArrowEndpointTopology.MultiStroke;
+
+        var line = lines[0];
+        var length = GeometryMath.Distance(line.Start, line.End);
+        if (length <= 1e-9)
+            return DimensionArrowEndpointTopology.Unknown;
+
+        var endpointTolerance = Math.Max(Math.Min(textHeight * 0.05d, 0.1d), 1e-6);
+        var startDistance = GeometryMath.Distance(endpoint, line.Start);
+        var endDistance = GeometryMath.Distance(endpoint, line.End);
+        var segmentDistance = GeometryMath.DistancePointToSegment(endpoint, line.Start, line.End);
+        if (segmentDistance > endpointTolerance)
+            return DimensionArrowEndpointTopology.Unknown;
+
+        var endpointAtTerminal = startDistance <= endpointTolerance || endDistance <= endpointTolerance;
+        if (endpointAtTerminal)
+            return DimensionArrowEndpointTopology.EndpointSingleWing;
+
+        var projection = ProjectionParameter(endpoint, line.Start, line.End);
+        return projection is > 0.05d and < 0.95d
+            ? DimensionArrowEndpointTopology.CrossingObliqueStroke
+            : DimensionArrowEndpointTopology.Unknown;
+    }
+
+    private static double ProjectionParameter(Point2 point, Point2 start, Point2 end)
+    {
+        var vector = GeometryMath.Subtract(end, start);
+        var denominator = GeometryMath.Dot(vector, vector);
+        if (denominator <= 1e-12)
+            return 0d;
+        return GeometryMath.Dot(GeometryMath.Subtract(point, start), vector) / denominator;
+    }
+
+    private enum DimensionArrowEndpointTopology
+    {
+        Unknown,
+        EndpointSingleWing,
+        CrossingObliqueStroke,
+        MultiStroke
     }
 
     private static string? ValidateDimensionCandidateConsistency(
