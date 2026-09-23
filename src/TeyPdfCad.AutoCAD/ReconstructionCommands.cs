@@ -333,6 +333,13 @@ public sealed class ReconstructionCommands
                                     style.FontSha256,
                                     mtext.TextHeight,
                                     style.WidthFactor,
+                                    BackgroundFill: mtext.BackgroundFill,
+                                    UseBackgroundColor: mtext.UseBackgroundColor,
+                                    BackgroundScaleFactor: mtext.BackgroundFill
+                                        ? mtext.BackgroundScaleFactor
+                                        : 0d,
+                                    ShowBorders: mtext.ShowBorders,
+                                    Attachment: mtext.Attachment.ToString(),
                                     Fragments: fragments));
                             }
                             else if (entity is DBText dbText)
