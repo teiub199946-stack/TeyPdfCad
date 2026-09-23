@@ -237,6 +237,13 @@ internal static class DimensionMetricComparator
                     blockers.Add("native-mtext-border-present");
                 if (string.IsNullOrWhiteSpace(metric.Attachment))
                     blockers.Add("native-mtext-attachment-missing");
+                else if (!string.Equals(
+                    metric.Attachment,
+                    "MiddleCenter",
+                    StringComparison.Ordinal))
+                {
+                    blockers.Add("native-mtext-attachment-not-middle-center");
+                }
 
                 if (metric.Fragments.Count != 1)
                 {
@@ -464,6 +471,55 @@ internal static class DimensionMetricComparator
             else
             {
                 blockers.Add("native-exploded-fragment-direction-not-planar");
+            }
+        }
+
+        var sourceVisualCenterUsable =
+            source.SourceVisualCenterX.HasValue
+            && source.SourceVisualCenterY.HasValue
+            && double.IsFinite(source.SourceVisualCenterX.Value)
+            && double.IsFinite(source.SourceVisualCenterY.Value);
+        if (!sourceVisualCenterUsable)
+            blockers.Add("source-text-visual-center-invalid");
+
+        var explodedTextCenterMatches = false;
+        if (native.ExplodedTextMetrics.Count == 1)
+        {
+            var nativeCenterUsable =
+                explodedTextMetric.PositionX.HasValue
+                && explodedTextMetric.PositionY.HasValue
+                && explodedTextMetric.PositionZ.HasValue
+                && double.IsFinite(explodedTextMetric.PositionX.Value)
+                && double.IsFinite(explodedTextMetric.PositionY.Value)
+                && double.IsFinite(explodedTextMetric.PositionZ.Value)
+                && Math.Abs(explodedTextMetric.PositionZ.Value)
+                    <= NumericalWidthToleranceMm;
+
+            if (!nativeCenterUsable)
+            {
+                blockers.Add("native-exploded-text-position-invalid");
+            }
+            else if (!string.Equals(
+                explodedTextMetric.Attachment,
+                "MiddleCenter",
+                StringComparison.Ordinal))
+            {
+                blockers.Add("native-mtext-attachment-not-middle-center");
+            }
+            else if (sourceVisualCenterUsable)
+            {
+                explodedTextCenterMatches =
+                    Math.Abs(
+                        explodedTextMetric.PositionX!.Value
+                        - source.SourceVisualCenterX!.Value)
+                        <= NumericalWidthToleranceMm
+                    && Math.Abs(
+                        explodedTextMetric.PositionY!.Value
+                        - source.SourceVisualCenterY!.Value)
+                        <= NumericalWidthToleranceMm;
+
+                if (!explodedTextCenterMatches)
+                    blockers.Add("source-native-text-center-mismatch");
             }
         }
 
@@ -714,6 +770,16 @@ internal static class DimensionMetricComparator
             && matchedSourceArrowLineCount == 2
             && baselineDirectionDot.HasValue
             && baselineDirectionDot.Value > 0.999999
+            && sourceVisualCenterUsable
+            && explodedTextCenterMatches
+            && string.Equals(
+                metric.Attachment,
+                "MiddleCenter",
+                StringComparison.Ordinal)
+            && string.Equals(
+                explodedTextMetric.Attachment,
+                "MiddleCenter",
+                StringComparison.Ordinal)
             && IsPositiveFinite(metric.Width)
             && IsPositiveFinite(metric.Height)
             && IsSupportedMetricKind(metric.MetricKind)
@@ -828,6 +894,8 @@ internal static class DimensionMetricComparator
                     GetNullableDouble(item, "sourceGlyphInkHeightMm"),
                     GetNullableDouble(item, "sourceHeightMm"),
                     GetNullableDouble(item, "sourceRotationDegrees") ?? double.NaN,
+                    GetNullableDouble(item, "sourceVisualCenterX"),
+                    GetNullableDouble(item, "sourceVisualCenterY"),
                     GetString(item, "sourceCoordinateFrame") ?? string.Empty,
                     sourceLineGeometry));
             }
@@ -1190,6 +1258,9 @@ internal static class DimensionMetricComparator
                 GetString(metric, "metricKind") ?? string.Empty,
                 GetNullableDouble(metric, "width"),
                 GetNullableDouble(metric, "height"),
+                GetNullableDouble(metric, "positionX"),
+                GetNullableDouble(metric, "positionY"),
+                GetNullableDouble(metric, "positionZ"),
                 GetString(metric, "textStyleName") ?? string.Empty,
                 GetString(metric, "fontFile") ?? string.Empty,
                 GetString(metric, "fontResolvedPath") ?? string.Empty,
@@ -1453,6 +1524,8 @@ internal static class DimensionMetricComparator
         double? SourceGlyphInkHeightMm,
         double? SourceHeightMm,
         double SourceRotationDegrees,
+        double? SourceVisualCenterX,
+        double? SourceVisualCenterY,
         string SourceCoordinateFrame,
         IReadOnlyList<SourceLineGeometry> SourceLineGeometry)
     {
@@ -1473,6 +1546,8 @@ internal static class DimensionMetricComparator
                 null,
                 null,
                 double.NaN,
+                null,
+                null,
                 string.Empty,
                 []);
     }
@@ -1553,6 +1628,9 @@ internal static class DimensionMetricComparator
         string MetricKind,
         double? Width,
         double? Height,
+        double? PositionX,
+        double? PositionY,
+        double? PositionZ,
         string TextStyleName,
         string FontFile,
         string FontResolvedPath,
@@ -1572,6 +1650,9 @@ internal static class DimensionMetricComparator
             string.Empty,
             string.Empty,
             string.Empty,
+            null,
+            null,
+            null,
             null,
             null,
             string.Empty,
