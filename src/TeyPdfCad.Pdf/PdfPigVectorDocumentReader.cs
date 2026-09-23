@@ -37,6 +37,7 @@ public sealed class PdfPigVectorDocumentReader
             var entities = graphics.Entities.ToList();
             var diagnostics = graphics.Diagnostics.ToList();
             var words = NearestNeighbourWordExtractor.Instance.GetWords(sourcePage.Letters);
+            var fontPrograms = PdfEmbeddedFontProgramCatalog.Create(document, sourcePage);
             var textSequence = 0;
             var skippedHiddenText = false;
             var encounteredTextClipping = false;
@@ -73,6 +74,7 @@ public sealed class PdfPigVectorDocumentReader
                     baselineY,
                     advanceWidthPoints);
                 var fontName = GetWordFontName(word);
+                var fontProgramSha256 = fontPrograms.ResolveUniqueSha256(fontName);
                 if (string.IsNullOrWhiteSpace(fontName))
                     encounteredAmbiguousFontIdentity = true;
                 if (advanceWidthPoints <= 1e-9)
@@ -94,7 +96,8 @@ public sealed class PdfPigVectorDocumentReader
                     VisualCenter: new Point2(
                         word.BoundingBox.Centroid.X * VectorPdfPage.MillimetresPerPoint,
                         word.BoundingBox.Centroid.Y * VectorPdfPage.MillimetresPerPoint),
-                    VisibleWidthPoints: visibleWidthPoints));
+                    VisibleWidthPoints: visibleWidthPoints,
+                    FontProgramSha256: fontProgramSha256));
             }
 
             if (skippedHiddenText)
