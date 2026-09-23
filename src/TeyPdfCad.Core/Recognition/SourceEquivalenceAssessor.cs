@@ -362,7 +362,8 @@ public static class SourceEquivalenceAssessor
                 sourceText.RotationRadians * 180d / Math.PI,
                 appearance.Text.RotationDegrees)
             || !string.Equals(sourceText.Style.SourceLayer, appearance.Text.Layer, StringComparison.Ordinal)
-            || sourceText.Style.RgbColor != appearance.Text.RgbColor)
+            || sourceText.Style.RgbColor != appearance.Text.RgbColor
+            || !string.Equals(sourceText.FontName, appearance.Text.FontName, StringComparison.Ordinal))
         {
             return "Dimension source text appearance differs from the raw VectorPdfPage evidence.";
         }
