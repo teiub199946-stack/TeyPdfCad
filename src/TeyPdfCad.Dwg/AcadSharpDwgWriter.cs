@@ -591,7 +591,7 @@ public sealed class AcadSharpDwgWriter
             : new DimensionAligned(first, second);
         dimension.DefinitionPoint = dimensionPoint;
         dimension.Normal = new XYZ(0d, 0d, 1d);
-        dimension.Style = styles.GetDimensionStyle(candidate.DrawingScale);
+        dimension.Style = styles.GetDimensionStyle(candidate);
         dimension.Text = NativeDimensionTextBuilder.Build(
             candidate.SourceText,
             candidate.DisplayedValue);
