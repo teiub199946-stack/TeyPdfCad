@@ -286,24 +286,6 @@ internal static class DimensionMetricComparator
         }
 
         double? baselineDirectionDot = null;
-        if (metric.Fragments.Count == 1
-            && double.IsFinite(source.SourceRotationDegrees)
-            && TryGetPlanarUnitDirection(
-                metric.Fragments[0],
-                out var nativeX,
-                out var nativeY))
-        {
-            var sourceRadians = source.SourceRotationDegrees * Math.PI / 180d;
-            var sourceX = Math.Cos(sourceRadians);
-            var sourceY = Math.Sin(sourceRadians);
-            baselineDirectionDot = sourceX * nativeX + sourceY * nativeY;
-
-            if (Math.Abs(sourceX - nativeX) > 1e-6
-                || Math.Abs(sourceY - nativeY) > 1e-6)
-            {
-                blockers.Add("source-native-baseline-direction-mismatch");
-            }
-        }
 
         NativeTextMetric explodedTextMetric = NativeTextMetric.Empty;
         if (natives.Count == 1)
@@ -447,6 +429,41 @@ internal static class DimensionMetricComparator
                         blockers.Add("cross-snapshot-fragment-formatting-mismatch");
                     }
                 }
+            }
+        }
+
+        // Source text rotation is expressed in drawing WCS. The regenerated
+        // anonymous *D block fragment is expressed in dimension-block MCS and
+        // cannot be compared directly without the dimension block transform.
+        // Dimension.Explode() gives us a separate drawing-WCS text snapshot, so
+        // bind source baseline evidence to that channel only.
+        if (native.ExplodedTextMetrics.Count == 1
+            && explodedTextMetric.Fragments.Count == 1
+            && double.IsFinite(source.SourceRotationDegrees)
+            && string.Equals(
+                native.ExplodedGeometryCoordinateFrame,
+                "drawing-wcs",
+                StringComparison.Ordinal))
+        {
+            if (TryGetPlanarUnitDirection(
+                    explodedTextMetric.Fragments[0],
+                    out var nativeX,
+                    out var nativeY))
+            {
+                var sourceRadians = source.SourceRotationDegrees * Math.PI / 180d;
+                var sourceX = Math.Cos(sourceRadians);
+                var sourceY = Math.Sin(sourceRadians);
+                baselineDirectionDot = sourceX * nativeX + sourceY * nativeY;
+
+                if (Math.Abs(sourceX - nativeX) > 1e-6
+                    || Math.Abs(sourceY - nativeY) > 1e-6)
+                {
+                    blockers.Add("source-native-baseline-direction-mismatch");
+                }
+            }
+            else
+            {
+                blockers.Add("native-exploded-fragment-direction-not-planar");
             }
         }
 
