@@ -13,6 +13,7 @@ internal sealed record DimensionTextFragmentMetric(
     double ExtentHeight,
     double CapsHeight,
     double TrackingFactor,
+    double WidthFactor,
     double ObliqueAngle,
     double LocationX,
     double LocationY,
