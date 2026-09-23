@@ -574,6 +574,12 @@ internal static class DimensionMetricComparator
         if (explodedLines.Length != sourceStructuralLineCount)
             blockers.Add("native-exploded-line-count-does-not-match-source-structure");
 
+        if (explodedLines.Any(line =>
+                !IsLineInSourcePlane(line, NumericalWidthToleranceMm)))
+        {
+            blockers.Add("native-exploded-line-not-in-source-plane");
+        }
+
         if (!IsFirstSafeNumericDimensionText(source.SourceText))
             blockers.Add("source-text-outside-safe-numeric-subset");
 
@@ -1063,11 +1069,29 @@ internal static class DimensionMetricComparator
         int ArrowLineMatches,
         int TotalMatches);
 
+    private static bool IsLineInSourcePlane(
+        NativeBlockGeometry line,
+        double tolerance)
+        => line.StartZ.HasValue
+            && line.EndZ.HasValue
+            && line.MinZ.HasValue
+            && line.MaxZ.HasValue
+            && double.IsFinite(line.StartZ.Value)
+            && double.IsFinite(line.EndZ.Value)
+            && double.IsFinite(line.MinZ.Value)
+            && double.IsFinite(line.MaxZ.Value)
+            && Math.Abs(line.StartZ.Value) <= tolerance
+            && Math.Abs(line.EndZ.Value) <= tolerance
+            && Math.Abs(line.MinZ.Value) <= tolerance
+            && Math.Abs(line.MaxZ.Value) <= tolerance;
+
     private static bool LinesEqual(
         SourceLineGeometry source,
         NativeBlockGeometry native,
         double tolerance)
     {
+        if (!IsLineInSourcePlane(native, tolerance))
+            return false;
         if (!source.StartX.HasValue
             || !source.StartY.HasValue
             || !source.EndX.HasValue
