@@ -2,6 +2,7 @@ using System.Globalization;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
+using CSMath;
 using TeyPdfCad.Core.Recognition;
 
 namespace TeyPdfCad.Dwg;
