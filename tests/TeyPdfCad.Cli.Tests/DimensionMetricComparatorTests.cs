@@ -18,6 +18,10 @@ public sealed class DimensionMetricComparatorTests
                   "candidateId": "p1:dimension:abc",
                   "sourceText": "100",
                   "sourceFontName": "Helvetica",
+                  "sourceFontSubtype": "TrueType",
+                  "sourceFontEncodingName": "WinAnsiEncoding",
+                  "sourceFontHasToUnicode": false,
+                  "sourceFontIsSubset": false,
                   "sourceAdvanceWidthMm": 8.0,
                   "sourceVisibleWidthMm": 7.5,
                   "sourceHeightMm": 2.5,
@@ -267,6 +271,30 @@ public sealed class DimensionMetricComparatorTests
     }
 
     [Fact]
+    public void Comparator_reports_font_encoding_outside_first_safe_subset()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5)
+            .Replace(
+                "\"sourceFontEncodingName\": \"WinAnsiEncoding\"",
+                "\"sourceFontEncodingName\": \"Identity-H\"",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "2",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{NativeDimension("candidate-1", "100", 7.5)}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains("source-font-encoding-not-winansi", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
     public void Comparator_accepts_matching_source_font_sha_only_as_one_proof_component()
     {
         const string sha = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
@@ -280,6 +308,10 @@ public sealed class DimensionMetricComparatorTests
                   "sourceText": "100",
                   "sourceFontName": "Arial",
                   "sourceFontSha256": "{{sha}}",
+                  "sourceFontSubtype": "TrueType",
+                  "sourceFontEncodingName": "WinAnsiEncoding",
+                  "sourceFontHasToUnicode": false,
+                  "sourceFontIsSubset": false,
                   "sourceAdvanceWidthMm": 7.5,
                   "sourceVisibleWidthMm": 7.5,
                   "sourceHeightMm": 2.5,
@@ -331,6 +363,10 @@ public sealed class DimensionMetricComparatorTests
                   "candidateId": "{{candidateId}}",
                   "sourceText": "{{text}}",
                   "sourceFontName": "Helvetica",
+                  "sourceFontSubtype": "TrueType",
+                  "sourceFontEncodingName": "WinAnsiEncoding",
+                  "sourceFontHasToUnicode": false,
+                  "sourceFontIsSubset": false,
                   "sourceAdvanceWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceVisibleWidthMm": {{visibleWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                   "sourceHeightMm": 2.5,
