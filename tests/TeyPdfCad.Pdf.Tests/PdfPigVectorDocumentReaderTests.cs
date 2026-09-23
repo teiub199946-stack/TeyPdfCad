@@ -134,6 +134,10 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.True(texts[0].AdvanceWidthPoints > 0d);
         Assert.True(texts[0].VisibleWidthPoints > 0d);
         Assert.True(double.IsFinite(texts[0].VisibleWidthPoints));
+        Assert.True(texts[0].GlyphInkWidthPoints > 0d);
+        Assert.True(texts[0].GlyphInkHeightPoints > 0d);
+        Assert.True(double.IsFinite(texts[0].GlyphInkWidthPoints));
+        Assert.True(double.IsFinite(texts[0].GlyphInkHeightPoints));
         Assert.True(texts[0].VisualCenter.HasValue);
         Assert.True(double.IsFinite(texts[0].VisualCenter!.Value.X));
         Assert.True(double.IsFinite(texts[0].VisualCenter!.Value.Y));
@@ -266,6 +270,12 @@ public sealed class PdfPigVectorDocumentReaderTests
 
         Assert.True(horizontalText.AdvanceWidthPoints > 0d, "horizontal word must report a positive advance width");
         Assert.True(verticalText.AdvanceWidthPoints > 0d, "rotated word must report a positive advance width (baseline length), not zero");
+        Assert.True(horizontalText.GlyphInkWidthPoints > 0d);
+        Assert.True(verticalText.GlyphInkWidthPoints > 0d);
+        Assert.True(horizontalText.GlyphInkHeightPoints > 0d);
+        Assert.True(verticalText.GlyphInkHeightPoints > 0d);
+        Assert.Equal(horizontalText.GlyphInkWidthPoints, verticalText.GlyphInkWidthPoints, 3);
+        Assert.Equal(horizontalText.GlyphInkHeightPoints, verticalText.GlyphInkHeightPoints, 3);
         Assert.Equal(Math.Abs(Math.PI / 2d), Math.Abs(verticalText.RotationRadians), 3);
     }
 
