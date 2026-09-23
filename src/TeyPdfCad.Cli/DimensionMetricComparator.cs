@@ -29,11 +29,15 @@ internal sealed record DimensionMetricComparisonCandidate(
     double? SourceAdvanceWidthMm,
     double? SourceVisibleWidthMm,
     double? SourceVisibleHeightMm,
+    double? SourceGlyphInkWidthMm,
+    double? SourceGlyphInkHeightMm,
     double? NativeRenderedWidthMm,
     double? NativeRenderedHeightMm,
     double? VisibleWidthDeltaMm,
     double? FragmentWidthDeltaMm,
     double? ProjectedHeightDeltaMm,
+    double? GlyphInkWidthDeltaMm,
+    double? GlyphInkHeightDeltaMm,
     double? SourceHeightMm,
     double? NativeNominalTextHeightMm,
     double? NativeTextStyleWidthFactor,
@@ -291,6 +295,11 @@ internal static class DimensionMetricComparator
             blockers.Add("source-visible-height-invalid");
         else
             blockers.Add("source-visible-height-is-bbox-projection-not-ink");
+        if (!IsPositiveFinite(source.SourceGlyphInkWidthMm)
+            || !IsPositiveFinite(source.SourceGlyphInkHeightMm))
+        {
+            blockers.Add("source-glyph-ink-extents-invalid");
+        }
         if (!IsPositiveFinite(source.SourceHeightMm))
             blockers.Add("source-height-invalid");
 
@@ -383,6 +392,8 @@ internal static class DimensionMetricComparator
 
         double? fragmentWidthDelta = null;
         double? projectedHeightDelta = null;
+        double? glyphInkWidthDelta = null;
+        double? glyphInkHeightDelta = null;
         if (metric.Fragments.Count == 1)
         {
             var fragment = metric.Fragments[0];
@@ -402,6 +413,24 @@ internal static class DimensionMetricComparator
                     fragment.ExtentHeight!.Value - source.SourceVisibleHeightMm!.Value;
                 if (Math.Abs(projectedHeightDelta.Value) > NumericalWidthToleranceMm)
                     blockers.Add("projected-height-mismatch");
+            }
+
+            if (IsPositiveFinite(source.SourceGlyphInkWidthMm)
+                && IsPositiveFinite(fragment.ExtentWidth))
+            {
+                glyphInkWidthDelta =
+                    fragment.ExtentWidth!.Value - source.SourceGlyphInkWidthMm!.Value;
+                if (Math.Abs(glyphInkWidthDelta.Value) > NumericalWidthToleranceMm)
+                    blockers.Add("glyph-ink-width-mismatch");
+            }
+
+            if (IsPositiveFinite(source.SourceGlyphInkHeightMm)
+                && IsPositiveFinite(fragment.ExtentHeight))
+            {
+                glyphInkHeightDelta =
+                    fragment.ExtentHeight!.Value - source.SourceGlyphInkHeightMm!.Value;
+                if (Math.Abs(glyphInkHeightDelta.Value) > NumericalWidthToleranceMm)
+                    blockers.Add("glyph-ink-height-mismatch");
             }
         }
 
@@ -437,6 +466,8 @@ internal static class DimensionMetricComparator
             && string.Equals(drawingUnits, "Millimeters", StringComparison.OrdinalIgnoreCase)
             && IsPositiveFinite(source.SourceVisibleWidthMm)
             && IsPositiveFinite(source.SourceVisibleHeightMm)
+            && IsPositiveFinite(source.SourceGlyphInkWidthMm)
+            && IsPositiveFinite(source.SourceGlyphInkHeightMm)
             && IsPositiveFinite(source.SourceAdvanceWidthMm)
             && IsPositiveFinite(source.SourceHeightMm)
             && string.Equals(
@@ -477,11 +508,15 @@ internal static class DimensionMetricComparator
             source.SourceAdvanceWidthMm,
             source.SourceVisibleWidthMm,
             source.SourceVisibleHeightMm,
+            source.SourceGlyphInkWidthMm,
+            source.SourceGlyphInkHeightMm,
             metric.Width,
             metric.Height,
             widthDelta,
             fragmentWidthDelta,
             projectedHeightDelta,
+            glyphInkWidthDelta,
+            glyphInkHeightDelta,
             source.SourceHeightMm,
             metric.NominalTextHeight,
             metric.TextStyleWidthFactor,
@@ -542,6 +577,8 @@ internal static class DimensionMetricComparator
                     GetNullableDouble(item, "sourceAdvanceWidthMm"),
                     GetNullableDouble(item, "sourceVisibleWidthMm"),
                     GetNullableDouble(item, "sourceVisibleHeightMm"),
+                    GetNullableDouble(item, "sourceGlyphInkWidthMm"),
+                    GetNullableDouble(item, "sourceGlyphInkHeightMm"),
                     GetNullableDouble(item, "sourceHeightMm"),
                     GetString(item, "sourceCoordinateFrame") ?? string.Empty,
                     sourceLineGeometry));
@@ -983,6 +1020,8 @@ internal static class DimensionMetricComparator
         double? SourceAdvanceWidthMm,
         double? SourceVisibleWidthMm,
         double? SourceVisibleHeightMm,
+        double? SourceGlyphInkWidthMm,
+        double? SourceGlyphInkHeightMm,
         double? SourceHeightMm,
         string SourceCoordinateFrame,
         IReadOnlyList<SourceLineGeometry> SourceLineGeometry)
@@ -991,6 +1030,8 @@ internal static class DimensionMetricComparator
             => new(
                 candidateId,
                 string.Empty,
+                null,
+                null,
                 null,
                 null,
                 null,
