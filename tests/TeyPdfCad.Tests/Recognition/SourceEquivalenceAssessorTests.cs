@@ -304,6 +304,64 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_is_fail_closed_when_visible_width_is_unavailable()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with { VisibleWidthMm = null }
+            }
+        };
+        var rawText = Assert.Single(page.Entities.OfType<VectorText>());
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => ReferenceEquals(entity, rawText)
+                    ? (VectorEntity)(rawText with { VisibleWidthPoints = 0d })
+                    : entity)
+                .ToArray()
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                semantics,
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("visible text width is unavailable", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_appearance_is_rejected_when_visible_width_differs_from_raw_page()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                Text = candidate.SourceAppearance.Text with
+                {
+                    VisibleWidthMm = candidate.SourceAppearance.Text.VisibleWidthMm!.Value + 1d
+                }
+            }
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                semantics,
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("differs from the raw VectorPdfPage evidence", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_is_fail_closed_when_advance_width_is_unavailable()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
@@ -1030,7 +1088,8 @@ public sealed class SourceEquivalenceAssessorTests
                     ["d-text"],
                     "Helvetica",
                     5.0,
-                    new(7.5, 6.25)),
+                    new(7.5, 6.25),
+                    4.5),
                 new DimensionSourceLineAppearance(
                     new(0, 5),
                     new(10, 5),
@@ -1100,7 +1159,8 @@ public sealed class SourceEquivalenceAssessorTests
                     new VectorStyle(SourceLayer: "DIM", RgbColor: 0),
                     AdvanceWidthPoints: 5.0 / VectorPdfPage.MillimetresPerPoint,
                     FontName: "Helvetica",
-                    VisualCenter: new(7.5, 6.25))
+                    VisualCenter: new(7.5, 6.25),
+                    VisibleWidthPoints: 4.5 / VectorPdfPage.MillimetresPerPoint)
             ]);
 
         return (candidate, page);
