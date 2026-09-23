@@ -172,6 +172,8 @@ public sealed class ConversionPipelineTests
         Assert.True(
             evidence.GetProperty("sourceAdvanceWidthMm").GetDouble() > 0d);
         Assert.True(
+            evidence.GetProperty("sourceVisibleWidthMm").GetDouble() > 0d);
+        Assert.True(
             evidence.GetProperty("sourceHeightMm").GetDouble() > 0d);
     }
 
