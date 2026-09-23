@@ -151,6 +151,20 @@ public sealed class PdfPigVectorDocumentReaderTests
     }
 
     [Fact]
+    public async Task Reader_reports_text_clipping_without_hiding_visible_fill_clip_text()
+    {
+        const string contents = "0 0 m 10 10 l S BT /F1 12 Tf 4 Tr 72 700 Td (CLIPPED) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        Assert.Contains(
+            page.Diagnostics,
+            diagnostic => diagnostic.Code == "unsupported-pdf-text-clipping");
+    }
+
+    [Fact]
     public async Task Reader_derives_text_height_from_visible_glyph_box_not_nominal_font_size()
     {
         // Type1 Helvetica at a nominal 40 pt renders a glyph bounding box that
