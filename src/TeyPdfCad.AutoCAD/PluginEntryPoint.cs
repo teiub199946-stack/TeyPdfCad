@@ -17,7 +17,7 @@ public sealed class PluginEntryPoint : IExtensionApplication
         document?.Editor.WriteMessage(
             "\nTeyPdfCad loaded successfully. Commands: TEYPDFPING, TEYPDFANALYZE, TEYPDFDUMP, " +
             "TEYPDFDUMPALL, TEYPDFRECONSTRUCT, TEYPDFRECONSTRUCTALL, TEYPDFSHEETCONFIG, " +
-            "TEYPDFSHEETAUDIT.\n");
+            "TEYPDFSHEETAUDIT, TEYPDFAUDITDWG, TEYPDFDIMMETRICS.\n");
     }
 
     public void Terminate()
