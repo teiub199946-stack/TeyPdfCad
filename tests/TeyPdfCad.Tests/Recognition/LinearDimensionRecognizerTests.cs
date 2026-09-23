@@ -81,7 +81,12 @@ public sealed class LinearDimensionRecognizerTests
             0,
             "DIM",
             ["text"],
-            0x445566));
+            0x445566,
+            FontName: "Arial",
+            AdvanceWidth: 5.0,
+            VisualCenter: new Point2(26, 3),
+            VisibleWidth: 4.5,
+            FontProgramSha256: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"));
 
         var dimension = Assert.Single(new LinearDimensionRecognizer().Recognize(scene));
         var appearance = Assert.IsType<DimensionSourceAppearance>(dimension.SourceAppearance);
@@ -91,6 +96,10 @@ public sealed class LinearDimensionRecognizerTests
         Assert.Equal("DIM", appearance.Text.Layer);
         Assert.Equal(0x445566, appearance.Text.RgbColor);
         Assert.Equal(["text"], appearance.Text.SourceIds);
+        Assert.Equal("Arial", appearance.Text.FontName);
+        Assert.Equal(5.0, appearance.Text.AdvanceWidthMm);
+        Assert.Equal(4.5, appearance.Text.VisibleWidthMm);
+        Assert.Equal("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", appearance.Text.FontProgramSha256);
 
         Assert.Equal(0.35, appearance.DimensionLine.StrokeWidthMm!.Value, 6);
         Assert.Equal([4.0, 1.0], appearance.DimensionLine.DashPatternMm);
