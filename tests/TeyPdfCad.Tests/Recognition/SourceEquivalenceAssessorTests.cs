@@ -454,6 +454,92 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_rejects_mismatched_extension_line_styles_as_unrepresentable()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var changedExtension = candidate.SourceAppearance!.ExtensionLines[1] with { RgbColor = 0xFF0000 };
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance with
+            {
+                ExtensionLines =
+                [
+                    candidate.SourceAppearance.ExtensionLines[0],
+                    changedExtension
+                ]
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => entity.SourceId == "d-ext-2"
+                    ? (VectorEntity)new VectorLine(
+                        "d-ext-2",
+                        changedExtension.Start,
+                        changedExtension.End,
+                        new VectorStyle(
+                            SourceLayer: "DIM",
+                            RgbColor: 0xFF0000,
+                            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint))
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("extension", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("same native DIMSTYLE", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_equivalence_rejects_arrow_style_drift_from_dimension_line()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var changedArrow = candidate.SourceAppearance!.ArrowLines[0] with { StrokeWidthMm = 0.50 };
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance with
+            {
+                ArrowLines =
+                [
+                    changedArrow,
+                    candidate.SourceAppearance.ArrowLines[1]
+                ]
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => entity.SourceId == "d-arrow-1"
+                    ? (VectorEntity)new VectorLine(
+                        "d-arrow-1",
+                        changedArrow.Start,
+                        changedArrow.End,
+                        new VectorStyle(
+                            SourceLayer: "DIM",
+                            RgbColor: 0,
+                            StrokeWidthPoints: 0.50 / VectorPdfPage.MillimetresPerPoint))
+                    : entity)
+                .ToArray()
+        };
+
+        var assessment = SourceEquivalenceAssessor.Build(
+                page,
+                EmptySemantics() with { Dimensions = [candidate] },
+                new HatchRecognitionResult([], []))
+            .GetRequired(SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("arrow", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("dimension-line style", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_equivalence_exposes_exact_native_font_and_width_proof_as_separate_blocker()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
