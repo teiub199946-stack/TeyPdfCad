@@ -401,8 +401,10 @@ internal static class NativeExpectationBuilder
             ArrowSize = 2.5d,
             TickSize = tickSize ?? 0d,
             DimensionLineExtension = 0d,
-            ExtensionLineOffset = 0d,
-            ExtensionLineExtension = IndependentExtensionBeyondDimensionLine(appearance) ?? 0d,
+            ExtensionLineOffset = appearance is null ? 0.75d : 0d,
+            ExtensionLineExtension = appearance is null
+                ? 1.25d
+                : IndependentExtensionBeyondDimensionLine(appearance) ?? 0d,
             ScaleFactor = 1d,
             Style = new TextStyle("TEYPDFCAD_TEXT")
             {
