@@ -190,6 +190,30 @@ public sealed class ConversionPipelineTests
             evidence.GetProperty("sourceVisibleWidthMm").GetDouble() > 0d);
         Assert.True(
             evidence.GetProperty("sourceHeightMm").GetDouble() > 0d);
+        Assert.Equal(
+            "drawing-wcs-model-mm",
+            evidence.GetProperty("sourceCoordinateFrame").GetString());
+        Assert.Equal(0d, evidence.GetProperty("modelOriginX").GetDouble(), 9);
+        Assert.Equal(0d, evidence.GetProperty("modelOriginY").GetDouble(), 9);
+
+        var sourceGeometry = evidence
+            .GetProperty("sourceLineGeometry")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Equal(5, sourceGeometry.Length);
+        Assert.Single(sourceGeometry.Where(item =>
+            item.GetProperty("role").GetString() == "dimension-line"));
+        Assert.Equal(2, sourceGeometry.Count(item =>
+            item.GetProperty("role").GetString() == "extension-line"));
+        Assert.Equal(2, sourceGeometry.Count(item =>
+            item.GetProperty("role").GetString() == "arrow-geometry"));
+        Assert.All(sourceGeometry, item =>
+        {
+            Assert.True(double.IsFinite(item.GetProperty("startX").GetDouble()));
+            Assert.True(double.IsFinite(item.GetProperty("startY").GetDouble()));
+            Assert.True(double.IsFinite(item.GetProperty("endX").GetDouble()));
+            Assert.True(double.IsFinite(item.GetProperty("endY").GetDouble()));
+        });
     }
 
     [Fact]
