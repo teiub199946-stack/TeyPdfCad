@@ -145,11 +145,19 @@ public sealed class DimensionMetricComparatorTests
     public void Comparator_rejects_missing_regenerated_block_geometry()
     {
         var source = SourceReport("candidate-1", "100", 7.5);
-        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
-            .Replace(
-                ",\n          \"blockGeometry\": [\n            {\n              \"entityType\": \"Line\",\n              \"entityHandle\": \"40\",\n              \"geometryKind\": \"line\",\n              \"startX\": 0,\n              \"startY\": 5,\n              \"startZ\": 0,\n              \"endX\": 10,\n              \"endY\": 5,\n              \"endZ\": 0,\n              \"minX\": 0,\n              \"minY\": 5,\n              \"minZ\": 0,\n              \"maxX\": 10,\n              \"maxY\": 5,\n              \"maxZ\": 0,\n              \"nestedBlockName\": \"\",\n              \"vertexCount\": 0\n            }\n          ]",
-                string.Empty,
-                StringComparison.Ordinal);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5);
+        var blockGeometryStart = nativeDimension.IndexOf(
+            "\"blockGeometry\": [",
+            StringComparison.Ordinal);
+        var explodedGeometryStart = nativeDimension.IndexOf(
+            "\"explodedGeometry\": [",
+            blockGeometryStart,
+            StringComparison.Ordinal);
+        Assert.True(blockGeometryStart >= 0);
+        Assert.True(explodedGeometryStart > blockGeometryStart);
+        nativeDimension = nativeDimension.Remove(
+            blockGeometryStart,
+            explodedGeometryStart - blockGeometryStart);
         var native = $"""
         {
           "schemaVersion": "8",
@@ -164,6 +172,34 @@ public sealed class DimensionMetricComparatorTests
 
         Assert.False(candidate.MeasurementsAreUsable);
         Assert.Contains("native-block-geometry-missing", candidate.Blockers);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
+    }
+
+    [Fact]
+    public void Comparator_rejects_cross_snapshot_structural_transform_drift()
+    {
+        var source = SourceReport("candidate-1", "100", 7.5);
+        var nativeDimension = NativeDimension("candidate-1", "100", 7.5)
+            .Replace(
+                "\"entityHandle\": \"block-1\",\n              \"geometryKind\": \"line\",\n              \"startX\": 0,\n              \"startY\": 0,\n              \"startZ\": 0,\n              \"endX\": 0,\n              \"endY\": 6.25",
+                "\"entityHandle\": \"block-1\",\n              \"geometryKind\": \"line\",\n              \"startX\": 0,\n              \"startY\": 0,\n              \"startZ\": 0,\n              \"endX\": 0,\n              \"endY\": 6.5",
+                StringComparison.Ordinal);
+        var native = $"""
+        {
+          "schemaVersion": "8",
+          "drawingName": "probe.dwg",
+          "drawingUnits": "Millimeters",
+          "dimensions": [{{nativeDimension}}]
+        }
+        """;
+
+        var candidate = Assert.Single(
+            DimensionMetricComparator.Compare(source, native).Candidates);
+
+        Assert.Contains(
+            "cross-snapshot-structural-transform-mismatch",
+            candidate.Blockers);
+        Assert.False(candidate.MeasurementsAreUsable);
         Assert.False(candidate.SourceToNativeEquivalenceProven);
     }
 
@@ -1542,7 +1578,7 @@ public sealed class DimensionMetricComparatorTests
           "blockGeometry": [
             {
               "entityType": "Line",
-              "entityHandle": "40",
+              "entityHandle": "block-0",
               "geometryKind": "line",
               "startX": 0,
               "startY": 5,
@@ -1555,6 +1591,82 @@ public sealed class DimensionMetricComparatorTests
               "minZ": 0,
               "maxX": 10,
               "maxY": 5,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "block-1",
+              "geometryKind": "line",
+              "startX": 0,
+              "startY": 0,
+              "startZ": 0,
+              "endX": 0,
+              "endY": 6.25,
+              "endZ": 0,
+              "minX": 0,
+              "minY": 0,
+              "minZ": 0,
+              "maxX": 0,
+              "maxY": 6.25,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "block-2",
+              "geometryKind": "line",
+              "startX": 10,
+              "startY": 0,
+              "startZ": 0,
+              "endX": 10,
+              "endY": 6.25,
+              "endZ": 0,
+              "minX": 10,
+              "minY": 0,
+              "minZ": 0,
+              "maxX": 10,
+              "maxY": 6.25,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "block-3",
+              "geometryKind": "line",
+              "startX": -1,
+              "startY": 4,
+              "startZ": 0,
+              "endX": 1,
+              "endY": 6,
+              "endZ": 0,
+              "minX": -1,
+              "minY": 4,
+              "minZ": 0,
+              "maxX": 1,
+              "maxY": 6,
+              "maxZ": 0,
+              "nestedBlockName": "",
+              "vertexCount": 0
+            },
+            {
+              "entityType": "Line",
+              "entityHandle": "block-4",
+              "geometryKind": "line",
+              "startX": 9,
+              "startY": 6,
+              "startZ": 0,
+              "endX": 11,
+              "endY": 4,
+              "endZ": 0,
+              "minX": 9,
+              "minY": 4,
+              "minZ": 0,
+              "maxX": 11,
+              "maxY": 6,
               "maxZ": 0,
               "nestedBlockName": "",
               "vertexCount": 0
