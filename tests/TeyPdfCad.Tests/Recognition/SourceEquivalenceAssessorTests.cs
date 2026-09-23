@@ -314,6 +314,49 @@ public sealed class SourceEquivalenceAssessorTests
             assessment => Assert.False(assessment.IsComplete));
     }
 
+    [Fact]
+    public void Dimension_polyline_segment_source_is_fail_closed_for_whole_source_suppression()
+    {
+        var (candidate, _) = CreateDimensionAppearanceFixture();
+        var lineStyle = new VectorStyle(
+            SourceLayer: "DIM",
+            RgbColor: 0,
+            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint);
+        var page = new VectorPdfPage(
+            1,
+            100,
+            100,
+            0,
+            [
+                new VectorPolyline(
+                    "d-line",
+                    [new(0, 0), new(10, 0), new(10, 10)],
+                    false,
+                    lineStyle),
+                new VectorLine("d-ext", new(0, 0), new(0, 5), lineStyle),
+                new VectorLine("d-arrow", new(-1, -1), new(1, 1), lineStyle),
+                new VectorText(
+                    "d-text",
+                    "10",
+                    new(5, 5),
+                    2.5 / VectorPdfPage.MillimetresPerPoint,
+                    new VectorStyle(SourceLayer: "DIM", RgbColor: 0))
+            ]);
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("VectorPolyline", assessment.Reason, StringComparison.Ordinal);
+        Assert.Contains("whole-source", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static (DimensionCandidate Candidate, VectorPdfPage Page) CreateDimensionAppearanceFixture()
     {
         var candidate = new DimensionCandidate(
