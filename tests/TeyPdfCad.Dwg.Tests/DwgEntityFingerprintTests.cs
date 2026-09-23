@@ -48,6 +48,32 @@ public sealed class DwgEntityFingerprintTests
         Assert.NotEqual(baseline, Fingerprint(differentTextStyle));
     }
 
+    [Fact]
+    public void Dimension_geometry_fingerprint_covers_native_text_placement_and_rotation()
+    {
+        var baseline = new DimensionAligned(
+            new CSMath.XYZ(0, 0, 0),
+            new CSMath.XYZ(10, 0, 0))
+        {
+            DefinitionPoint = new CSMath.XYZ(5, 5, 0),
+            Style = CreateStyle()
+        };
+        var moved = new DimensionAligned(
+            new CSMath.XYZ(0, 0, 0),
+            new CSMath.XYZ(10, 0, 0))
+        {
+            DefinitionPoint = new CSMath.XYZ(5, 5, 0),
+            Style = CreateStyle(),
+            TextMiddlePoint = new CSMath.XYZ(8, 7, 0),
+            TextRotation = Math.PI / 6d,
+            IsTextUserDefinedLocation = true
+        };
+
+        Assert.NotEqual(
+            DwgEntityFingerprint.ComputeGeometry(baseline),
+            DwgEntityFingerprint.ComputeGeometry(moved));
+    }
+
     private static DimensionStyle CreateStyle()
         => new("TEYPDFCAD_SCALE_1")
         {
