@@ -215,17 +215,18 @@ public static class SourceEquivalenceAssessor
                 "Dimension source appearance is captured and source-linked, but the dimension-line observation is composite (for example split around text); raw source segments must be compared independently before suppression.");
         }
 
-        var arrowMappingBlocker = DescribeUnprovenDimensionArrowMapping(appearance);
-        if (arrowMappingBlocker is not null)
+        var remainingBlockers = new[]
         {
-            return new SourceEquivalenceAssessmentResult(
-                false,
-                arrowMappingBlocker);
+            DescribeUnprovenDimensionTextMapping(appearance),
+            DescribeUnprovenDimensionArrowMapping(appearance),
+            "Dimension/extension line style mapping is not yet independently proven equivalent."
         }
+        .Where(reason => !string.IsNullOrWhiteSpace(reason))
+        .ToArray();
 
         return new SourceEquivalenceAssessmentResult(
             false,
-            "Dimension source appearance is captured before DWG emission, but native DIMENSION font/advance-width metrics and dimension/extension line style mapping are not yet independently proven equivalent.");
+            string.Join(" ", remainingBlockers));
     }
 
     private static string? ValidateDimensionArrowEndpointEvidence(
@@ -279,6 +280,17 @@ public static class SourceEquivalenceAssessor
         }
 
         return null;
+    }
+
+    private static string DescribeUnprovenDimensionTextMapping(
+        DimensionSourceAppearance appearance)
+    {
+        var sourceFont = appearance.Text.FontName ?? "<unknown>";
+        var sourceWidth = appearance.Text.AdvanceWidthMm.HasValue
+            ? appearance.Text.AdvanceWidthMm.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+            : "<unknown>";
+
+        return $"Native DIMENSION text is now deterministically bound to TEYPDFCAD_TEXT/arial.ttf, but raw PDF font '{sourceFont}' has not been proven to resolve to the same font binary/glyph metrics, and native rendered advance width has not been independently measured against the source advance width {sourceWidth} mm.";
     }
 
     private static string? DescribeUnprovenDimensionArrowMapping(
