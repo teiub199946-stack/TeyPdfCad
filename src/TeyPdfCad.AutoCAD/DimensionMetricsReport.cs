@@ -71,7 +71,13 @@ internal sealed record DimensionBlockGeometryMetric(
     double? MaxY,
     double? MaxZ,
     string NestedBlockName,
-    int VertexCount);
+    int VertexCount,
+    string ColorMethod = "",
+    int? RgbColor = null,
+    string LineWeightMode = "",
+    int? LineWeightHundredthsMm = null,
+    string Linetype = "",
+    string Layer = "");
 
 internal sealed record DimensionMetric(
     string DimensionHandle,
@@ -97,7 +103,7 @@ internal sealed record DimensionMetricsReport(
 
 internal static class DimensionMetricsReportFormatter
 {
-    public const string SchemaVersion = "8";
+    public const string SchemaVersion = "9";
 
     public static string Format(DimensionMetricsReport report)
     {
