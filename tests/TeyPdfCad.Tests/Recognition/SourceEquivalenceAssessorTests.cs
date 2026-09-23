@@ -454,6 +454,75 @@ public sealed class SourceEquivalenceAssessorTests
     }
 
     [Fact]
+    public void Dimension_source_equivalence_identifies_endpoint_single_wing_arrow_as_unmapped()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("single-wing", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("arrow", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dimension_source_equivalence_identifies_crossing_oblique_ticks_but_keeps_tick_size_unproven()
+    {
+        var (candidate, page) = CreateDimensionAppearanceFixture();
+        var firstTick = new DimensionSourceLineAppearance(
+            new(-1, 4), new(1, 6), "DIM", 0, 0.25, [], ["d-arrow-1"]);
+        var secondTick = new DimensionSourceLineAppearance(
+            new(9, 6), new(11, 4), "DIM", 0, 0.25, [], ["d-arrow-2"]);
+        candidate = candidate with
+        {
+            SourceAppearance = candidate.SourceAppearance! with
+            {
+                ArrowLines = [firstTick, secondTick]
+            }
+        };
+        page = page with
+        {
+            Entities = page.Entities
+                .Select(entity => entity.SourceId switch
+                {
+                    "d-arrow-1" => (VectorEntity)new VectorLine(
+                        "d-arrow-1", firstTick.Start, firstTick.End,
+                        new VectorStyle(
+                            SourceLayer: "DIM", RgbColor: 0,
+                            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                    "d-arrow-2" => (VectorEntity)new VectorLine(
+                        "d-arrow-2", secondTick.Start, secondTick.End,
+                        new VectorStyle(
+                            SourceLayer: "DIM", RgbColor: 0,
+                            StrokeWidthPoints: 0.25 / VectorPdfPage.MillimetresPerPoint)),
+                    _ => entity
+                })
+                .ToArray()
+        };
+        var semantics = EmptySemantics() with { Dimensions = [candidate] };
+
+        var result = SourceEquivalenceAssessor.Build(
+            page,
+            semantics,
+            new HatchRecognitionResult([], []));
+
+        var assessment = result.GetRequired(
+            SourceReplacementPlanner.GetCandidateKey(candidate, 1));
+
+        Assert.False(assessment.IsComplete);
+        Assert.Contains("oblique", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("TickSize", assessment.Reason, StringComparison.Ordinal);
+        Assert.Contains("calibration", assessment.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dimension_source_appearance_is_rejected_when_visual_center_differs_from_raw_page()
     {
         var (candidate, page) = CreateDimensionAppearanceFixture();
