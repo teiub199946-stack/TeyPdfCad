@@ -594,6 +594,14 @@ public sealed class AcadSharpDwgWriter
         dimension.Text = NativeDimensionTextBuilder.Build(
             candidate.SourceText,
             candidate.DisplayedValue);
+        if (candidate.SourceAppearance?.Text.VisualCenter is { } visualCenter)
+        {
+            dimension.TextMiddlePoint = new XYZ(
+                sheet.ModelOriginX + visualCenter.X,
+                sheet.ModelOriginY + visualCenter.Y,
+                0d);
+            dimension.IsTextUserDefinedLocation = true;
+        }
         dimension.Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ");
         document.Entities.Add(dimension);
         return dimension;
