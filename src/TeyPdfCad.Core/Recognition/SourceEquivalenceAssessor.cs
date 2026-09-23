@@ -200,6 +200,14 @@ public static class SourceEquivalenceAssessor
                 semanticMismatch);
         }
 
+        var arrowTopologyMismatch = ValidateDimensionArrowEndpointEvidence(appearance);
+        if (arrowTopologyMismatch is not null)
+        {
+            return new SourceEquivalenceAssessmentResult(
+                false,
+                arrowTopologyMismatch);
+        }
+
         if (appearance.DimensionLine.IsCompositeObservation)
         {
             return new SourceEquivalenceAssessmentResult(
@@ -210,6 +218,59 @@ public static class SourceEquivalenceAssessor
         return new SourceEquivalenceAssessmentResult(
             false,
             "Dimension source appearance is captured before DWG emission (text metrics/color and line geometry/stroke/dash/color), but native DIMENSION font metrics, arrow topology/type and dimension/extension line style mapping are not yet independently proven equivalent.");
+    }
+
+    private static string? ValidateDimensionArrowEndpointEvidence(
+        DimensionSourceAppearance appearance)
+    {
+        if (appearance.ArrowLines.Count < 2)
+        {
+            return "Dimension source arrow topology is incomplete: both dimension endpoints require independent raw arrow evidence.";
+        }
+
+        var firstEndpoint = appearance.DimensionLine.Start;
+        var secondEndpoint = appearance.DimensionLine.End;
+        var contactTolerance = Math.Max(appearance.Text.HeightMm * 0.5d, 0.5d);
+        var firstSourceIds = new HashSet<string>(StringComparer.Ordinal);
+        var secondSourceIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var arrow in appearance.ArrowLines)
+        {
+            var touchesFirst = GeometryMath.DistancePointToSegment(
+                firstEndpoint,
+                arrow.Start,
+                arrow.End) <= contactTolerance;
+            var touchesSecond = GeometryMath.DistancePointToSegment(
+                secondEndpoint,
+                arrow.Start,
+                arrow.End) <= contactTolerance;
+
+            if (touchesFirst && touchesSecond)
+            {
+                return "Dimension source arrow topology is ambiguous: one raw arrow geometry reaches both dimension endpoints.";
+            }
+
+            if (!touchesFirst && !touchesSecond)
+            {
+                return "Dimension source arrow topology is not endpoint-bound to the source dimension line.";
+            }
+
+            var target = touchesFirst ? firstSourceIds : secondSourceIds;
+            foreach (var sourceId in arrow.SourceIds.Where(id => !string.IsNullOrWhiteSpace(id)))
+                target.Add(sourceId);
+        }
+
+        if (firstSourceIds.Count == 0 || secondSourceIds.Count == 0)
+        {
+            return "Dimension source arrow topology is incomplete: both dimension endpoints require source-bound arrow geometry.";
+        }
+
+        if (firstSourceIds.Overlaps(secondSourceIds))
+        {
+            return "Dimension source arrow topology is ambiguous: the same SourceId claims arrow evidence at both endpoints.";
+        }
+
+        return null;
     }
 
     private static string? ValidateDimensionCandidateConsistency(
