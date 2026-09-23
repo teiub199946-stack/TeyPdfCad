@@ -553,6 +553,7 @@ public sealed class LinearDimensionRecognizer
             text.AdvanceWidth,
             text.VisualCenter,
             text.VisibleWidth,
+            text.VisibleHeight,
             text.FontProgramSha256,
             text.FontProgramSubtype,
             text.FontEncodingName,
