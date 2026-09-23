@@ -91,7 +91,7 @@ internal static class DimensionMetricComparator
         var drawingUnits = GetString(nativeDocument.RootElement, "drawingUnits") ?? string.Empty;
         var globalBlockers = new List<string>();
 
-        if (!string.Equals(nativeSchemaVersion, "8", StringComparison.Ordinal))
+        if (!string.Equals(nativeSchemaVersion, "9", StringComparison.Ordinal))
             globalBlockers.Add("unsupported-native-metrics-schema");
         if (!TryGetArray(sourceDocument.RootElement, "pages", out _))
             globalBlockers.Add("source-report-pages-missing");
@@ -660,6 +660,24 @@ internal static class DimensionMetricComparator
             blockers.Add("native-exploded-line-not-in-source-plane");
         }
 
+        if (native.BlockGeometry
+            .Where(item => string.Equals(
+                item.GeometryKind,
+                "line",
+                StringComparison.Ordinal))
+            .Any(line => !HasUnambiguousRawLineAppearance(line)))
+        {
+            blockers.Add(
+                "native-block-line-appearance-inherited-or-unresolved");
+        }
+
+        if (explodedLines.Any(line =>
+                !HasUnambiguousRawLineAppearance(line)))
+        {
+            blockers.Add(
+                "native-exploded-line-appearance-inherited-or-unresolved");
+        }
+
         var blockLines = native.BlockGeometry
             .Where(item => string.Equals(
                 item.GeometryKind,
@@ -1047,7 +1065,13 @@ internal static class DimensionMetricComparator
                         GetNullableDouble(geometry, "maxY"),
                         GetNullableDouble(geometry, "maxZ"),
                         GetString(geometry, "nestedBlockName") ?? string.Empty,
-                        GetNullableInt(geometry, "vertexCount") ?? 0));
+                        GetNullableInt(geometry, "vertexCount") ?? 0,
+                        GetString(geometry, "colorMethod") ?? string.Empty,
+                        GetNullableInt(geometry, "rgbColor"),
+                        GetString(geometry, "lineWeightMode") ?? string.Empty,
+                        GetNullableInt(geometry, "lineWeightHundredthsMm"),
+                        GetString(geometry, "linetype") ?? string.Empty,
+                        GetString(geometry, "layer") ?? string.Empty));
                 }
             }
 
@@ -1408,6 +1432,51 @@ internal static class DimensionMetricComparator
                 Sine * x + Cosine * y + TranslateY);
     }
 
+    private static bool HasUnambiguousRawLineAppearance(
+        NativeBlockGeometry line)
+    {
+        var colorExplicit =
+            (string.Equals(
+                line.ColorMethod,
+                "ByColor",
+                StringComparison.Ordinal)
+             || string.Equals(
+                 line.ColorMethod,
+                 "ByAci",
+                 StringComparison.Ordinal))
+            && line.RgbColor.HasValue;
+
+        var lineWeightExplicit =
+            line.LineWeightHundredthsMm.HasValue
+            && line.LineWeightHundredthsMm.Value >= 0
+            && !string.IsNullOrWhiteSpace(line.LineWeightMode)
+            && !line.LineWeightMode.Contains(
+                "ByLayer",
+                StringComparison.OrdinalIgnoreCase)
+            && !line.LineWeightMode.Contains(
+                "ByBlock",
+                StringComparison.OrdinalIgnoreCase)
+            && !line.LineWeightMode.Contains(
+                "Default",
+                StringComparison.OrdinalIgnoreCase);
+
+        var linetypeExplicit =
+            !string.IsNullOrWhiteSpace(line.Linetype)
+            && !string.Equals(
+                line.Linetype,
+                "ByLayer",
+                StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
+                line.Linetype,
+                "ByBlock",
+                StringComparison.OrdinalIgnoreCase);
+
+        return colorExplicit
+            && lineWeightExplicit
+            && linetypeExplicit
+            && !string.IsNullOrWhiteSpace(line.Layer);
+    }
+
     private static bool IsLineInSourcePlane(
         NativeBlockGeometry line,
         double tolerance)
@@ -1577,7 +1646,13 @@ internal static class DimensionMetricComparator
                 GetNullableDouble(geometry, "maxY"),
                 GetNullableDouble(geometry, "maxZ"),
                 GetString(geometry, "nestedBlockName") ?? string.Empty,
-                GetNullableInt(geometry, "vertexCount") ?? 0));
+                GetNullableInt(geometry, "vertexCount") ?? 0,
+                GetString(geometry, "colorMethod") ?? string.Empty,
+                GetNullableInt(geometry, "rgbColor"),
+                GetString(geometry, "lineWeightMode") ?? string.Empty,
+                GetNullableInt(geometry, "lineWeightHundredthsMm"),
+                GetString(geometry, "linetype") ?? string.Empty,
+                GetString(geometry, "layer") ?? string.Empty));
         }
 
         return output;
@@ -1842,7 +1917,13 @@ internal static class DimensionMetricComparator
         double? MaxY,
         double? MaxZ,
         string NestedBlockName,
-        int VertexCount);
+        int VertexCount,
+        string ColorMethod,
+        int? RgbColor,
+        string LineWeightMode,
+        int? LineWeightHundredthsMm,
+        string Linetype,
+        string Layer);
 
     private sealed record NativeDimensionEvidence(
         string CandidateId,
