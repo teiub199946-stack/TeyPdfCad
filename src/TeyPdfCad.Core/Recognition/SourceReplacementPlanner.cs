@@ -183,15 +183,22 @@ public sealed class SourceReplacementPlanner
         SemanticReconstructionResult semantics,
         int pageNumber)
     {
+        var primaryDimensionIds = semantics.Dimensions
+            .Select(candidate => GetCandidateKey(candidate, pageNumber))
+            .ToHashSet(StringComparer.Ordinal);
         var dimensionClaimants = semantics.DimensionClaimants.Count > 0
             ? semantics.DimensionClaimants
             : semantics.Dimensions;
         foreach (var candidate in dimensionClaimants)
+        {
+            var candidateId = GetCandidateKey(candidate, pageNumber);
             output.Add(new CandidateDescriptor(
-                GetCandidateKey(candidate, pageNumber),
+                candidateId,
                 "DIMENSION",
                 NormalizeClaims(candidate.SourceClaims),
-                NormalizeDeclaredSourceIds(candidate.ProvenanceIds)));
+                NormalizeDeclaredSourceIds(candidate.ProvenanceIds),
+                CanEmit: primaryDimensionIds.Contains(candidateId)));
+        }
         foreach (var candidate in semantics.Leaders)
             output.Add(new CandidateDescriptor(
                 GetCandidateKey(candidate, pageNumber),
@@ -524,6 +531,28 @@ public sealed class SourceReplacementPlanner
                     ReplacementResidualSeverity.High,
                     "Incomplete, partial, legacy, protected-overlap, or unresolved recognizer claims prevent native emission.");
             }
+
+            if (!candidate.CanEmit)
+            {
+                deferred.Add(candidate.CandidateId);
+                foreach (var sourceId in candidate.Claims
+                             .Select(claim => claim.SourceId)
+                             .Where(id => !string.IsNullOrWhiteSpace(id)))
+                {
+                    preserved.Add(sourceId);
+                }
+
+                AddResidual(
+                    residuals,
+                    candidate.Claims
+                        .Select(claim => claim.SourceId)
+                        .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
+                        ?? "(candidate)",
+                    candidate.CandidateId,
+                    ReplacementResidualKind.DeferredUnresolvedClaims,
+                    ReplacementResidualSeverity.High,
+                    "Safety-only claimant is not a primary writer candidate; it remains in the shared-claim graph but cannot own source replacement.");
+            }
         }
 
         var claimsBySource = uniqueCandidates
@@ -706,6 +735,7 @@ public sealed class SourceReplacementPlanner
     private static bool EquivalentCandidateDescriptor(CandidateDescriptor first, CandidateDescriptor second)
         => string.Equals(first.SemanticType, second.SemanticType, StringComparison.Ordinal)
             && first.HatchClassification == second.HatchClassification
+            && first.CanEmit == second.CanEmit
             && first.DeclaredSourceIds.SequenceEqual(second.DeclaredSourceIds, StringComparer.Ordinal)
             && first.Claims
                 .OrderBy(claim => claim.SourceId, StringComparer.Ordinal)
@@ -812,5 +842,6 @@ public sealed class SourceReplacementPlanner
         string SemanticType,
         IReadOnlyList<RecognizerSourceClaim> Claims,
         IReadOnlyList<string> DeclaredSourceIds,
-        HatchClassification? HatchClassification = null);
+        HatchClassification? HatchClassification = null,
+        bool CanEmit = true);
 }
