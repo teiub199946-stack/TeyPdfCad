@@ -47,7 +47,7 @@ public sealed class ConversionPipeline
         : this(
             dwgWriter,
             dwgVerifier,
-            destructiveSuppressionEnabled: true)
+            destructiveSuppressionEnabled: false)
     {
     }
 
