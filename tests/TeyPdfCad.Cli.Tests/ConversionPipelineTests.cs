@@ -348,6 +348,43 @@ public sealed class ConversionPipelineTests
                 == (int)ReplacementResidualKind.SourceEquivalenceIncomplete);
     }
 
+    [Fact]
+    public async Task Internal_two_argument_pipeline_constructor_keeps_destructive_suppression_disabled()
+    {
+        var directory = CreateTestDirectory();
+        var input = Path.Combine(directory, "axis.pdf");
+        var output = Path.Combine(directory, "result.dwg");
+        var report = Path.Combine(directory, "result.json");
+        await File.WriteAllBytesAsync(input, CreateSegmentedAxisPdf());
+
+        var pipeline = new ConversionPipeline(
+            new ProductionDwgDocumentWriter(),
+            new ForceEquivalenceCompleteVerifier());
+
+        var result = await pipeline.ConvertAsync(
+            input,
+            output,
+            report,
+            default);
+
+        Assert.Equal(ConversionOutcome.Partial, result.Outcome);
+        Assert.True(File.Exists(output));
+
+        var drawing = DwgReader.Read(output);
+        Assert.Equal(3, drawing.Entities.OfType<ACadSharp.Entities.Line>().Count());
+        Assert.DoesNotContain(
+            drawing.Entities.OfType<ACadSharp.Entities.Insert>(),
+            insert => insert.Block.Name == "TEY_AXIS");
+
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var page = Assert.Single(json.RootElement.GetProperty("pages").EnumerateArray());
+        Assert.Equal(0, page.GetProperty("suppressedSourceCount").GetInt32());
+        Assert.Contains(
+            json.RootElement.GetProperty("warnings").EnumerateArray(),
+            warning => warning.GetString()!.Contains(
+                "DestructiveSuppressionDisabled",
+                StringComparison.Ordinal));
+    }
 
     [Fact]
     public async Task Pipeline_keeps_sources_when_probe_verification_rejects_a_native_candidate()
@@ -360,7 +397,8 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new ProductionDwgDocumentWriter(),
-            new RejectFirstCandidateVerification());
+            new RejectFirstCandidateVerification(),
+            destructiveSuppressionEnabled: true);
 
         var result = await pipeline.ConvertAsync(
             input,
@@ -398,7 +436,8 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new MutateFinalAxisWriter(),
-            new ForceEquivalenceCompleteVerifier());
+            new ForceEquivalenceCompleteVerifier(),
+            destructiveSuppressionEnabled: true);
 
         var result = await pipeline.ConvertAsync(
             input,
@@ -434,7 +473,8 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new CorruptProbeSourceEmissionWriter(),
-            new ForceEquivalenceCompleteVerifier());
+            new ForceEquivalenceCompleteVerifier(),
+            destructiveSuppressionEnabled: true);
 
         var result = await pipeline.ConvertAsync(
             input,
@@ -470,7 +510,8 @@ public sealed class ConversionPipelineTests
 
         var pipeline = new ConversionPipeline(
             new AddUnauthorizedSourceOnFinalWriter(),
-            new ForceEquivalenceCompleteVerifier());
+            new ForceEquivalenceCompleteVerifier(),
+            destructiveSuppressionEnabled: true);
 
         var result = await pipeline.ConvertAsync(
             input,
