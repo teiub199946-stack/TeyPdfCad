@@ -93,6 +93,27 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
+    public async Task Very_short_outside_text_dimension_survives_microscopic_endpoint_overhang()
+    {
+        // TEST-002/003 case_000210: 25 mm at 1:500 is ~0.05 mm in paper
+        // space. Endpoint mismatch shortens the observed dimension line to
+        // ~0.04 mm, so a legitimate outside-right text lands at projection
+        // ~1.33 even though its absolute longitudinal overhang is only ~0.013
+        // mm. Full extension + arrow evidence is still present.
+        var testCase = new DimensionCaseGenerator()
+            .Generate(210, 12345)
+            .Cases
+            .Single(testCase => testCase.Id == "case_000210");
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(1, actual.DetectedDimensions);
+        Assert.Equal(25d, actual.Value!.Value, 6);
+        Assert.Equal(500d, actual.DrawingScale!.Value, 6);
+    }
+
+    [Fact]
     public async Task Short_canonical_dimension_survives_small_absolute_pdf_noise()
     {
         // TEST-002/003 case_005570: a 25 mm linear dimension at 1:50 is only
