@@ -1,0 +1,91 @@
+name: Windows Manual Test Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/manual-acceptance-package
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: |
+          dotnet restore tests/TeyPdfCad.Pdf.Tests/TeyPdfCad.Pdf.Tests.csproj
+          dotnet restore tests/TeyPdfCad.Tests/TeyPdfCad.Tests.csproj
+          dotnet restore tests/TeyPdfCad.Dwg.Tests/TeyPdfCad.Dwg.Tests.csproj
+          dotnet restore tests/TeyPdfCad.Cli.Tests/TeyPdfCad.Cli.Tests.csproj
+          dotnet restore tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj
+          dotnet restore src/TeyPdfCad.Cli/TeyPdfCad.Cli.csproj
+
+      - name: PDF tests
+        run: dotnet test tests/TeyPdfCad.Pdf.Tests/TeyPdfCad.Pdf.Tests.csproj --configuration Release --no-restore
+
+      - name: Core tests
+        run: dotnet test tests/TeyPdfCad.Tests/TeyPdfCad.Tests.csproj --configuration Release --no-restore
+
+      - name: DWG tests
+        run: dotnet test tests/TeyPdfCad.Dwg.Tests/TeyPdfCad.Dwg.Tests.csproj --configuration Release --no-restore
+
+      - name: CLI tests
+        run: dotnet test tests/TeyPdfCad.Cli.Tests/TeyPdfCad.Cli.Tests.csproj --configuration Release --no-restore
+
+      - name: Build AutoCAD metrics plugin
+        run: dotnet build src/TeyPdfCad.AutoCAD/TeyPdfCad.AutoCAD.csproj --configuration Release --no-restore
+
+      - name: AutoCAD adapter tests
+        run: dotnet test tests/TeyPdfCad.AutoCAD.Tests/TeyPdfCad.AutoCAD.Tests.csproj --configuration Release --no-restore
+
+      - name: Publish self-contained Windows converter
+        run: >
+          dotnet publish src/TeyPdfCad.Cli/TeyPdfCad.Cli.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --no-restore
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishTrimmed=false
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          --output artifacts/TeyPdfCad-Windows-Test
+
+      - name: Add one-click test launcher
+        shell: pwsh
+        run: |
+          Copy-Item tools/manual-test/START_TEST.cmd artifacts/TeyPdfCad-Windows-Test/
+          Copy-Item tools/manual-test/Run-TeyPdfCadTest.ps1 artifacts/TeyPdfCad-Windows-Test/
+          Copy-Item tools/manual-test/README_TEST.txt artifacts/TeyPdfCad-Windows-Test/
+          New-Item -ItemType Directory -Force -Path artifacts/TeyPdfCad-Windows-Test/AutoCADPlugin | Out-Null
+          Copy-Item src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.AutoCAD.dll artifacts/TeyPdfCad-Windows-Test/AutoCADPlugin/
+          Copy-Item src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.Core.dll artifacts/TeyPdfCad-Windows-Test/AutoCADPlugin/
+          Copy-Item src/TeyPdfCad.AutoCAD/bin/Release/net48/TeyPdfCad.AutoCAD.deps.json artifacts/TeyPdfCad-Windows-Test/AutoCADPlugin/
+          $exeHash = (Get-FileHash -LiteralPath artifacts/TeyPdfCad-Windows-Test/TeyPdfCad.Cli.exe -Algorithm SHA256).Hash
+          $adapterHash = (Get-FileHash -LiteralPath artifacts/TeyPdfCad-Windows-Test/AutoCADPlugin/TeyPdfCad.AutoCAD.dll -Algorithm SHA256).Hash
+          $adapterCoreHash = (Get-FileHash -LiteralPath artifacts/TeyPdfCad-Windows-Test/AutoCADPlugin/TeyPdfCad.Core.dll -Algorithm SHA256).Hash
+          @(
+            "BuildCommit=$env:GITHUB_SHA"
+            "BuildBranch=$env:GITHUB_REF_NAME"
+            "BuiltUtc=$([DateTime]::UtcNow.ToString('o'))"
+            "Runtime=win-x64-self-contained"
+            "DestructiveSuppression=disabled"
+            "ExecutableSha256=$exeHash"
+            "AutoCADAdapterSha256=$adapterHash"
+            "AutoCADCoreSha256=$adapterCoreHash"
+          ) | Set-Content -LiteralPath artifacts/TeyPdfCad-Windows-Test/BUILD_INFO.txt -Encoding UTF8
+          Compress-Archive -Path artifacts/TeyPdfCad-Windows-Test/* -DestinationPath artifacts/TeyPdfCad-Windows-Test.zip -Force
+
+      - name: Upload Windows test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeyPdfCad-Windows-Test
+          path: artifacts/TeyPdfCad-Windows-Test.zip
+          if-no-files-found: error
+          retention-days: 14
