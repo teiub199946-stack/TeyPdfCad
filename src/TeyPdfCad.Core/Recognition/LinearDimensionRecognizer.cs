@@ -13,6 +13,7 @@ public sealed record LinearDimensionRecognitionResult(
 public sealed class LinearDimensionRecognizer
 {
     public const string AmbiguousEvidenceWarningCode = "DIMENSION_AMBIGUOUS_PARTIAL_ARROW";
+    private const double MaximumShortSpanPaperCorrectionMm = 0.02d;
 
     public IReadOnlyList<DimensionCandidate> Recognize(
         PrimitiveScene scene,
@@ -358,6 +359,25 @@ public sealed class LinearDimensionRecognizer
             rawScale,
             options.DrawingScale,
             options.CanonicalScaleRelativeTolerance);
+        var scaleResolvedByAbsolutePaperCorrection = false;
+
+        if (scale is null && !options.DrawingScale.HasValue)
+        {
+            var shortSpanLimit =
+                text.Height * options.TextDistanceHeightMultiplier;
+            if (NumericCompat.IsFinite(shortSpanLimit)
+                && shortSpanLimit > 0d
+                && probe.Value.ProjectedDistance <= shortSpanLimit)
+            {
+                scale = DimensionGeometryAnalysis
+                    .ResolveUniqueCanonicalScaleByPaperCorrection(
+                        displayedValue,
+                        probe.Value.ProjectedDistance,
+                        MaximumShortSpanPaperCorrectionMm);
+                scaleResolvedByAbsolutePaperCorrection = scale.HasValue;
+            }
+        }
+
         if (scale is null) return null;
 
         var definitionPoint1 = probe.Value.DefinitionPoint1;
@@ -376,6 +396,7 @@ public sealed class LinearDimensionRecognizer
                     scale.Value,
                     probe.Value,
                     options,
+                    scaleResolvedByAbsolutePaperCorrection,
                     out definitionPoint1,
                     out definitionPoint2,
                     out reconstructed))
@@ -395,7 +416,11 @@ public sealed class LinearDimensionRecognizer
                 1.0);
         var scaleScore = options.DrawingScale.HasValue
             ? measurementScore
-            : DimensionGeometryAnalysis.CanonicalScaleScore(rawScale, scale.Value);
+            : scaleResolvedByAbsolutePaperCorrection
+                ? 0d
+                : DimensionGeometryAnalysis.CanonicalScaleScore(
+                    rawScale,
+                    scale.Value);
 
         var confidence = 0.50
             + 0.10 * probe.Value.TextScore
@@ -445,8 +470,7 @@ public sealed class LinearDimensionRecognizer
         var absoluteOverhang = projection < 0d
             ? -projection * dimensionLineLength
             : (projection - 1d) * dimensionLineLength;
-        const double maximumAbsolutePaperOverhangMm = 0.02d;
-        return absoluteOverhang <= maximumAbsolutePaperOverhangMm;
+        return absoluteOverhang <= MaximumShortSpanPaperCorrectionMm;
     }
 
     private static bool TryNormalizeShortCanonicalGeometry(
@@ -456,6 +480,7 @@ public sealed class LinearDimensionRecognizer
         double resolvedScale,
         GeometryProbe probe,
         DimensionRecognitionOptions options,
+        bool scaleResolvedByAbsolutePaperCorrection,
         out Point2 definitionPoint1,
         out Point2 definitionPoint2,
         out double reconstructedMeasurement)
@@ -478,8 +503,11 @@ public sealed class LinearDimensionRecognizer
 
         var scaleError = Math.Abs(rawScale - resolvedScale)
             / Math.Max(resolvedScale, 1e-9);
-        if (scaleError > options.CanonicalScaleRelativeTolerance)
+        if (!scaleResolvedByAbsolutePaperCorrection
+            && scaleError > options.CanonicalScaleRelativeTolerance)
+        {
             return false;
+        }
 
         var targetPaperDistance = displayedValue / resolvedScale;
         if (!NumericCompat.IsFinite(targetPaperDistance)
@@ -512,8 +540,7 @@ public sealed class LinearDimensionRecognizer
         // in absolute paper space as a second independent guard. 0.02 mm is
         // intentionally far below ordinary drafting lineweights and prevents
         // semantic normalization from hiding materially different geometry.
-        const double maximumAbsolutePaperCorrectionMm = 0.02d;
-        if (absolutePaperCorrection > maximumAbsolutePaperCorrectionMm)
+        if (absolutePaperCorrection > MaximumShortSpanPaperCorrectionMm)
             return false;
 
         var axis = new Point2(
