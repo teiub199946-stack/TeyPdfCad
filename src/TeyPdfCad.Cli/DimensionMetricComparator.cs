@@ -15,6 +15,7 @@ internal sealed record DimensionMetricComparisonCandidate(
     bool MeasurementsAreUsable,
     bool LineAppearanceEvidenceUsable,
     bool CrossSnapshotLineAppearanceEvidenceUsable,
+    bool AllCapturedEvidenceChannelsUsable,
     bool SourceToNativeEquivalenceProven,
     IReadOnlyList<string> Blockers,
     string SourceText,
@@ -969,11 +970,17 @@ internal static class DimensionMetricComparator
                     "cross-snapshot-transform-equivalence-not-yet-authorized",
                     StringComparison.Ordinal));
 
+        var allCapturedEvidenceChannelsUsable =
+            measurementsUsable
+            && lineAppearanceEvidenceUsable
+            && crossSnapshotLineAppearanceEvidenceUsable;
+
         return new DimensionMetricComparisonCandidate(
             candidateId,
             measurementsUsable,
             lineAppearanceEvidenceUsable,
             crossSnapshotLineAppearanceEvidenceUsable,
+            allCapturedEvidenceChannelsUsable,
             SourceToNativeEquivalenceProven: false,
             distinctBlockers,
             source.SourceText,
