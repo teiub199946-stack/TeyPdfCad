@@ -99,15 +99,15 @@ public sealed class DimensionChainDetector
         if (sourceTextHeights.Length == 0)
             return Math.Max(relativeTolerance, 1e-6);
 
-        // PDFIMPORT coordinate jitter is naturally bounded in paper space,
-        // while the old 3%-of-segment rule collapses toward zero for short
-        // chain members. Use recognizer-captured source text height as a local
-        // paper-space scale, but cap the extra allowance to 10% of the shorter
-        // dimension so nearby independent dimensions cannot be bridged merely
-        // because their text is large.
-        var sourceAwareFloor = Math.Min(
-            sourceTextHeights.Min() * 0.25,
-            minimumLength * 0.10);
+        // PDFIMPORT coordinate jitter is bounded in paper space, not as a
+        // percentage of the measured span. Scaling the source-aware allowance
+        // back down by the shorter dimension reintroduces the original failure
+        // for very short dimensions (for example 0.05 mm on paper): the
+        // tolerance collapses below ordinary import jitter. Keep the
+        // conservative quarter-text-height envelope instead. The adjacency
+        // predicate still requires equal scale, near-parallel measured axes,
+        // collinear dimension-line locations and endpoint continuity.
+        var sourceAwareFloor = sourceTextHeights.Min() * 0.25;
 
         return Math.Max(Math.Max(relativeTolerance, sourceAwareFloor), 1e-6);
     }
