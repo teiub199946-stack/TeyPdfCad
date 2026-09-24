@@ -93,6 +93,27 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
+    public async Task Short_dimension_can_resolve_unique_canonical_scale_from_microscopic_paper_correction()
+    {
+        // TEST-002/003 case_001554: 25 mm at 1:100 should be 0.25 mm
+        // in paper space. The observed projected span is ~0.26007 mm, which
+        // makes raw scale ~96.13 and therefore sits outside the existing 3%
+        // canonical snap. Yet 1:100 is the only canonical scale whose expected
+        // paper span lies within 0.02 mm of the source geometry.
+        var testCase = new DimensionCaseGenerator()
+            .Generate(1_554, 12345)
+            .Cases
+            .Single(testCase => testCase.Id == "case_001554");
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(1, actual.DetectedDimensions);
+        Assert.Equal(25d, actual.Value!.Value, 6);
+        Assert.Equal(100d, actual.DrawingScale!.Value, 6);
+    }
+
+    [Fact]
     public async Task Very_short_outside_text_dimension_survives_microscopic_projection_overhang()
     {
         // TEST-002/003 case_002130: 25 mm at 1:500 is ~0.05 mm in paper
