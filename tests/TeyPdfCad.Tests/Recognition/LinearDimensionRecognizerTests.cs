@@ -896,6 +896,25 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Short_dimension_rejects_ambiguous_absolute_canonical_scale_evidence()
+    {
+        var scene = new PrimitiveScene();
+        // For displayed value 5 and observed paper span 0.018 mm both 1:200
+        // (target 0.025 mm) and 1:500 (target 0.010 mm) lie inside the 0.02 mm
+        // microscopic correction envelope. The recognizer must abstain rather
+        // than rank between two otherwise admissible canonical scales.
+        AddHorizontalDimension(
+            scene,
+            y: 0,
+            importedLength: 0.018,
+            displayedValue: "5");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Empty(dimensions);
+    }
+
+    [Fact]
     public void Short_dimension_is_not_normalized_when_absolute_paper_correction_is_material()
     {
         var scene = new PrimitiveScene();
