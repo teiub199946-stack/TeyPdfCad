@@ -839,6 +839,44 @@ public sealed class LinearDimensionRecognizerTests
         scene.Texts.Add(new TextPrimitive(displayedValue, new Point2(importedLength / 2.0, y + 3), 2.5, 0, SourceIds: [textSourceId]));
     }
 
+    [Fact]
+    public void Long_dimension_is_not_normalized_only_because_canonical_scale_is_nearby()
+    {
+        var scene = new PrimitiveScene();
+        // 5200 / 53.3 = 97.56, inside the existing 3% snap window for 1:100,
+        // but the resulting measurement error is >2%. The semantic
+        // normalization is intentionally restricted to short paper spans.
+        AddHorizontalDimension(
+            scene,
+            y: 0,
+            importedLength: 53.3,
+            displayedValue: "5200");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Empty(dimensions);
+    }
+
+    [Fact]
+    public void Explicit_scale_keeps_strict_measurement_tolerance_for_short_dimension()
+    {
+        var scene = new PrimitiveScene();
+        AddHorizontalDimension(
+            scene,
+            y: 0,
+            importedLength: 0.5144,
+            displayedValue: "25");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(
+            scene,
+            new DimensionRecognitionOptions
+            {
+                DrawingScale = 50
+            });
+
+        Assert.Empty(dimensions);
+    }
+
     private static void AddHorizontalDimension(
         PrimitiveScene scene,
         double y,
