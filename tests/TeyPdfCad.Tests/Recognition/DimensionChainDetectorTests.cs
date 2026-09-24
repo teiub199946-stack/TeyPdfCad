@@ -35,6 +35,26 @@ public sealed class DimensionChainDetectorTests
     }
 
     [Fact]
+    public void Groups_Very_Short_SourceAware_Chain_Members_Using_PaperSpace_Jitter_Tolerance()
+    {
+        var first = WithSourceTextHeight(Create(0, 0.05, 25, 0.025), 2.5);
+        var second = WithSourceTextHeight(Create(0.55, 0.60, 25, 0.575), 2.5);
+
+        var chain = Assert.Single(new DimensionChainDetector().Detect([first, second]));
+
+        Assert.Equal(2, chain.Dimensions.Count);
+    }
+
+    [Fact]
+    public void Very_Short_SourceAware_Members_Still_Reject_Gap_Beyond_PaperSpace_Jitter_Tolerance()
+    {
+        var first = WithSourceTextHeight(Create(0, 0.05, 25, 0.025), 2.5);
+        var second = WithSourceTextHeight(Create(0.80, 0.85, 25, 0.825), 2.5);
+
+        Assert.Empty(new DimensionChainDetector().Detect([first, second]));
+    }
+
+    [Fact]
     public void SourceAware_Tolerance_Does_Not_Group_Distinct_Nearby_Dimensions()
     {
         var first = WithSourceTextHeight(Create(0, 10, 1000, 5), 2.5);
