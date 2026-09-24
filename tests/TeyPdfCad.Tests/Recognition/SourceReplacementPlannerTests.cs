@@ -218,6 +218,63 @@ public sealed class SourceReplacementPlannerTests
     }
 
     [Fact]
+    public void Non_primary_dimension_claimant_cannot_own_source_replacement()
+    {
+        var sources = new VectorEntity[]
+        {
+            new VectorLine("a-dim", new(0, 0), new(10, 0), new VectorStyle()),
+            new VectorLine("a-ext", new(0, -5), new(0, 0), new VectorStyle()),
+            new VectorLine("a-arrow", new(-1, -1), new(1, 1), new VectorStyle()),
+            new VectorText("a-text", "1000", new(5, 3), 2.5, new VectorStyle()),
+            new VectorLine("b-dim", new(0, 20), new(10, 20), new VectorStyle()),
+            new VectorLine("b-ext", new(0, 15), new(0, 20), new VectorStyle()),
+            new VectorLine("b-arrow", new(-1, 19), new(1, 21), new VectorStyle()),
+            new VectorText("b-text", "1000", new(5, 23), 2.5, new VectorStyle())
+        };
+        var primary = new DimensionCandidate(
+            DimensionKind.Rotated, new(0, -5), new(10, -5), new(5, 0),
+            1000, 1000, 100, 0.95, "1000", 1, ["a-dim", "a-ext", "a-arrow", "a-text"])
+        {
+            SourceClaims =
+            [
+                new("a-dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("a-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("a-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("a-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var safetyOnly = new DimensionCandidate(
+            DimensionKind.Rotated, new(0, 15), new(10, 15), new(5, 20),
+            1000, 1000, 100, 0.96, "1000", 1, ["b-dim", "b-ext", "b-arrow", "b-text"])
+        {
+            SourceClaims =
+            [
+                new("b-dim", SourceUsageRole.DimensionLine, SourceClaimState.Valid, false),
+                new("b-ext", SourceUsageRole.ExtensionLine, SourceClaimState.Valid, false),
+                new("b-arrow", SourceUsageRole.ArrowGeometry, SourceClaimState.Valid, false),
+                new("b-text", SourceUsageRole.Text, SourceClaimState.Valid, false)
+            ]
+        };
+        var semantics = new SemanticReconstructionResult([primary], [], 100, 0.95)
+        {
+            DimensionClaimants = [primary, safetyOnly]
+        };
+
+        var plan = new SourceReplacementPlanner().BuildPlan(sources, semantics, pageNumber: 7);
+        var primaryId = SourceReplacementPlanner.GetCandidateKey(primary, 7);
+        var safetyOnlyId = SourceReplacementPlanner.GetCandidateKey(safetyOnly, 7);
+
+        Assert.DoesNotContain(primaryId, plan.DeferredCandidateKeys);
+        Assert.Contains(safetyOnlyId, plan.DeferredCandidateKeys);
+        Assert.Contains("a-dim", plan.EligibleSourceIds);
+        Assert.DoesNotContain("b-dim", plan.EligibleSourceIds);
+        Assert.Contains("b-dim", plan.PreservedSourceIds);
+        Assert.Contains(plan.Residuals, residual =>
+            residual.CandidateKey == safetyOnlyId
+            && residual.Kind == ReplacementResidualKind.DeferredUnresolvedClaims);
+    }
+
+    [Fact]
     public void Shared_dimension_text_claim_reaches_planner_and_defers_every_claimant()
     {
         var sources = new VectorEntity[]
