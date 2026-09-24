@@ -93,17 +93,18 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
-    public async Task Very_short_outside_text_dimension_survives_microscopic_endpoint_overhang()
+    public async Task Very_short_outside_text_dimension_survives_microscopic_projection_overhang()
     {
-        // TEST-002/003 case_000210: 25 mm at 1:500 is ~0.05 mm in paper
-        // space. Endpoint mismatch shortens the observed dimension line to
-        // ~0.04 mm, so a legitimate outside-right text lands at projection
-        // ~1.33 even though its absolute longitudinal overhang is only ~0.013
-        // mm. Full extension + arrow evidence is still present.
+        // TEST-002/003 case_002130: 25 mm at 1:500 is ~0.05 mm in paper
+        // space. Tiny PDF/PDFIMPORT noise moves legitimate outside-left text
+        // just beyond the old relative projection envelope, while the absolute
+        // longitudinal overhang is only ~0.01935 mm. Full extension + arrow
+        // evidence is present and the inferred scale remains inside the strict
+        // existing measurement/canonical contracts.
         var testCase = new DimensionCaseGenerator()
-            .Generate(210, 12345)
+            .Generate(2_130, 12345)
             .Cases
-            .Single(testCase => testCase.Id == "case_000210");
+            .Single(testCase => testCase.Id == "case_002130");
 
         var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
 
