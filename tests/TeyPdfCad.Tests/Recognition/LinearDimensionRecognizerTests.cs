@@ -858,6 +858,24 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Short_dimension_is_not_normalized_when_absolute_paper_correction_is_material()
+    {
+        var scene = new PrimitiveScene();
+        // Raw scale is ~19.5, close enough to the existing 1:20 canonical
+        // window to be tempting, but snapping 1.282 mm of source geometry to
+        // 1.25 mm would require >0.02 mm absolute paper-space correction.
+        AddHorizontalDimension(
+            scene,
+            y: 0,
+            importedLength: 25d / 19.5d,
+            displayedValue: "25");
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(scene);
+
+        Assert.Empty(dimensions);
+    }
+
+    [Fact]
     public void Explicit_scale_keeps_strict_measurement_tolerance_for_short_dimension()
     {
         var scene = new PrimitiveScene();
