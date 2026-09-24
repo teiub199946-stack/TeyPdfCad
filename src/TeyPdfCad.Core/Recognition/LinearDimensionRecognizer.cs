@@ -473,10 +473,20 @@ public sealed class LinearDimensionRecognizer
             return false;
         }
 
-        var correctionRatio = Math.Abs(
-                probe.ProjectedDistance - targetPaperDistance)
+        var absolutePaperCorrection = Math.Abs(
+            probe.ProjectedDistance - targetPaperDistance);
+        var correctionRatio = absolutePaperCorrection
             / Math.Max(targetPaperDistance, 1e-9);
         if (correctionRatio > options.CanonicalScaleRelativeTolerance)
+            return false;
+
+        // A nearby canonical scale can still be the wrong scale when severe
+        // noise dominates a tiny source span. Keep this recovery microscopic
+        // in absolute paper space as a second independent guard. 0.02 mm is
+        // intentionally far below ordinary drafting lineweights and prevents
+        // semantic normalization from hiding materially different geometry.
+        const double maximumAbsolutePaperCorrectionMm = 0.02d;
+        if (absolutePaperCorrection > maximumAbsolutePaperCorrectionMm)
             return false;
 
         var axis = new Point2(
