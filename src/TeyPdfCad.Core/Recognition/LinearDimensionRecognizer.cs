@@ -422,6 +422,33 @@ public sealed class LinearDimensionRecognizer
         };
     }
 
+    private static bool IsTextProjectionWithinDimensionEnvelope(
+        double projection,
+        double dimensionLineLength)
+    {
+        if (!double.IsFinite(projection)
+            || !double.IsFinite(dimensionLineLength)
+            || dimensionLineLength <= 1e-9)
+        {
+            return false;
+        }
+
+        if (projection is >= -0.25d and <= 1.25d)
+            return true;
+
+        // Keep the existing relative [-0.25, 1.25] envelope unchanged for
+        // ordinary dimensions. Only very short paper-space dimensions get an
+        // absolute floor because a microscopic endpoint mismatch can otherwise
+        // consume most of their observed span and move legitimate outside text
+        // beyond the relative bound. Full two-sided arrow and extension
+        // evidence is still required later by the normal recognizer.
+        var absoluteOverhang = projection < 0d
+            ? -projection * dimensionLineLength
+            : (projection - 1d) * dimensionLineLength;
+        const double maximumAbsolutePaperOverhangMm = 0.02d;
+        return absoluteOverhang <= maximumAbsolutePaperOverhangMm;
+    }
+
     private static bool TryNormalizeShortCanonicalGeometry(
         TextPrimitive text,
         double displayedValue,
@@ -536,8 +563,16 @@ public sealed class LinearDimensionRecognizer
         var textDistance = GeometryMath.DistancePointToInfiniteLine(text.Position, dimensionLine.Start, dimensionLine.End);
         if (textDistance > textTolerance) return null;
 
-        var projection = DimensionGeometryAnalysis.ProjectionParameter(text.Position, dimensionLine.Start, dimensionLine.End);
-        if (projection < -0.25 || projection > 1.25) return null;
+        var projection = DimensionGeometryAnalysis.ProjectionParameter(
+            text.Position,
+            dimensionLine.Start,
+            dimensionLine.End);
+        if (!IsTextProjectionWithinDimensionEnvelope(
+                projection,
+                dimLength))
+        {
+            return null;
+        }
 
         var endpointTolerance = Math.Max(
             text.Height * options.EndpointToleranceHeightMultiplier,
