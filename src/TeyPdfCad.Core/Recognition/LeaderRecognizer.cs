@@ -36,12 +36,32 @@ public sealed class LeaderRecognizer
 
             if (text is not null && confidence >= NativeLeaderThreshold)
             {
+                var provenance = shaft.ProvenanceIds
+                    .Concat(arrows.SelectMany(arrow => arrow.ProvenanceIds))
+                    .Concat(text.ProvenanceIds)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                var claims = RecognizerSourceClaimBuilder.FromProvenance(
+                        SourceUsageRole.LeaderShaft,
+                        shaft.ProvenanceIds)
+                    .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                        SourceUsageRole.LeaderArrow,
+                        arrows.SelectMany(arrow => arrow.ProvenanceIds).ToArray()))
+                    .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                        SourceUsageRole.Text,
+                        text.ProvenanceIds))
+                    .Distinct()
+                    .ToArray();
+
                 leaders.Add(new LeaderCandidate(
                     shaft.Start,
                     text.Position,
                     text.Value,
                     confidence,
-                    shaft.ProvenanceIds.Concat(arrows.SelectMany(arrow => arrow.ProvenanceIds)).Concat(text.ProvenanceIds).Distinct().ToArray()));
+                    provenance)
+                {
+                    SourceClaims = claims
+                });
             }
             else if (arrows.Length > 0 || hasNearbyText)
             {

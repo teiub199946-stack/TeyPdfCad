@@ -14,21 +14,28 @@ public enum PaintPriority
     ReviewOverlay = 100
 }
 
+public sealed record PaintOrderKey(
+    int PageNumber,
+    string SourceOrCandidateKey,
+    string Role,
+    PaintPriority Priority,
+    int StableOrdinal);
+
 public sealed record PaintOrderItem<T>(
     T Item,
-    PaintPriority Priority,
-    int InsertionIndex,
-    string SourceIdOrdinal);
+    PaintOrderKey Key);
 
 public static class PaintOrderEngine
 {
-    // Contract: bottom-to-top order is determined only by
-    // (paintPriority, insertionIndex, sourceIdOrdinal).
+    // Contract: bottom-to-top ordering depends only on immutable identity fields.
+    // Input enumeration order is never a tie-breaker.
     public static IReadOnlyList<PaintOrderItem<T>> OrderBottomToTop<T>(
         IEnumerable<PaintOrderItem<T>> items)
         => items
-            .OrderBy(item => item.Priority)
-            .ThenBy(item => item.InsertionIndex)
-            .ThenBy(item => item.SourceIdOrdinal, StringComparer.Ordinal)
+            .OrderBy(item => item.Key.Priority)
+            .ThenBy(item => item.Key.PageNumber)
+            .ThenBy(item => item.Key.SourceOrCandidateKey, StringComparer.Ordinal)
+            .ThenBy(item => item.Key.Role, StringComparer.Ordinal)
+            .ThenBy(item => item.Key.StableOrdinal)
             .ToArray();
 }

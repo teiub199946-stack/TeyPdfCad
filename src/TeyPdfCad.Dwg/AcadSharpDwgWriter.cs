@@ -1,3 +1,4 @@
+using System.Globalization;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
@@ -25,13 +26,76 @@ public sealed class AcadSharpDwgWriter
         IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
         IDictionary<int, ISet<string>>? createdCandidateKeysByPage = null)
     {
+        using var output = new MemoryStream();
+        _ = WriteCore(
+            output,
+            source,
+            plan,
+            hatchRecognitionByPage,
+            semanticRecognitionByPage,
+            templateLibrary,
+            templateSelectionsByPage,
+            sourceReplacementPlansByPage,
+            authorizedSuppressedSources: null,
+            createdCandidateKeysByPage);
+        return output.ToArray();
+    }
+
+    public DwgWriteResult Write(
+        Stream destination,
+        VectorPdfDocument source,
+        DwgDocumentPlan plan,
+        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage = null,
+        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage = null,
+        TemplateLibrary? templateLibrary = null,
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage = null,
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage = null,
+        IReadOnlySet<PageSourceRef>? authorizedSuppressedSources = null)
+        => WriteCore(
+            destination,
+            source,
+            plan,
+            hatchRecognitionByPage,
+            semanticRecognitionByPage,
+            templateLibrary,
+            templateSelectionsByPage,
+            sourceReplacementPlansByPage,
+            authorizedSuppressedSources,
+            createdCandidateKeysByPage: null);
+
+    private static DwgWriteResult WriteCore(
+        Stream destination,
+        VectorPdfDocument source,
+        DwgDocumentPlan plan,
+        IReadOnlyDictionary<int, HatchRecognitionResult>? hatchRecognitionByPage,
+        IReadOnlyDictionary<int, SemanticReconstructionResult>? semanticRecognitionByPage,
+        TemplateLibrary? templateLibrary,
+        IReadOnlyDictionary<int, TemplateSelection>? templateSelectionsByPage,
+        IReadOnlyDictionary<int, SourceReplacementPlan>? sourceReplacementPlansByPage,
+        IReadOnlySet<PageSourceRef>? authorizedSuppressedSources,
+        IDictionary<int, ISet<string>>? createdCandidateKeysByPage)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(plan);
+        if (!destination.CanWrite)
+            throw new ArgumentException("Destination stream must be writable.", nameof(destination));
+
+        var manifest = NativeExpectationBuilder.Build(
+            source,
+            plan,
+            hatchRecognitionByPage,
+            semanticRecognitionByPage,
+            sourceReplacementPlansByPage,
+            authorizedSuppressedSources);
 
         var document = new CadDocument();
+        var sourceEmissionCounts = new Dictionary<PageSourceRef, Dictionary<string, int>>();
+        var diagnosticCreatedCandidateKeyCount = 0;
         var styles = new AcadSharpStyleCatalog(document);
         var sheetsByPage = plan.Sheets.ToDictionary(sheet => sheet.PageNumber);
         var preservedBoundaryEntities = new HashSet<Entity>();
+        var paintKeys = new Dictionary<Entity, PaintOrderKey>();
         foreach (var page in source.Pages)
         {
             var sheet = sheetsByPage[page.Number];
@@ -43,26 +107,57 @@ public sealed class AcadSharpDwgWriter
             {
                 var template = templateLibrary.Blocks.SingleOrDefault(block =>
                     string.Equals(block.Name, templateSelection.TemplateName, StringComparison.Ordinal));
-                if (template is not null)
+                if (template is not null
+                    && templateSelection.SourceIdsToReplace.Count == 0)
                 {
-                    WriteTemplateInsert(document, styles, sheet, template);
-                    templateSourceIds.UnionWith(templateSelection.SourceIdsToReplace);
+                    var templateInsert = WriteTemplateInsert(document, styles, sheet, template);
+                    RegisterPaintKey(
+                        paintKeys,
+                        templateInsert,
+                        page.Number,
+                        $"template:{template.Name}",
+                        "template",
+                        0,
+                        preservedBoundaryEntities);
                 }
+                // A template that intends to replace source geometry is fail-closed
+                // until it has its own persistent manifest + on-disk verification path.
+                // Do not emit the template and do not suppress its source IDs here.
             }
             var hatchRecognition = hatchRecognitionByPage is not null && hatchRecognitionByPage.TryGetValue(page.Number, out var suppliedRecognition)
                 ? suppliedRecognition
-                : new HatchRecognizer().Recognize(page.Entities);
+                : new HatchRecognizer().Recognize(page.Entities, page.Number);
             var semantics = semanticRecognitionByPage is not null && semanticRecognitionByPage.TryGetValue(page.Number, out var suppliedSemantics)
                 ? suppliedSemantics
                 : null;
             var replacementPlan = sourceReplacementPlansByPage is not null
                 && sourceReplacementPlansByPage.TryGetValue(page.Number, out var suppliedReplacementPlan)
                     ? suppliedReplacementPlan
-                    : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition);
-            var suppressedSourceIds = replacementPlan.SuppressedSourceIds
+                    : new SourceReplacementPlanner().BuildPlan(page.Entities, semantics, hatchRecognition, page.Number);
+            var authorizedForPage = authorizedSuppressedSources is null
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : authorizedSuppressedSources
+                    .Where(sourceRef => sourceRef.PageNumber == page.Number)
+                    .Select(sourceRef => sourceRef.SourceId)
+                    .ToHashSet(StringComparer.Ordinal);
+            var eligibleForPage = replacementPlan.EligibleSourceIds
                 .ToHashSet(StringComparer.Ordinal);
+            var invalidAuthorization = authorizedForPage
+                .Where(sourceId => !eligibleForPage.Contains(sourceId))
+                .OrderBy(sourceId => sourceId, StringComparer.Ordinal)
+                .ToArray();
+            if (invalidAuthorization.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Page {page.Number} suppression authorization contains non-eligible SourceId(s): {string.Join(", ", invalidAuthorization)}.");
+            }
+            var suppressedSourceIds = authorizedForPage;
             var deferredCandidateKeys = replacementPlan.DeferredCandidateKeys
                 .ToHashSet(StringComparer.Ordinal);
+            var authorizedNativeCandidateKeys = NativeCandidateAuthorization.GetAuthorizedCandidateIds(
+                replacementPlan,
+                page.Number,
+                authorizedSuppressedSources);
             ISet<string>? createdCandidateKeys = null;
             if (createdCandidateKeysByPage is not null)
             {
@@ -84,7 +179,10 @@ public sealed class AcadSharpDwgWriter
                     .ToDictionary(group => group.Key, group => group.First().Layer, StringComparer.Ordinal);
             var patternHatches = hatchRecognition.NativeHatches
                 .Where(candidate => !candidate.IsSolid)
-                .Where(candidate => !deferredCandidateKeys.Contains(SourceReplacementPlanner.GetCandidateKey(candidate)))
+                .Where(candidate => !deferredCandidateKeys.Contains(SourceReplacementPlanner.GetCandidateKey(candidate, page.Number)))
+                .Where(candidate => NativeCandidateAuthorization.ShouldEmit(
+                    authorizedNativeCandidateKeys,
+                    SourceReplacementPlanner.GetCandidateKey(candidate, page.Number)))
                 .ToArray();
             var writtenBoundaries = new Dictionary<string, LwPolyline>(StringComparer.Ordinal);
             foreach (var sourceLine in page.Entities.OfType<VectorLine>())
@@ -96,6 +194,9 @@ public sealed class AcadSharpDwgWriter
                     new XYZ(sheet.ModelOriginX + sourceLine.End.X, sheet.ModelOriginY + sourceLine.End.Y, 0));
                 styles.Apply(line, GetReviewStyle(sourceLine.Style, sourceLine.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(line);
+                RegisterPaintKey(
+                    paintKeys, line, page.Number, sourceLine.SourceId, "source-line", 0, preservedBoundaryEntities);
+                RecordSourceEmission(page.Number, sourceLine.SourceId, line, sourceEmissionCounts);
             }
             foreach (var sourcePolyline in page.Entities.OfType<VectorPolyline>())
             {
@@ -108,6 +209,9 @@ public sealed class AcadSharpDwgWriter
                         radius);
                     styles.Apply(circle, sourcePolyline.Style);
                     document.Entities.Add(circle);
+                    RegisterPaintKey(
+                        paintKeys, circle, page.Number, sourcePolyline.SourceId, "source-circle", 0, preservedBoundaryEntities);
+                    RecordSourceEmission(page.Number, sourcePolyline.SourceId, circle, sourceEmissionCounts);
                     continue;
                 }
                 var polyline = new LwPolyline(sourcePolyline.Vertices.Select(vertex => new XY(
@@ -118,6 +222,9 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(polyline, GetReviewStyle(sourcePolyline.Style, sourcePolyline.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(polyline);
+                RegisterPaintKey(
+                    paintKeys, polyline, page.Number, sourcePolyline.SourceId, "source-polyline", 0, preservedBoundaryEntities);
+                RecordSourceEmission(page.Number, sourcePolyline.SourceId, polyline, sourceEmissionCounts);
                 if (sourcePolyline.IsClosed)
                 {
                     writtenBoundaries[sourcePolyline.SourceId] = polyline;
@@ -125,13 +232,28 @@ public sealed class AcadSharpDwgWriter
             }
             foreach (var sourceFill in page.Entities.OfType<VectorFilledPath>())
             {
+                if (templateSourceIds.Contains(sourceFill.SourceId)) continue;
+                if (suppressedSourceIds.Contains(sourceFill.SourceId)) continue;
                 var boundaries = sourceFill.Loops
                     .Where(IsValidBoundary)
                     .Select(loop => CreateBoundary(loop, sheet.ModelOriginX, sheet.ModelOriginY, sourceFill.Style, styles, document))
                     .ToArray();
                 // Fill support contours are not PDF strokes. Retain them for
                 // editing, but do not draw edges that were absent in the source.
-                foreach (var boundary in boundaries) boundary.IsInvisible = true;
+                for (var boundaryIndex = 0; boundaryIndex < boundaries.Length; boundaryIndex++)
+                {
+                    var boundary = boundaries[boundaryIndex];
+                    boundary.IsInvisible = true;
+                    RegisterPaintKey(
+                        paintKeys,
+                        boundary,
+                        page.Number,
+                        sourceFill.SourceId,
+                        "source-fill-boundary",
+                        boundaryIndex,
+                        preservedBoundaryEntities);
+                    RecordSourceEmission(page.Number, sourceFill.SourceId, boundary, sourceEmissionCounts);
+                }
                 if (boundaries.Length == 0 || !TryFindInteriorSeed(sourceFill, out var seed))
                 {
                     continue;
@@ -151,6 +273,9 @@ public sealed class AcadSharpDwgWriter
                 }
                 styles.Apply(hatch, GetReviewStyle(sourceFill.Style, sourceFill.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(hatch);
+                RegisterPaintKey(
+                    paintKeys, hatch, page.Number, sourceFill.SourceId, "source-fill-hatch", 0, preservedBoundaryEntities);
+                RecordSourceEmission(page.Number, sourceFill.SourceId, hatch, sourceEmissionCounts);
             }
             foreach (var candidate in patternHatches)
             {
@@ -162,11 +287,27 @@ public sealed class AcadSharpDwgWriter
                     continue;
                 }
 
+                var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
                 var boundary = candidate.ProvenanceIds
                     .Select(sourceId => writtenBoundaries.GetValueOrDefault(sourceId))
                     .FirstOrDefault(polyline => polyline is not null)
                     ?? CreateBoundary(candidate.Boundary, sheet.ModelOriginX, sheet.ModelOriginY, candidate.Style, styles, document);
                 preservedBoundaryEntities.Add(boundary);
+                if (paintKeys.TryGetValue(boundary, out var existingBoundaryKey))
+                {
+                    paintKeys[boundary] = existingBoundaryKey with { Priority = PaintPriority.PreservedBoundary };
+                }
+                else
+                {
+                    RegisterPaintKey(
+                        paintKeys,
+                        boundary,
+                        page.Number,
+                        key,
+                        "preserved-boundary",
+                        0,
+                        preservedBoundaryEntities);
+                }
                 var pattern = new HatchPattern("TEYPDFCAD_LINEAR");
                 pattern.Lines.Add(new HatchPattern.Line
                 {
@@ -184,8 +325,12 @@ public sealed class AcadSharpDwgWriter
                 };
                 hatch.Paths.Add(new Hatch.BoundaryPath([boundary]));
                 styles.Apply(hatch, candidate.Style);
+                StampNativeEntity(manifest, key, "primary", hatch);
                 document.Entities.Add(hatch);
-                createdCandidateKeys?.Add(SourceReplacementPlanner.GetCandidateKey(candidate));
+                RegisterPaintKey(
+                    paintKeys, hatch, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                diagnosticCreatedCandidateKeyCount++;
+                createdCandidateKeys?.Add(key);
             }
             foreach (var sourceText in page.Entities.OfType<VectorText>())
             {
@@ -204,63 +349,199 @@ public sealed class AcadSharpDwgWriter
                 };
                 styles.Apply(text, GetReviewStyle(sourceText.Style, sourceText.SourceId, reviewLayersBySourceId));
                 document.Entities.Add(text);
+                RegisterPaintKey(
+                    paintKeys, text, page.Number, sourceText.SourceId, "source-text", 0, preservedBoundaryEntities);
+                RecordSourceEmission(page.Number, sourceText.SourceId, text, sourceEmissionCounts);
             }
             if (semantics is not null)
             {
                 foreach (var candidate in semantics.Dimensions)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
-                    if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteDimension(document, styles, sheet, candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
+                    var dimension = WriteDimension(document, styles, sheet, candidate);
+                    StampNativeEntity(manifest, key, "primary", dimension);
+                    RegisterPaintKey(
+                        paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Leaders)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
-                    if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteLeader(document, styles, sheet, candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
+                    var emitted = WriteLeader(document, styles, sheet, candidate);
+                    StampNativeEntity(manifest, key, "primary", emitted.Leader);
+                    StampNativeEntity(manifest, key, "annotation", emitted.Annotation);
+                    RegisterPaintKey(
+                        paintKeys, emitted.Leader, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                    RegisterPaintKey(
+                        paintKeys, emitted.Annotation, page.Number, key, "annotation", 0, preservedBoundaryEntities);
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Axes)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
-                    if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteAxis(document, styles, sheet, candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
+                    var axis = WriteAxis(document, styles, sheet, candidate);
+                    StampNativeEntity(manifest, key, "primary", axis);
+                    RegisterPaintKey(
+                        paintKeys, axis, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.Levels)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
-                    if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteLevel(document, styles, sheet, candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
+                    var emitted = WriteLevel(document, styles, sheet, candidate);
+                    StampNativeEntity(manifest, key, "primary", emitted.Insert);
+                    StampNativeEntity(manifest, key, "attribute", emitted.Attribute);
+                    RegisterPaintKey(
+                        paintKeys, emitted.Insert, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
                 foreach (var candidate in semantics.ArcDimensions)
                 {
-                    var key = SourceReplacementPlanner.GetCandidateKey(candidate);
-                    if (deferredCandidateKeys.Contains(key)) continue;
-                    WriteArcDimension(document, styles, sheet, candidate);
+                    var key = SourceReplacementPlanner.GetCandidateKey(candidate, page.Number);
+                    if (deferredCandidateKeys.Contains(key)
+                        || !NativeCandidateAuthorization.ShouldEmit(authorizedNativeCandidateKeys, key))
+                        continue;
+                    var dimension = WriteArcDimension(document, styles, sheet, candidate);
+                    StampNativeEntity(manifest, key, "primary", dimension);
+                    RegisterPaintKey(
+                        paintKeys, dimension, page.Number, key, "primary", 0, preservedBoundaryEntities);
+                    diagnosticCreatedCandidateKeyCount++;
                     createdCandidateKeys?.Add(key);
                 }
             }
         }
-        ApplyExplicitPaintOrder(document, preservedBoundaryEntities);
-        using var output = new MemoryStream();
-        using var writer = new DwgWriter(output, document);
+        ApplyExplicitPaintOrder(document, paintKeys);
+
+        var writer = new DwgWriter(destination, document)
+        {
+            Configuration = new DwgWriterConfiguration
+            {
+                CloseStream = false
+            }
+        };
         writer.Write();
-        return output.ToArray();
+
+        var sourceSummary = new SourceEmissionSummary(
+            sourceEmissionCounts
+                .OrderBy(pair => pair.Key.PageNumber)
+                .ThenBy(pair => pair.Key.SourceId, StringComparer.Ordinal)
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => (IReadOnlyDictionary<string, int>)pair.Value
+                        .OrderBy(item => item.Key, StringComparer.Ordinal)
+                        .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal)));
+
+        return new DwgWriteResult(
+            manifest,
+            sourceSummary,
+            diagnosticCreatedCandidateKeyCount);
+    }
+
+    private static void RecordSourceEmission(
+        int pageNumber,
+        string sourceId,
+        Entity entity,
+        IDictionary<PageSourceRef, Dictionary<string, int>> sourceEmissionCounts)
+    {
+        var sourceRef = new PageSourceRef(pageNumber, sourceId);
+        if (SourceMetadataCodec.CanEncode(sourceRef))
+            SourceMetadataCodec.Write(entity, sourceRef);
+        if (!sourceEmissionCounts.TryGetValue(sourceRef, out var counts))
+        {
+            counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            sourceEmissionCounts[sourceRef] = counts;
+        }
+
+        var fingerprint = DwgEntityFingerprint.ComputeOutput(entity);
+        counts[fingerprint] = counts.TryGetValue(fingerprint, out var count)
+            ? checked(count + 1)
+            : 1;
+    }
+
+    private static void StampNativeEntity(
+        NativeWriteManifest manifest,
+        string candidateId,
+        string role,
+        Entity entity)
+    {
+        if (!manifest.Candidates.TryGetValue(candidateId, out var expected))
+        {
+            throw new InvalidOperationException(
+                $"Writer emitted candidate {candidateId} without a pre-write native expectation.");
+        }
+
+        var expectedRole = expected.Entities.SingleOrDefault(item =>
+            string.Equals(item.Role, role, StringComparison.Ordinal));
+        if (expectedRole is null)
+        {
+            throw new InvalidOperationException(
+                $"Writer emitted unexpected role '{role}' for candidate {candidateId}.");
+        }
+
+        CandidateMetadataCodec.Write(
+            entity,
+            new CandidateEntityMetadata(candidateId, role));
+    }
+
+    private static void RegisterPaintKey(
+        IDictionary<Entity, PaintOrderKey> paintKeys,
+        Entity entity,
+        int pageNumber,
+        string sourceOrCandidateKey,
+        string role,
+        int stableOrdinal,
+        IReadOnlySet<Entity> preservedBoundaryEntities)
+    {
+        if (paintKeys.ContainsKey(entity))
+            throw new InvalidOperationException("DWG entity already has an immutable paint identity.");
+
+        var key = string.IsNullOrWhiteSpace(sourceOrCandidateKey)
+            ? "invalid-source|" + DwgEntityFingerprint.ComputeOutput(entity)
+            : sourceOrCandidateKey;
+
+        paintKeys[entity] = new PaintOrderKey(
+            pageNumber,
+            key,
+            role,
+            ResolvePaintPriority(entity, preservedBoundaryEntities),
+            stableOrdinal);
     }
 
     private static void ApplyExplicitPaintOrder(
         CadDocument document,
-        IReadOnlySet<Entity> preservedBoundaryEntities)
+        IReadOnlyDictionary<Entity, PaintOrderKey> paintKeys)
     {
-        var ordered = PaintOrderEngine.OrderBottomToTop(document.Entities
-            .Select((entity, index) => new PaintOrderItem<Entity>(
+        var missing = document.Entities
+            .Where(entity => !paintKeys.ContainsKey(entity))
+            .Select(entity => entity.GetType().Name)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"ModelSpace contains {missing.Length} entity/entities without immutable paint identity: {string.Join(", ", missing)}.");
+        }
+
+        var ordered = PaintOrderEngine.OrderBottomToTop(
+            document.Entities.Select(entity => new PaintOrderItem<Entity>(
                 entity,
-                ResolvePaintPriority(entity, preservedBoundaryEntities),
-                index,
-                (entity.Layer?.Name ?? string.Empty) + "|" + entity.GetType().Name)));
+                paintKeys[entity])));
 
         var sortTable = document.ModelSpace.CreateSortEntitiesTable();
         foreach (var entry in ordered)
@@ -295,7 +576,7 @@ public sealed class AcadSharpDwgWriter
         return PaintPriority.BaseGeometry;
     }
 
-    private static void WriteDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, DimensionCandidate candidate)
+    private static Dimension WriteDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, DimensionCandidate candidate)
     {
         var first = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint1.X, sheet.ModelOriginY + candidate.DefinitionPoint1.Y, 0d);
         var second = new XYZ(sheet.ModelOriginX + candidate.DefinitionPoint2.X, sheet.ModelOriginY + candidate.DefinitionPoint2.Y, 0d);
@@ -309,10 +590,22 @@ public sealed class AcadSharpDwgWriter
             }
             : new DimensionAligned(first, second);
         dimension.DefinitionPoint = dimensionPoint;
-        dimension.Style = styles.GetDimensionStyle(candidate.DrawingScale);
-        dimension.Text = string.Empty;
+        dimension.Normal = new XYZ(0d, 0d, 1d);
+        dimension.Style = styles.GetDimensionStyle(candidate);
+        dimension.Text = NativeDimensionTextBuilder.Build(
+            candidate.SourceText,
+            candidate.DisplayedValue);
+        if (candidate.SourceAppearance?.Text.VisualCenter is { } visualCenter)
+        {
+            dimension.TextMiddlePoint = new XYZ(
+                sheet.ModelOriginX + visualCenter.X,
+                sheet.ModelOriginY + visualCenter.Y,
+                0d);
+            dimension.IsTextUserDefinedLocation = true;
+        }
         dimension.Layer = styles.GetAnnotationLayer("PDF_РАЗМЕРЫ");
         document.Entities.Add(dimension);
+        return dimension;
     }
 
     private static VectorStyle GetReviewStyle(
@@ -334,7 +627,7 @@ public sealed class AcadSharpDwgWriter
         return "TEY_REVIEW_SEMANTIC";
     }
 
-    private static void WriteTemplateInsert(
+    private static Insert WriteTemplateInsert(
         CadDocument document,
         AcadSharpStyleCatalog styles,
         SheetPlan sheet,
@@ -400,13 +693,15 @@ public sealed class AcadSharpDwgWriter
             document.BlockRecords.Add(block);
         }
 
-        document.Entities.Add(new Insert(block)
+        var insert = new Insert(block)
         {
             InsertPoint = new XYZ(sheet.ModelOriginX, sheet.ModelOriginY, 0d)
-        });
+        };
+        document.Entities.Add(insert);
+        return insert;
     }
 
-    private static void WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)
+    private static (Leader Leader, TextEntity Annotation) WriteLeader(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LeaderCandidate candidate)
     {
         var annotation = new TextEntity
         {
@@ -430,9 +725,10 @@ public sealed class AcadSharpDwgWriter
         leader.Vertices.Add(new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d));
         document.Entities.Add(annotation);
         document.Entities.Add(leader);
+        return (leader, annotation);
     }
 
-    private static void WriteAxis(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, AxisCandidate candidate)
+    private static Insert WriteAxis(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, AxisCandidate candidate)
     {
         const string blockName = "TEY_AXIS";
         if (!document.BlockRecords.TryGetValue(blockName, out var block))
@@ -460,9 +756,10 @@ public sealed class AcadSharpDwgWriter
             Layer = styles.GetAnnotationLayer("PDF_ОСИ")
         };
         document.Entities.Add(insert);
+        return insert;
     }
 
-    private static void WriteLevel(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LevelCandidate candidate)
+    private static (Insert Insert, AttributeEntity Attribute) WriteLevel(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, LevelCandidate candidate)
     {
         const string blockName = "TEY_LEVEL";
         if (!document.BlockRecords.TryGetValue(blockName, out var block))
@@ -506,9 +803,10 @@ public sealed class AcadSharpDwgWriter
         attribute.Value = candidate.Value;
         attribute.InsertPoint = new XYZ(sheet.ModelOriginX + candidate.TextPoint.X, sheet.ModelOriginY + candidate.TextPoint.Y, 0d);
         document.Entities.Add(insert);
+        return (insert, attribute);
     }
 
-    private static void WriteArcDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, ArcDimensionCandidate candidate)
+    private static DimensionArc WriteArcDimension(CadDocument document, AcadSharpStyleCatalog styles, SheetPlan sheet, ArcDimensionCandidate candidate)
     {
         var center = new XYZ(
             sheet.ModelOriginX + candidate.Center.X,
@@ -539,6 +837,7 @@ public sealed class AcadSharpDwgWriter
             LineWeight = LineWeightType.W9
         };
         document.Entities.Add(dimension);
+        return dimension;
     }
 
     private static LwPolyline CreateBoundary(IReadOnlyList<TeyPdfCad.Core.Geometry.Point2> loop, double originX, double originY, VectorStyle style, AcadSharpStyleCatalog styles, CadDocument document)

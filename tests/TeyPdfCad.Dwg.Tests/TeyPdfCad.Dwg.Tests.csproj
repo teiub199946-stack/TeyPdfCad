@@ -12,4 +12,9 @@
     <ProjectReference Include="../../src/TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
     <ProjectReference Include="../../src/TeyPdfCad.Dwg/TeyPdfCad.Dwg.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Fixtures/**/*.b64">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

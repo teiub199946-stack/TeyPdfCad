@@ -27,18 +27,36 @@ public sealed class LevelRecognizer
                     || GeometryMath.Distance(line.End, text.Position) <= MarkerTolerance)
                 .ToArray();
             var marker = nearby.FirstOrDefault(line => GeometryMath.Distance(line.Start, line.End) <= 10d);
-            var hasMarkerGeometry = marker is not null && scene.Lines.Count(line =>
-                line != marker && (Touches(line, marker.Start) || Touches(line, marker.End))) >= 1;
+            var markerSupport = marker is null
+                ? []
+                : scene.Lines
+                    .Where(line => line != marker && (Touches(line, marker.Start) || Touches(line, marker.End)))
+                    .ToArray();
+            var hasMarkerGeometry = marker is not null && markerSupport.Length >= 1;
 
             if (hasMarkerGeometry)
             {
                 var markerPoint = marker!.Start;
+                var markerProvenance = marker.ProvenanceIds
+                    .Concat(markerSupport.SelectMany(line => line.ProvenanceIds))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
                 levels.Add(new LevelCandidate(
                     markerPoint,
                     text.Position,
                     text.Value,
                     0.92d,
-                    marker.ProvenanceIds.Concat(text.ProvenanceIds).Distinct().ToArray()));
+                    markerProvenance.Concat(text.ProvenanceIds).Distinct(StringComparer.Ordinal).ToArray())
+                {
+                    SourceClaims = RecognizerSourceClaimBuilder.FromProvenance(
+                            SourceUsageRole.LevelMarker,
+                            markerProvenance)
+                        .Concat(RecognizerSourceClaimBuilder.FromProvenance(
+                            SourceUsageRole.Text,
+                            text.ProvenanceIds))
+                        .Distinct()
+                        .ToArray()
+                });
             }
             else
             {

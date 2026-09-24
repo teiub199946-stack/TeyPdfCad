@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>TeyPdfCad.TestGenerator</AssemblyName>
+    <RootNamespace>TeyPdfCad.TestGenerator</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/TeyPdfCad.Core/TeyPdfCad.Core.csproj" />
+  </ItemGroup>
+</Project>

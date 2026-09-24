@@ -257,6 +257,631 @@ public sealed class ReconstructionCommands
         transaction.Commit();
     }
 
+    [CommandMethod("TEYPDFDIMMETRICS", CommandFlags.Modal)]
+    public void ExportDimensionTextMetrics()
+    {
+        var document = Application.DocumentManager.MdiActiveDocument;
+        if (document is null) return;
+
+        var database = document.Database;
+        var editor = document.Editor;
+        var metrics = new List<DimensionMetric>();
+
+        using (var transaction = database.TransactionManager.StartTransaction())
+        {
+            var blockTable = (BlockTable)transaction.GetObject(
+                database.BlockTableId,
+                OpenMode.ForRead);
+            var modelSpace = (BlockTableRecord)transaction.GetObject(
+                blockTable[BlockTableRecord.ModelSpace],
+                OpenMode.ForRead);
+
+            foreach (var objectId in modelSpace.Cast<ObjectId>())
+            {
+                if (transaction.GetObject(objectId, OpenMode.ForRead, false) is not Dimension dimension)
+                    continue;
+
+                var textMetrics = new List<DimensionTextMetric>();
+                var blockGeometry = new List<DimensionBlockGeometryMetric>();
+                var explodedGeometry = new List<DimensionBlockGeometryMetric>();
+                var explodedTextMetrics = new List<DimensionTextMetric>();
+                string? error = null;
+                var dimBlockHandle = string.Empty;
+                var candidateIdentity = ReadCandidateIdentity(dimension);
+
+                try
+                {
+                    dimension.UpgradeOpen();
+                    dimension.RecomputeDimensionBlock(true);
+
+                    if (dimension.DimBlockId.IsNull)
+                    {
+                        error = "AutoCAD did not provide a dimension display block after recompute.";
+                    }
+                    else
+                    {
+                        dimBlockHandle = dimension.DimBlockId.Handle.ToString();
+                        var dimBlock = (BlockTableRecord)transaction.GetObject(
+                            dimension.DimBlockId,
+                            OpenMode.ForRead);
+
+                        foreach (var entityId in dimBlock.Cast<ObjectId>())
+                        {
+                            var entity = transaction.GetObject(
+                                entityId,
+                                OpenMode.ForRead,
+                                false);
+
+                            if (entity is MText mtext)
+                            {
+                                var style = ReadTextStyle(transaction, database, mtext.TextStyleId);
+                                var fragments = ReadMTextFragments(mtext);
+                                textMetrics.Add(new DimensionTextMetric(
+                                    "MText",
+                                    mtext.Handle.ToString(),
+                                    mtext.Contents ?? string.Empty,
+                                    "mtext-actual-bounds-dimblock-mcs",
+                                    mtext.ActualWidth,
+                                    mtext.ActualHeight,
+                                    mtext.Rotation,
+                                    mtext.Location.X,
+                                    mtext.Location.Y,
+                                    mtext.Location.Z,
+                                    style.Name,
+                                    style.FontFile,
+                                    style.WidthFactor,
+                                    style.FontResolvedPath,
+                                    style.FontSha256,
+                                    mtext.TextHeight,
+                                    style.WidthFactor,
+                                    BackgroundFill: mtext.BackgroundFill,
+                                    UseBackgroundColor: mtext.UseBackgroundColor,
+                                    BackgroundScaleFactor: mtext.BackgroundFill
+                                        ? mtext.BackgroundScaleFactor
+                                        : 0d,
+                                    ShowBorders: mtext.ShowBorders,
+                                    Attachment: mtext.Attachment.ToString(),
+                                    Fragments: fragments));
+                            }
+                            else if (entity is DBText dbText)
+                            {
+                                var style = ReadTextStyle(transaction, database, dbText.TextStyleId);
+                                var extents = dbText.GeometricExtents;
+                                textMetrics.Add(new DimensionTextMetric(
+                                    "DBText",
+                                    dbText.Handle.ToString(),
+                                    dbText.TextString ?? string.Empty,
+                                    "dbtext-geometric-extents-dimblock-mcs",
+                                    Math.Abs(extents.MaxPoint.X - extents.MinPoint.X),
+                                    Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y),
+                                    dbText.Rotation,
+                                    dbText.Position.X,
+                                    dbText.Position.Y,
+                                    dbText.Position.Z,
+                                    style.Name,
+                                    style.FontFile,
+                                    style.WidthFactor,
+                                    style.FontResolvedPath,
+                                    style.FontSha256,
+                                    dbText.Height,
+                                    dbText.WidthFactor));
+                            }
+                            else if (entity is Entity geometryEntity)
+                            {
+                                blockGeometry.Add(ReadDimensionBlockGeometry(
+                                    transaction,
+                                    geometryEntity));
+                            }
+                        }
+
+                        var explodedEvidence = ReadExplodedDimensionEvidence(
+                            transaction,
+                            database,
+                            dimension);
+                        explodedGeometry.AddRange(explodedEvidence.Geometry);
+                        explodedTextMetrics.AddRange(explodedEvidence.TextMetrics);
+
+                        if (textMetrics.Count == 0)
+                        {
+                            error = "Dimension display block contains no MText/DBText entity; rendered text metrics are unavailable.";
+                        }
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    error = ex.GetType().Name + ": " + ex.Message;
+                }
+
+                metrics.Add(new DimensionMetric(
+                    dimension.Handle.ToString(),
+                    dimension.GetType().Name,
+                    dimension.Measurement,
+                    dimension.DimensionText ?? string.Empty,
+                    dimBlockHandle,
+                    textMetrics,
+                    error,
+                    candidateIdentity.CandidateId,
+                    candidateIdentity.Role,
+                    blockGeometry,
+                    explodedGeometry,
+                    explodedTextMetrics));
+            }
+
+            // RecomputeDimensionBlock can update the anonymous display block.
+            // This command is diagnostic only: abort the transaction so the
+            // user's drawing is never modified by metrics capture.
+            transaction.Abort();
+        }
+
+        var report = new DimensionMetricsReport(
+            DimensionMetricsReportFormatter.SchemaVersion,
+            document.Name ?? string.Empty,
+            database.Insunits.ToString(),
+            metrics);
+
+        try
+        {
+            var configuredOutput = Environment.GetEnvironmentVariable(
+                "TEYPDFCAD_DIM_METRICS_OUTPUT");
+            string outputPath;
+            if (!string.IsNullOrWhiteSpace(configuredOutput))
+            {
+                outputPath = Path.GetFullPath(configuredOutput);
+                var outputDirectory = Path.GetDirectoryName(outputPath);
+                if (string.IsNullOrWhiteSpace(outputDirectory))
+                    throw new InvalidOperationException(
+                        "Configured dimension metrics output has no directory.");
+                Directory.CreateDirectory(outputDirectory);
+            }
+            else
+            {
+                var drawingPath = document.Name;
+                var drawingDirectory = !string.IsNullOrWhiteSpace(drawingPath)
+                    ? Path.GetDirectoryName(drawingPath)
+                    : null;
+                var drawingBaseName = !string.IsNullOrWhiteSpace(drawingPath)
+                    ? Path.GetFileNameWithoutExtension(drawingPath)
+                    : null;
+
+                if (!string.IsNullOrWhiteSpace(drawingDirectory)
+                    && !string.IsNullOrWhiteSpace(drawingBaseName)
+                    && Directory.Exists(drawingDirectory))
+                {
+                    outputPath = Path.Combine(
+                        drawingDirectory,
+                        drawingBaseName + ".dimension-metrics.json");
+                }
+                else
+                {
+                    var outputDirectory = Path.Combine(Path.GetTempPath(), "TeyPdfCad");
+                    Directory.CreateDirectory(outputDirectory);
+                    var timestamp = DateTime.UtcNow.ToString(
+                        "yyyyMMdd_HHmmssfff",
+                        CultureInfo.InvariantCulture);
+                    outputPath = Path.Combine(
+                        outputDirectory,
+                        $"DimensionMetrics_{timestamp}.json");
+                }
+            }
+
+            File.WriteAllText(
+                outputPath,
+                DimensionMetricsReportFormatter.Format(report),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            editor.WriteMessage(
+                $"\nTEYPDFCAD_DIM_METRICS {outputPath}\n" +
+                $"dimensions={metrics.Count}, " +
+                $"textEntities={metrics.Sum(item => item.TextMetrics.Count)}, " +
+                $"errors={metrics.Count(item => !string.IsNullOrWhiteSpace(item.Error))}. " +
+                "Drawing was not changed.\n");
+        }
+        catch (System.Exception ex)
+        {
+            editor.WriteMessage(
+                $"\nTeyPdfCad dimension metrics export failed: {ex.Message}\n");
+        }
+    }
+
+    private const string NativeCandidateAppId = "TEYCONVERT_CANDIDATE_V1";
+
+    private static (string CandidateId, string Role) ReadCandidateIdentity(
+        Dimension dimension)
+    {
+        try
+        {
+            using var xdata = dimension.GetXDataForApplication(NativeCandidateAppId);
+            if (xdata is null)
+                return (string.Empty, string.Empty);
+
+            var values = xdata.AsArray()
+                .Where(value => value.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
+                .Select(value => value.Value as string)
+                .ToArray();
+
+            if (values.Length != 2
+                || string.IsNullOrWhiteSpace(values[0])
+                || string.IsNullOrWhiteSpace(values[1]))
+            {
+                return (string.Empty, string.Empty);
+            }
+
+            return (values[0]!, values[1]!);
+        }
+        catch (System.Exception)
+        {
+            return (string.Empty, string.Empty);
+        }
+    }
+
+    private static DimensionBlockGeometryMetric ReadDimensionBlockGeometry(
+        Transaction transaction,
+        Entity entity,
+        string? identityOverride = null)
+    {
+        double? startX = null;
+        double? startY = null;
+        double? startZ = null;
+        double? endX = null;
+        double? endY = null;
+        double? endZ = null;
+        double? minX = null;
+        double? minY = null;
+        double? minZ = null;
+        double? maxX = null;
+        double? maxY = null;
+        double? maxZ = null;
+        var nestedBlockName = string.Empty;
+        var vertexCount = 0;
+        var geometryKind = "other";
+
+        if (entity is Line line)
+        {
+            geometryKind = "line";
+            startX = line.StartPoint.X;
+            startY = line.StartPoint.Y;
+            startZ = line.StartPoint.Z;
+            endX = line.EndPoint.X;
+            endY = line.EndPoint.Y;
+            endZ = line.EndPoint.Z;
+        }
+        else if (entity is Polyline polyline)
+        {
+            geometryKind = "polyline";
+            vertexCount = polyline.NumberOfVertices;
+        }
+        else if (entity is Solid)
+        {
+            geometryKind = "solid";
+            vertexCount = 4;
+        }
+        else if (entity is Arc)
+        {
+            geometryKind = "arc";
+        }
+        else if (entity is BlockReference blockReference)
+        {
+            geometryKind = "block-reference";
+            if (!blockReference.BlockTableRecord.IsNull
+                && transaction.GetObject(
+                    blockReference.BlockTableRecord,
+                    OpenMode.ForRead,
+                    false) is BlockTableRecord nested)
+            {
+                nestedBlockName = nested.Name ?? string.Empty;
+            }
+        }
+
+        try
+        {
+            var extents = entity.GeometricExtents;
+            minX = extents.MinPoint.X;
+            minY = extents.MinPoint.Y;
+            minZ = extents.MinPoint.Z;
+            maxX = extents.MaxPoint.X;
+            maxY = extents.MaxPoint.Y;
+            maxZ = extents.MaxPoint.Z;
+        }
+        catch (System.Exception)
+        {
+            // Some generated entities may not expose valid extents. Keep the
+            // type/handle evidence and leave extents null; the comparator will
+            // fail closed rather than invent geometry.
+        }
+
+        return new DimensionBlockGeometryMetric(
+            entity.GetType().Name,
+            identityOverride ?? SafeEntityIdentity(entity),
+            geometryKind,
+            startX,
+            startY,
+            startZ,
+            endX,
+            endY,
+            endZ,
+            minX,
+            minY,
+            minZ,
+            maxX,
+            maxY,
+            maxZ,
+            nestedBlockName,
+            vertexCount,
+            SafeColorMethod(entity, out var rgbColor),
+            rgbColor,
+            entity.LineWeight.ToString(),
+            (int)entity.LineWeight >= 0 ? (int)entity.LineWeight : null,
+            SafeEntityLinetype(entity),
+            SafeEntityLayer(entity));
+    }
+
+    private static (
+        IReadOnlyList<DimensionBlockGeometryMetric> Geometry,
+        IReadOnlyList<DimensionTextMetric> TextMetrics) ReadExplodedDimensionEvidence(
+        Transaction transaction,
+        Database database,
+        Dimension dimension)
+    {
+        var geometry = new List<DimensionBlockGeometryMetric>();
+        var textMetrics = new List<DimensionTextMetric>();
+        var exploded = new DBObjectCollection();
+
+        try
+        {
+            dimension.Explode(exploded);
+            var ordinal = 0;
+            foreach (DBObject item in exploded)
+            {
+                if (item is not Entity entity)
+                    continue;
+
+                var identity = "explode-" + ordinal.ToString(CultureInfo.InvariantCulture);
+                ordinal++;
+
+                if (entity is MText mtext)
+                {
+                    var style = ReadTextStyle(
+                        transaction,
+                        database,
+                        mtext.TextStyleId);
+                    textMetrics.Add(new DimensionTextMetric(
+                        "MText",
+                        identity,
+                        mtext.Contents ?? string.Empty,
+                        "mtext-actual-bounds-exploded-wcs",
+                        mtext.ActualWidth,
+                        mtext.ActualHeight,
+                        mtext.Rotation,
+                        mtext.Location.X,
+                        mtext.Location.Y,
+                        mtext.Location.Z,
+                        style.Name,
+                        style.FontFile,
+                        style.WidthFactor,
+                        style.FontResolvedPath,
+                        style.FontSha256,
+                        mtext.TextHeight,
+                        style.WidthFactor,
+                        BackgroundFill: mtext.BackgroundFill,
+                        UseBackgroundColor: mtext.UseBackgroundColor,
+                        BackgroundScaleFactor: mtext.BackgroundFill
+                            ? mtext.BackgroundScaleFactor
+                            : 0d,
+                        ShowBorders: mtext.ShowBorders,
+                        Attachment: mtext.Attachment.ToString(),
+                        Fragments: ReadMTextFragments(mtext)));
+                    continue;
+                }
+
+                if (entity is DBText dbText)
+                {
+                    var style = ReadTextStyle(
+                        transaction,
+                        database,
+                        dbText.TextStyleId);
+                    var extents = dbText.GeometricExtents;
+                    textMetrics.Add(new DimensionTextMetric(
+                        "DBText",
+                        identity,
+                        dbText.TextString ?? string.Empty,
+                        "dbtext-geometric-extents-exploded-wcs",
+                        Math.Abs(extents.MaxPoint.X - extents.MinPoint.X),
+                        Math.Abs(extents.MaxPoint.Y - extents.MinPoint.Y),
+                        dbText.Rotation,
+                        dbText.Position.X,
+                        dbText.Position.Y,
+                        dbText.Position.Z,
+                        style.Name,
+                        style.FontFile,
+                        style.WidthFactor,
+                        style.FontResolvedPath,
+                        style.FontSha256,
+                        dbText.Height,
+                        dbText.WidthFactor));
+                    continue;
+                }
+
+                geometry.Add(ReadDimensionBlockGeometry(
+                    transaction,
+                    entity,
+                    identity));
+            }
+
+            return (geometry, textMetrics);
+        }
+        catch (System.Exception)
+        {
+            return ([], []);
+        }
+        finally
+        {
+            foreach (DBObject item in exploded)
+                item.Dispose();
+        }
+    }
+
+    private static string SafeColorMethod(
+        Entity entity,
+        out int? rgbColor)
+    {
+        rgbColor = null;
+        try
+        {
+            var color = entity.Color;
+            var method = color.ColorMethod.ToString();
+            if (string.Equals(method, "ByColor", StringComparison.Ordinal)
+                || string.Equals(method, "ByAci", StringComparison.Ordinal))
+            {
+                rgbColor =
+                    (color.Red << 16)
+                    | (color.Green << 8)
+                    | color.Blue;
+            }
+
+            return method;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeEntityLinetype(Entity entity)
+    {
+        try
+        {
+            return entity.Linetype ?? string.Empty;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeEntityLayer(Entity entity)
+    {
+        try
+        {
+            return entity.Layer ?? string.Empty;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeEntityIdentity(Entity entity)
+    {
+        try
+        {
+            return entity.Handle.ToString();
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static IReadOnlyList<DimensionTextFragmentMetric> ReadMTextFragments(
+        MText mtext)
+    {
+        var fragments = new List<DimensionTextFragmentMetric>();
+        try
+        {
+            MTextFragmentCallback callback = (fragment, _) =>
+            {
+                var extents = fragment.Extents;
+                var location = fragment.Location;
+                var direction = fragment.Direction;
+                fragments.Add(new DimensionTextFragmentMetric(
+                    fragment.Text ?? string.Empty,
+                    Convert.ToString(fragment.TrueTypeFont, CultureInfo.InvariantCulture)
+                        ?? string.Empty,
+                    Convert.ToString(fragment.ShxFont, CultureInfo.InvariantCulture)
+                        ?? string.Empty,
+                    extents.X,
+                    extents.Y,
+                    fragment.CapsHeight,
+                    fragment.TrackingFactor,
+                    fragment.WidthFactor,
+                    fragment.ObliqueAngle,
+                    location.X,
+                    location.Y,
+                    location.Z,
+                    direction.X,
+                    direction.Y,
+                    direction.Z,
+                    fragment.Bold,
+                    fragment.Italic,
+                    fragment.StackTop,
+                    fragment.StackBottom,
+                    fragment.Underlined,
+                    fragment.Overlined,
+                    fragment.Strikethrough));
+                return MTextFragmentCallbackStatus.Continue;
+            };
+
+            mtext.ExplodeFragments(callback);
+        }
+        catch (System.Exception)
+        {
+            // Fragment evidence is diagnostic-only and fail-closed. If AutoCAD
+            // cannot enumerate the generated MText layout we leave the list
+            // empty; the independent comparator will reject that candidate.
+            return [];
+        }
+
+        return fragments;
+    }
+
+    private static (
+        string Name,
+        string FontFile,
+        double WidthFactor,
+        string FontResolvedPath,
+        string FontSha256) ReadTextStyle(
+        Transaction transaction,
+        Database database,
+        ObjectId textStyleId)
+    {
+        if (textStyleId.IsNull
+            || transaction.GetObject(
+                textStyleId,
+                OpenMode.ForRead,
+                false) is not TextStyleTableRecord style)
+        {
+            return (string.Empty, string.Empty, 1d, string.Empty, string.Empty);
+        }
+
+        var fontFile = style.FileName ?? string.Empty;
+        var resolvedPath = ResolveFontPath(database, fontFile);
+        return (
+            style.Name ?? string.Empty,
+            fontFile,
+            style.XScale,
+            resolvedPath,
+            DimensionMetricsFileIdentity.ComputeSha256(resolvedPath));
+    }
+
+    private static string ResolveFontPath(Database database, string fontFile)
+    {
+        if (string.IsNullOrWhiteSpace(fontFile))
+            return string.Empty;
+
+        try
+        {
+            var path = HostApplicationServices.Current.FindFile(
+                fontFile,
+                database,
+                FindFileHint.FontFile);
+            return File.Exists(path) ? Path.GetFullPath(path) : string.Empty;
+        }
+        catch (System.Exception)
+        {
+            return string.Empty;
+        }
+    }
+
     [CommandMethod("TEYPDFSHEETCONFIG", CommandFlags.Modal)]
     public void ConfigureSheetBounds()
     {

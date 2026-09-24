@@ -1,4 +1,5 @@
 using TeyPdfCad.Core.Geometry;
+using TeyPdfCad.Core.Recognition;
 
 namespace TeyPdfCad.Core.Semantics;
 
@@ -17,6 +18,7 @@ public sealed record AxisCandidate(
     IReadOnlyList<string>? SourcePrimitiveIds = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
+    public IReadOnlyList<RecognizerSourceClaim> SourceClaims { get; init; } = [];
 }
 
 public sealed record LeaderCandidate(
@@ -27,6 +29,7 @@ public sealed record LeaderCandidate(
     IReadOnlyList<string>? SourcePrimitiveIds = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
+    public IReadOnlyList<RecognizerSourceClaim> SourceClaims { get; init; } = [];
 }
 
 public sealed record LevelCandidate(
@@ -37,6 +40,7 @@ public sealed record LevelCandidate(
     IReadOnlyList<string>? SourcePrimitiveIds = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
+    public IReadOnlyList<RecognizerSourceClaim> SourceClaims { get; init; } = [];
 }
 
 public sealed record ArcDimensionCandidate(
@@ -50,4 +54,5 @@ public sealed record ArcDimensionCandidate(
     IReadOnlyList<string>? SourcePrimitiveIds = null)
 {
     public IReadOnlyList<string> ProvenanceIds => SourcePrimitiveIds ?? [];
+    public IReadOnlyList<RecognizerSourceClaim> SourceClaims { get; init; } = [];
 }

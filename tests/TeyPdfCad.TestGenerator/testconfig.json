@@ -1,0 +1,16 @@
+{
+  "defaultCount": 10000,
+  "defaultSeed": 12345,
+  "valueToleranceAbsolute": 0.01,
+  "pointTolerance": 0.05,
+  "scaleTolerance": 0.000001,
+  "maxFalsePositiveRate": 0.005,
+  "maxWrongMeasurementRate": 0.002,
+  "minReconstructionRecall": 0.95,
+  "minReconstructionF1": 0.95,
+  "minFullSemanticPassRate": 0.90,
+  "maxRecallDrop": 0.001,
+  "maxPrecisionDrop": 0.001,
+  "maxPassRateDrop": 0.001,
+  "failOnBaselineRegression": true
+}

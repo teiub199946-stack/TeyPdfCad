@@ -125,9 +125,91 @@ public sealed class PdfPigVectorDocumentReaderTests
         Assert.Equal(8.66d, texts[0].HeightPoints, 2);
         Assert.Equal(-Math.PI / 2d, texts[0].RotationRadians, 6);
         Assert.Equal(0x000000, texts[0].Style.RgbColor);
+        Assert.Equal("Helvetica", texts[0].FontName);
+        Assert.Null(texts[0].FontProgramSha256);
+        Assert.Null(texts[0].FontProgramSubtype);
+        Assert.Null(texts[0].FontEncodingName);
+        Assert.Null(texts[0].FontHasToUnicode);
+        Assert.Null(texts[0].FontIsSubset);
+        Assert.True(texts[0].AdvanceWidthPoints > 0d);
+        Assert.True(texts[0].VisibleWidthPoints > 0d);
+        Assert.True(double.IsFinite(texts[0].VisibleWidthPoints));
+        Assert.True(texts[0].GlyphInkWidthPoints > 0d);
+        Assert.True(texts[0].GlyphInkHeightPoints > 0d);
+        Assert.True(double.IsFinite(texts[0].GlyphInkWidthPoints));
+        Assert.True(double.IsFinite(texts[0].GlyphInkHeightPoints));
+        Assert.True(texts[0].VisualCenter.HasValue);
+        Assert.True(double.IsFinite(texts[0].VisualCenter!.Value.X));
+        Assert.True(double.IsFinite(texts[0].VisualCenter!.Value.Y));
+        Assert.NotEqual(texts[0].InsertionPoint, texts[0].VisualCenter!.Value);
         var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
         Assert.Equal(20 * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
         Assert.Equal((595.276 - 10) * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
+    }
+
+    [Fact]
+    public async Task Reader_keeps_rotated_text_and_geometry_aligned_with_nonzero_media_box_origin()
+    {
+        const string contents = "172 800 m 200 800 l S BT /F1 12 Tf 172 800 Td (A3) Tj ET";
+        await using var input = CreateMinimalPdf(
+            contents,
+            rotation: 90,
+            mediaBox: "100 100 695.276 941.89");
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+
+        var mm = TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint;
+        Assert.Equal(700d * mm, text.InsertionPoint.X, 6);
+        Assert.Equal(523.276d * mm, text.InsertionPoint.Y, 6);
+        Assert.Equal(700d * mm, line.Start.X, 6);
+        Assert.Equal(523.276d * mm, line.Start.Y, 6);
+        Assert.Equal(700d * mm, line.End.X, 6);
+        Assert.Equal(495.276d * mm, line.End.Y, 6);
+    }
+
+    [Fact]
+    public async Task Reader_does_not_promote_hidden_pdf_text_to_visible_vector_text()
+    {
+        const string contents = "0 0 m 10 10 l S BT /F1 12 Tf 3 Tr 72 700 Td (HIDDEN) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        Assert.Empty(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        Assert.Contains(
+            page.Diagnostics,
+            diagnostic => diagnostic.Code == "hidden-pdf-text-skipped");
+        Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
+    }
+
+    [Fact]
+    public async Task Reader_keeps_visible_text_source_id_tied_to_raw_word_ordinal_after_hidden_text()
+    {
+        const string contents = "BT /F1 12 Tf 3 Tr 72 700 Td (HIDDEN) Tj 0 Tr 0 -30 Td (VISIBLE) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+        var visible = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+
+        Assert.Equal("VISIBLE", visible.Value);
+        Assert.Equal("page-1-text-2", visible.SourceId);
+        Assert.Contains(page.Diagnostics, diagnostic => diagnostic.Code == "hidden-pdf-text-skipped");
+    }
+
+    [Fact]
+    public async Task Reader_reports_text_clipping_without_hiding_visible_fill_clip_text()
+    {
+        const string contents = "0 0 m 10 10 l S BT /F1 12 Tf 4 Tr 72 700 Td (CLIPPED) Tj ET";
+        await using var input = CreateMinimalPdf(contents);
+
+        var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
+
+        Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        Assert.Contains(
+            page.Diagnostics,
+            diagnostic => diagnostic.Code == "unsupported-pdf-text-clipping");
     }
 
     [Fact]
@@ -160,9 +242,14 @@ public sealed class PdfPigVectorDocumentReaderTests
 
         var page = Assert.Single((await new PdfPigVectorDocumentReader().ReadAsync(input, default)).Pages);
         var text = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorText>());
+        var line = Assert.Single(page.Entities.OfType<TeyPdfCad.Core.Documents.VectorLine>());
 
         Assert.Equal(72d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.X, 6);
         Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, text.InsertionPoint.Y, 6);
+        Assert.Equal(72d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.X, 6);
+        Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.Start.Y, 6);
+        Assert.Equal(100d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.End.X, 6);
+        Assert.Equal(700d * TeyPdfCad.Core.Documents.VectorPdfPage.MillimetresPerPoint, line.End.Y, 6);
     }
 
     [Fact]
@@ -183,6 +270,12 @@ public sealed class PdfPigVectorDocumentReaderTests
 
         Assert.True(horizontalText.AdvanceWidthPoints > 0d, "horizontal word must report a positive advance width");
         Assert.True(verticalText.AdvanceWidthPoints > 0d, "rotated word must report a positive advance width (baseline length), not zero");
+        Assert.True(horizontalText.GlyphInkWidthPoints > 0d);
+        Assert.True(verticalText.GlyphInkWidthPoints > 0d);
+        Assert.True(horizontalText.GlyphInkHeightPoints > 0d);
+        Assert.True(verticalText.GlyphInkHeightPoints > 0d);
+        Assert.Equal(horizontalText.GlyphInkWidthPoints, verticalText.GlyphInkWidthPoints, 3);
+        Assert.Equal(horizontalText.GlyphInkHeightPoints, verticalText.GlyphInkHeightPoints, 3);
         Assert.Equal(Math.Abs(Math.PI / 2d), Math.Abs(verticalText.RotationRadians), 3);
     }
 

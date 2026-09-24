@@ -19,7 +19,9 @@ public sealed class SemanticReconstructionEngine
     {
         if (scene is null) throw new ArgumentNullException(nameof(scene));
 
-        var dimensions = _dimensionRecognizer.Recognize(scene, dimensionOptions);
+        var dimensionRecognition = _dimensionRecognizer.RecognizeDetailed(scene, dimensionOptions);
+        var dimensions = dimensionRecognition.PrimaryCandidates;
+        var dimensionWarnings = _dimensionRecognizer.DetectAmbiguities(scene, dimensionOptions);
         var chains = _chainDetector.Detect(dimensions);
         var dominantScale = EstimateDominantScale(dimensions);
         var averageConfidence = dimensions.Count == 0 ? 0.0 : dimensions.Average(x => x.Confidence);
@@ -34,12 +36,14 @@ public sealed class SemanticReconstructionEngine
             dominantScale,
             averageConfidence)
         {
+            DimensionClaimants = dimensionRecognition.Claimants,
             Axes = axes.NativeAxes,
             Leaders = leaders.NativeLeaders,
             Levels = levels.NativeLevels,
             ArcDimensions = arcDimensions.NativeArcDimensions,
             NativeFillPaths = scene.ClosedPaths,
-            Warnings = axes.Warnings
+            Warnings = dimensionWarnings
+                .Concat(axes.Warnings)
                 .Concat(leaders.Warnings)
                 .Concat(levels.Warnings)
                 .Concat(arcDimensions.Warnings)

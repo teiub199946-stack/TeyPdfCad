@@ -21,16 +21,53 @@ public enum ConversionOutcome
     InvalidArgumentsOrIo = 4
 }
 
-public sealed record ConversionResult(ConversionOutcome Outcome, string ReportPath, string? DwgPath);
+public sealed record ConversionResult(
+    ConversionOutcome Outcome,
+    string ReportPath,
+    string? DwgPath,
+    string? ProbeDwgPath = null);
 
 public sealed class ConversionPipeline
 {
+    private readonly IDwgDocumentWriter _dwgWriter;
+    private readonly IDwgReadBackVerifier _dwgVerifier;
+    private readonly bool _destructiveSuppressionEnabled;
+
+    public ConversionPipeline()
+        : this(
+            new ProductionDwgDocumentWriter(),
+            new ProductionDwgReadBackVerifier(),
+            destructiveSuppressionEnabled: false)
+    {
+    }
+
+    internal ConversionPipeline(
+        IDwgDocumentWriter dwgWriter,
+        IDwgReadBackVerifier dwgVerifier)
+        : this(
+            dwgWriter,
+            dwgVerifier,
+            destructiveSuppressionEnabled: false)
+    {
+    }
+
+    internal ConversionPipeline(
+        IDwgDocumentWriter dwgWriter,
+        IDwgReadBackVerifier dwgVerifier,
+        bool destructiveSuppressionEnabled)
+    {
+        _dwgWriter = dwgWriter ?? throw new ArgumentNullException(nameof(dwgWriter));
+        _dwgVerifier = dwgVerifier ?? throw new ArgumentNullException(nameof(dwgVerifier));
+        _destructiveSuppressionEnabled = destructiveSuppressionEnabled;
+    }
+
     public async Task<ConversionResult> ConvertAsync(
         string inputPdfPath,
         string outputDwgPath,
         string reportPath,
         CancellationToken cancellationToken,
-        string? templateManifestPath = null)
+        string? templateManifestPath = null,
+        string? diagnosticProbeOutputPath = null)
     {
         if (string.IsNullOrWhiteSpace(inputPdfPath)) throw new ArgumentException("Input PDF path is required.", nameof(inputPdfPath));
         if (string.IsNullOrWhiteSpace(outputDwgPath)) throw new ArgumentException("Output DWG path is required.", nameof(outputDwgPath));
@@ -38,12 +75,16 @@ public sealed class ConversionPipeline
 
         try
         {
-            ValidatePaths(inputPdfPath, outputDwgPath, reportPath);
+            ValidatePaths(
+                inputPdfPath,
+                outputDwgPath,
+                reportPath,
+                diagnosticProbeOutputPath);
             await using var input = File.OpenRead(inputPdfPath);
             var document = await new PdfPigVectorDocumentReader().ReadAsync(input, cancellationToken);
             var hatchRecognition = document.Pages.ToDictionary(
                 page => page.Number,
-                page => new HatchRecognizer().Recognize(page.Entities));
+                page => new HatchRecognizer().Recognize(page.Entities, page.Number));
             var semanticRecognition = document.Pages.ToDictionary(
                 page => page.Number,
                 AnalyzeSemantics);
@@ -52,49 +93,226 @@ public sealed class ConversionPipeline
                 page => new SourceReplacementPlanner().BuildPlan(
                     page.Entities,
                     semanticRecognition[page.Number].Result,
-                    hatchRecognition[page.Number]));
+                    hatchRecognition[page.Number],
+                    page.Number));
             var templateLibrary = LoadTemplateLibrary(templateManifestPath);
             var templateSelections = templateLibrary is null
                 ? null
-                : document.Pages.ToDictionary(page => page.Number, page => SelectTemplate(page, templateLibrary));
+                : document.Pages.ToDictionary(
+                    page => page.Number,
+                    page => DeferUnverifiedTemplateReplacement(
+                        SelectTemplate(page, templateLibrary)));
+            var plan = new DocumentLayoutPlanner().Create(document);
             var pagesWithVectors = document.Pages.Count(page => page.Entities.Count > 0);
             if (pagesWithVectors == 0)
             {
-                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), null, cancellationToken);
-                return new ConversionResult(ConversionOutcome.UnsupportedVectorContent, reportPath, null);
+                await WriteReportAsync(reportPath, complete: false, document.PageCount, 0, 0, ["PDF has no usable vector entities; raster/scanned input is unsupported in this release."], CreatePageReports(document, plan, hatchRecognition, semanticRecognition, replacementPlans, templateSelections), null, cancellationToken);
+                return new ConversionResult(
+                    ConversionOutcome.UnsupportedVectorContent,
+                    reportPath,
+                    null,
+                    null);
             }
 
-            var plan = new DocumentLayoutPlanner().Create(document);
             var semanticResults = semanticRecognition
                 .Where(pair => pair.Value.Result is not null)
                 .ToDictionary(pair => pair.Key, pair => pair.Value.Result!);
-            var createdCandidateKeysByPage = document.Pages.ToDictionary(
-                page => page.Number,
-                _ => (ISet<string>)new HashSet<string>(StringComparer.Ordinal));
-            var bytes = new AcadSharpDwgWriter().Write(
-                document,
-                plan,
-                hatchRecognition,
-                semanticResults,
-                templateLibrary,
-                templateSelections,
-                replacementPlans,
-                createdCandidateKeysByPage);
-            var readBack = DwgReader.Read(new MemoryStream(bytes));
-            var layoutsReadBack = readBack.Layouts.Count(layout => layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
-            if (layoutsReadBack != 0)
+            var writer = _dwgWriter;
+            var verifier = _dwgVerifier;
+
+            var outputFullPath = Path.GetFullPath(outputDwgPath);
+            var outputDirectory = Path.GetDirectoryName(outputFullPath)!;
+            Directory.CreateDirectory(outputDirectory);
+            var diagnosticProbeFullPath = string.IsNullOrWhiteSpace(diagnosticProbeOutputPath)
+                ? null
+                : Path.GetFullPath(diagnosticProbeOutputPath);
+            if (diagnosticProbeFullPath is not null)
             {
-                throw new InvalidDataException($"DWG read-back found {layoutsReadBack} generated layouts; Model Space-only output requires zero.");
+                Directory.CreateDirectory(Path.GetDirectoryName(diagnosticProbeFullPath)!);
             }
-            ValidateReadBack(readBack, plan, document);
-            var readBackSummary = CreateReadBackSummary(readBack);
+            var runId = Guid.NewGuid().ToString("N");
+            var probePath = Path.Combine(outputDirectory, $".teypdfcad-probe-{runId}.dwg");
+            var finalPath = Path.Combine(outputDirectory, $".teypdfcad-final-{runId}.dwg");
+
+            DwgWriteResult probeWrite;
+            NativeReadBackVerification probeVerification;
+            IReadOnlyDictionary<int, SuppressionDecision> suppressionDecisions;
+            HashSet<PageSourceRef> authorizedSuppressedSources;
+            DwgStructuralInventory probeInventory;
+            SourceEmissionSummary closedProbeSourceEmissions;
+            DwgStructuralInventory finalInventory;
+            ACadSharp.CadDocument finalReadBack;
+
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using (var probeStream = File.Create(probePath))
+                {
+                    probeWrite = writer.Write(
+                        probeStream,
+                        document,
+                        plan,
+                        hatchRecognition,
+                        semanticResults,
+                        templateLibrary,
+                        templateSelections,
+                        replacementPlans,
+                        authorizedSuppressedSources: null);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                probeVerification = verifier.Verify(probePath, probeWrite.Manifest);
+                suppressionDecisions = document.Pages.ToDictionary(
+                    page => page.Number,
+                    page => new SuppressionGate().Evaluate(
+                        replacementPlans[page.Number],
+                        probeVerification));
+
+                if (!_destructiveSuppressionEnabled)
+                {
+                    suppressionDecisions = suppressionDecisions.ToDictionary(
+                        pair => pair.Key,
+                        pair => DisableDestructiveSuppression(
+                            replacementPlans[pair.Key],
+                            pair.Value));
+                }
+
+                authorizedSuppressedSources = suppressionDecisions
+                    .SelectMany(pair => pair.Value.SuppressSourceIds.Select(
+                        sourceId => new PageSourceRef(pair.Key, sourceId)))
+                    .ToHashSet();
+                var authorizedNativeCandidateIds = document.Pages
+                    .SelectMany(page =>
+                        NativeCandidateAuthorization.GetAuthorizedCandidateIds(
+                            replacementPlans[page.Number],
+                            page.Number,
+                            authorizedSuppressedSources)
+                        ?? new HashSet<string>(StringComparer.Ordinal))
+                    .ToHashSet(StringComparer.Ordinal);
+
+                probeInventory = verifier.ReadStructuralInventory(probePath);
+                try
+                {
+                    DwgStructuralSanity.ValidateDeclaredSourceEmissionParity(
+                        probeInventory,
+                        probeWrite.SourceEmissionSummary);
+                    closedProbeSourceEmissions =
+                        DwgStructuralSanity.GetClosedProbeSourceEmissions(
+                            probeInventory);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: closed-probe source inventory mismatch: {exception.Message}",
+                        exception);
+                }
+
+                // Validate every requested removal against source identity rebuilt
+                // independently from the closed probe, never writer memory.
+                try
+                {
+                    _ = DwgStructuralSanity.BuildExpectedFinalFingerprintMultiset(
+                        probeInventory,
+                        closedProbeSourceEmissions,
+                        authorizedSuppressedSources);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: {exception.Message}",
+                        exception);
+                }
+
+                DwgWriteResult finalWrite;
+                try
+                {
+                    using var finalStream = File.Create(finalPath);
+                    finalWrite = writer.Write(
+                        finalStream,
+                        document,
+                        plan,
+                        hatchRecognition,
+                        semanticResults,
+                        templateLibrary,
+                        templateSelections,
+                        replacementPlans,
+                        authorizedSuppressedSources);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: final writer rejected authorized suppression: {exception.Message}",
+                        exception);
+                }
+
+                ValidateManifestParity(
+                    probeWrite.Manifest,
+                    finalWrite.Manifest,
+                    authorizedNativeCandidateIds);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                var finalVerification = verifier.Verify(finalPath, finalWrite.Manifest);
+                ValidateVerifiedCandidatesRemainVerified(
+                    probeVerification,
+                    finalVerification,
+                    authorizedNativeCandidateIds);
+
+                finalInventory = verifier.ReadStructuralInventory(finalPath);
+                try
+                {
+                    DwgStructuralSanity.ValidateFinal(
+                        probeInventory,
+                        finalInventory,
+                        closedProbeSourceEmissions,
+                        authorizedSuppressedSources,
+                        authorizedNativeCandidateIds);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: {exception.Message}",
+                        exception);
+                }
+
+                finalReadBack = DwgReader.Read(finalPath);
+                var layoutsInFinal = finalReadBack.Layouts.Count(layout =>
+                    layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
+                if (layoutsInFinal != 0)
+                {
+                    throw new InvalidDataException(
+                        $"DWG read-back found {layoutsInFinal} generated layouts; Model Space-only output requires zero.");
+                }
+                ValidateReadBack(finalReadBack, plan, document);
+
+                // The optional probe copy is diagnostics-only: it contains the
+                // original source geometry plus native candidates and performs
+                // no destructive source suppression. Publish it only after the
+                // same probe/final structural gates have succeeded.
+                if (diagnosticProbeFullPath is not null)
+                {
+                    File.Copy(probePath, diagnosticProbeFullPath, overwrite: true);
+                }
+
+                // Publication happens only after every probe/final gate above passed.
+                File.Move(finalPath, outputFullPath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(probePath))
+                    File.Delete(probePath);
+                if (File.Exists(finalPath))
+                    File.Delete(finalPath);
+            }
+
+            var layoutsReadBack = finalReadBack.Layouts.Count(layout =>
+                layout.Name.StartsWith("Лист-", StringComparison.Ordinal));
+            var readBackSummary = CreateReadBackSummary(finalReadBack);
             var executionReports = document.Pages.ToDictionary(
                 page => page.Number,
                 page => ReplacementExecutionAuditor.Build(
                     replacementPlans[page.Number],
-                    createdCandidateKeysByPage[page.Number].ToArray(),
+                    probeVerification,
                     readBackConfirmed: true));
-            await WriteAtomicallyAsync(outputDwgPath, bytes, cancellationToken);
             var warnings = new List<string>();
             if (pagesWithVectors != document.PageCount)
                 warnings.Add("One or more PDF pages contained no usable vector entities; DWG is partial.");
@@ -109,40 +327,136 @@ public sealed class ConversionPipeline
             warnings.AddRange(document.Pages.SelectMany(page =>
                 replacementPlans[page.Number].Conflicts.Select(conflict =>
                     $"Page {page.Number}: source replacement conflict {conflict.Reason} on {conflict.SourceId}.")));
+            if (templateSelections is not null)
+            {
+                warnings.AddRange(templateSelections
+                    .Where(pair => string.Equals(
+                        pair.Value.Reason,
+                        "template-source-replacement-deferred-p0",
+                        StringComparison.Ordinal))
+                    .Select(pair =>
+                        $"Page {pair.Key}: template source replacement is deferred until native read-back verification exists; source geometry is preserved."));
+            }
             warnings.AddRange(document.Pages.SelectMany(page =>
-                executionReports[page.Number].GeometryLostSourceIds.Select(sourceId =>
-                    $"Page {page.Number}: GEOMETRY_LOST for suppressed source {sourceId}.")));
+                executionReports[page.Number].CandidateNotVerifiedSourceIds.Select(sourceId =>
+                    $"Page {page.Number}: native candidate is not read-back verified for source {sourceId}; source is preserved.")));
+            warnings.AddRange(document.Pages.SelectMany(page =>
+                suppressionDecisions[page.Number].Residuals
+                    .Where(residual =>
+                        residual.Kind is ReplacementResidualKind.SourceEquivalenceIncomplete
+                            or ReplacementResidualKind.DestructiveSuppressionDisabled)
+                    .Select(residual =>
+                        $"Page {page.Number}: {residual.Kind} on {residual.SourceId}; source is preserved.")));
+            if (!_destructiveSuppressionEnabled
+                && suppressionDecisions.Values.Any(decision =>
+                    decision.Residuals.Any(residual =>
+                        residual.Kind == ReplacementResidualKind.DestructiveSuppressionDisabled)))
+            {
+                warnings.Add("Production destructive source suppression is disabled until independent source-equivalence is complete; probe-only native candidates are withheld from the published DWG while source geometry is preserved.");
+            }
             warnings = warnings.Distinct(StringComparer.Ordinal).ToList();
 
             var complete = warnings.Count == 0
                 && replacementPlans.Values.All(planResult => planResult.IsFullPassEligible)
-                && executionReports.Values.All(report => report.ReadBackConfirmed && !report.AnyGeometryLost);
-            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports), readBackSummary, cancellationToken);
-            return new ConversionResult(complete ? ConversionOutcome.Complete : ConversionOutcome.Partial, reportPath, outputDwgPath);
+                && suppressionDecisions.Values.All(decision => decision.Residuals.Count == 0)
+                && executionReports.Values.All(report =>
+                    report.ReadBackConfirmed
+                    && report.CandidateNotVerifiedSourceIds.Count == 0
+                    && !report.AnyGeometryLost);
+            await WriteReportAsync(reportPath, complete, document.PageCount, pagesWithVectors, layoutsReadBack, warnings, CreatePageReports(document, plan, hatchRecognition, semanticRecognition, replacementPlans, templateSelections, executionReports, suppressionDecisions), readBackSummary, cancellationToken);
+            return new ConversionResult(
+                complete ? ConversionOutcome.Complete : ConversionOutcome.Partial,
+                reportPath,
+                outputDwgPath,
+                diagnosticProbeFullPath);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception exception)
         {
             await TryWriteFailureReportAsync(reportPath, exception.Message, cancellationToken);
-            return new ConversionResult(ConversionOutcome.InvalidArgumentsOrIo, reportPath, null);
+            return new ConversionResult(
+                ConversionOutcome.InvalidArgumentsOrIo,
+                reportPath,
+                null,
+                null);
         }
     }
 
-    private static void ValidatePaths(string inputPdfPath, string outputDwgPath, string reportPath)
+    private static SuppressionDecision DisableDestructiveSuppression(
+        SourceReplacementPlan plan,
+        SuppressionDecision decision)
+    {
+        if (decision.SuppressSourceIds.Count == 0)
+            return decision;
+
+        var preserved = decision.PreserveSourceIds
+            .Concat(decision.SuppressSourceIds)
+            .ToHashSet(StringComparer.Ordinal);
+        var residuals = decision.Residuals.ToList();
+
+        foreach (var sourceId in decision.SuppressSourceIds.OrderBy(value => value, StringComparer.Ordinal))
+        {
+            var candidateId = plan.SourceCoverageMap.TryGetValue(sourceId, out var candidates)
+                && candidates.Count == 1
+                    ? candidates[0]
+                    : null;
+
+            if (!residuals.Any(existing =>
+                    string.Equals(existing.SourceId, sourceId, StringComparison.Ordinal)
+                    && existing.Kind == ReplacementResidualKind.DestructiveSuppressionDisabled))
+            {
+                residuals.Add(new ReplacementResidual(
+                    sourceId,
+                    candidateId,
+                    ReplacementResidualKind.DestructiveSuppressionDisabled,
+                    ReplacementResidualSeverity.Critical,
+                    "Production destructive source suppression is disabled until independent source-equivalence and current-branch 10k semantic quality gates pass."));
+            }
+        }
+
+        return new SuppressionDecision(
+            new HashSet<string>(StringComparer.Ordinal),
+            preserved,
+            residuals
+                .OrderBy(residual => residual.SourceId, StringComparer.Ordinal)
+                .ThenBy(residual => residual.CandidateKey, StringComparer.Ordinal)
+                .ThenBy(residual => residual.Kind)
+                .ToArray());
+    }
+
+    private static void ValidatePaths(
+        string inputPdfPath,
+        string outputDwgPath,
+        string reportPath,
+        string? diagnosticProbeOutputPath)
     {
         var input = Path.GetFullPath(inputPdfPath);
         var output = Path.GetFullPath(outputDwgPath);
         var report = Path.GetFullPath(reportPath);
+        var probe = string.IsNullOrWhiteSpace(diagnosticProbeOutputPath)
+            ? null
+            : Path.GetFullPath(diagnosticProbeOutputPath);
+
         if (!string.Equals(Path.GetExtension(input), ".pdf", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Input file must use the .pdf extension.");
         if (!string.Equals(Path.GetExtension(output), ".dwg", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Output file must use the .dwg extension.");
         if (!string.Equals(Path.GetExtension(report), ".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Report file must use the .json extension.");
-        if (string.Equals(input, output, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(input, report, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(output, report, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Input PDF, output DWG and JSON report must use distinct paths.");
+        if (probe is not null
+            && !string.Equals(Path.GetExtension(probe), ".dwg", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Diagnostic probe output must use the .dwg extension.");
+        }
+
+        var paths = new[] { input, output, report }
+            .Concat(probe is null ? [] : [probe])
+            .ToArray();
+        if (paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length)
+        {
+            throw new InvalidDataException(
+                "Input PDF, output DWG, JSON report and diagnostic probe DWG must use distinct paths.");
+        }
     }
 
     private static TemplateLibrary? LoadTemplateLibrary(string? templateManifestPath)
@@ -193,16 +507,78 @@ public sealed class ConversionPipeline
             text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
-            [text.SourceId])));
+            [text.SourceId],
+            text.Style.RgbColor,
+            text.FontName,
+            text.AdvanceWidthPoints > 0d
+                ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.VisualCenter,
+            text.VisibleWidthPoints > 0d
+                ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.VisibleHeightPoints > 0d
+                ? text.VisibleHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.FontProgramSha256,
+            text.FontProgramSubtype,
+            text.FontEncodingName,
+            text.FontHasToUnicode,
+            text.FontIsSubset,
+            text.GlyphInkWidthPoints > 0d
+                ? text.GlyphInkWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.GlyphInkHeightPoints > 0d
+                ? text.GlyphInkHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null)));
         var titleBlock = TitleBlockDetector.Detect(scene, sheet);
         return new TemplateSheetSelector(library).Select(sheet, titleBlock);
     }
 
-    private static async Task TryWriteFailureReportAsync(string reportPath, string message, CancellationToken cancellationToken)
+    private static TemplateSelection DeferUnverifiedTemplateReplacement(
+        TemplateSelection selection)
+    {
+        if (!selection.IsConfirmed || selection.SourceIdsToReplace.Count == 0)
+            return selection;
+
+        return new TemplateSelection(
+            false,
+            selection.TemplateName,
+            "template-source-replacement-deferred-p0",
+            selection.SourceIdsToReplace);
+    }
+
+    private static async Task TryWriteFailureReportAsync(
+        string reportPath,
+        string message,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await WriteReportAsync(reportPath, complete: false, 0, 0, 0, [message], [], null, cancellationToken);
+            IReadOnlyList<ReplacementResidual> fatalResiduals =
+                message.Contains("SourceSuppressionViolation", StringComparison.Ordinal)
+                    ?
+                    [
+                        new ReplacementResidual(
+                            "(document)",
+                            null,
+                            ReplacementResidualKind.SourceSuppressionViolation,
+                            ReplacementResidualSeverity.Critical,
+                            message)
+                    ]
+                    : [];
+
+            await WriteReportAsync(
+                reportPath,
+                complete: false,
+                0,
+                0,
+                0,
+                [message],
+                [],
+                null,
+                cancellationToken,
+                fatalResiduals);
         }
         catch (OperationCanceledException) { throw; }
         catch
@@ -222,11 +598,13 @@ public sealed class ConversionPipeline
 
     private static IReadOnlyList<PageReport> CreatePageReports(
         TeyPdfCad.Core.Documents.VectorPdfDocument document,
+        DwgDocumentPlan plan,
         IReadOnlyDictionary<int, HatchRecognitionResult> hatchRecognition,
         IReadOnlyDictionary<int, PageSemanticSummary> semanticRecognition,
         IReadOnlyDictionary<int, SourceReplacementPlan> replacementPlans,
         IReadOnlyDictionary<int, TemplateSelection>? templateSelections = null,
-        IReadOnlyDictionary<int, ReplacementExecutionReport>? executionReports = null)
+        IReadOnlyDictionary<int, ReplacementExecutionReport>? executionReports = null,
+        IReadOnlyDictionary<int, SuppressionDecision>? suppressionDecisions = null)
         => document.Pages.Select(page => new PageReport(
             page.Number,
             page.WidthMillimetres,
@@ -242,6 +620,10 @@ public sealed class ConversionPipeline
             semanticRecognition[page.Number].LevelCandidateCount,
             semanticRecognition[page.Number].ArcDimensionCandidateCount,
             semanticRecognition[page.Number].Warnings,
+            BuildDimensionMetricEvidence(
+                page.Number,
+                semanticRecognition[page.Number],
+                plan.Sheets.Single(sheet => sheet.PageNumber == page.Number)),
             templateSelections is not null
                 && templateSelections.TryGetValue(page.Number, out var selection)
                 && selection.IsConfirmed,
@@ -254,25 +636,41 @@ public sealed class ConversionPipeline
                 ? reasonSelection.Reason
                 : "template-manifest-not-supplied",
             page.Diagnostics,
-            replacementPlans[page.Number].SuppressedSourceIds.Count,
-            replacementPlans[page.Number].PreservedSourceIds.Count,
+            suppressionDecisions is not null
+                && suppressionDecisions.TryGetValue(page.Number, out var pageSuppression)
+                ? pageSuppression.SuppressSourceIds.Count
+                : 0,
+            suppressionDecisions is not null
+                && suppressionDecisions.TryGetValue(page.Number, out var pagePreservation)
+                ? pagePreservation.PreserveSourceIds.Count
+                : replacementPlans[page.Number].PreservedSourceIds.Count,
             replacementPlans[page.Number].DeferredCandidateKeys.Count,
             replacementPlans[page.Number].SourceCoverageMap.Count,
             replacementPlans[page.Number].Conflicts.Count,
-            replacementPlans[page.Number].Residuals,
-            replacementPlans[page.Number].Residuals.Count == 0
-                ? null
-                : replacementPlans[page.Number].Residuals
-                    .OrderByDescending(residual => residual.Severity)
-                    .First().Severity.ToString(),
-            executionReports is not null && executionReports.TryGetValue(page.Number, out var execution)
-                ? execution.GeometryLostSourceIds.Count
-                : 0,
+            GetReportedResiduals(
+                replacementPlans[page.Number],
+                suppressionDecisions is not null
+                    && suppressionDecisions.TryGetValue(page.Number, out var pageDecision)
+                        ? pageDecision
+                        : null),
+            GetHighestResidualSeverity(
+                replacementPlans[page.Number],
+                suppressionDecisions is not null
+                    && suppressionDecisions.TryGetValue(page.Number, out var severityDecision)
+                        ? severityDecision
+                        : null),
+            0,
             ResolvePageAuditStatus(
                 page,
                 hatchRecognition[page.Number],
                 semanticRecognition[page.Number],
                 replacementPlans[page.Number],
+                templateSelections is not null && templateSelections.TryGetValue(page.Number, out var auditTemplateSelection)
+                    ? auditTemplateSelection
+                    : null,
+                suppressionDecisions is not null && suppressionDecisions.TryGetValue(page.Number, out var auditSuppressionDecision)
+                    ? auditSuppressionDecision
+                    : null,
                 executionReports is not null && executionReports.TryGetValue(page.Number, out var executionReport)
                     ? executionReport
                     : null),
@@ -281,21 +679,262 @@ public sealed class ConversionPipeline
                 && hatchRecognition[page.Number].Warnings.Count == 0
                 && semanticRecognition[page.Number].Warnings.Count == 0
                 && replacementPlans[page.Number].IsFullPassEligible
+                && (suppressionDecisions is null
+                    || !suppressionDecisions.TryGetValue(page.Number, out var completionSuppressionDecision)
+                    || completionSuppressionDecision.Residuals.Count == 0)
+                && (templateSelections is null
+                    || !templateSelections.TryGetValue(page.Number, out var completionTemplateSelection)
+                    || !string.Equals(
+                        completionTemplateSelection.Reason,
+                        "template-source-replacement-deferred-p0",
+                        StringComparison.Ordinal))
                 && (executionReports is null
                     || !executionReports.TryGetValue(page.Number, out var pageExecution)
-                    || (pageExecution.ReadBackConfirmed && !pageExecution.AnyGeometryLost)))).ToArray();
+                    || (pageExecution.ReadBackConfirmed
+                        && pageExecution.CandidateNotVerifiedSourceIds.Count == 0
+                        && !pageExecution.AnyGeometryLost)))).ToArray();
+
+    private static IReadOnlyList<DimensionMetricEvidence> BuildDimensionMetricEvidence(
+        int pageNumber,
+        PageSemanticSummary semantic,
+        SheetPlan sheet)
+    {
+        if (semantic.Result is null)
+            return [];
+
+        return semantic.Result.Dimensions
+            .Where(candidate => candidate.SourceAppearance?.Text is not null)
+            .Select(candidate =>
+            {
+                var appearance = candidate.SourceAppearance!;
+                var text = appearance.Text;
+                var sourceLineGeometry = new List<DimensionSourceLineMetricEvidence>
+                {
+                    ToDrawingLineEvidence(
+                        "dimension-line",
+                        appearance.DimensionLine,
+                        sheet)
+                };
+                sourceLineGeometry.AddRange(
+                    appearance.ExtensionLines.Select(line =>
+                        ToDrawingLineEvidence("extension-line", line, sheet)));
+                sourceLineGeometry.AddRange(
+                    appearance.ArrowLines.Select(line =>
+                        ToDrawingLineEvidence("arrow-geometry", line, sheet)));
+
+                var sourceNativeMeasurementMm =
+                    double.IsFinite(candidate.ReconstructedMeasurement)
+                    && double.IsFinite(candidate.DrawingScale)
+                    && Math.Abs(candidate.DrawingScale) > 1e-12
+                        ? candidate.ReconstructedMeasurement / candidate.DrawingScale
+                        : (double?)null;
+
+                return new DimensionMetricEvidence(
+                    SourceReplacementPlanner.GetCandidateKey(candidate, pageNumber),
+                    candidate.SourceText,
+                    text.FontName,
+                    text.FontProgramSha256,
+                    text.FontProgramSubtype,
+                    text.FontEncodingName,
+                    text.FontHasToUnicode,
+                    text.FontIsSubset,
+                    text.AdvanceWidthMm,
+                    text.VisibleWidthMm,
+                    text.VisibleHeightMm,
+                    text.HeightMm,
+                    sourceNativeMeasurementMm,
+                    text.RotationDegrees,
+                    text.VisualCenter?.X,
+                    text.VisualCenter?.Y,
+                    text.GlyphInkWidthMm,
+                    text.GlyphInkHeightMm,
+                    "drawing-wcs-model-mm",
+                    sheet.ModelOriginX,
+                    sheet.ModelOriginY,
+                    sourceLineGeometry);
+            })
+            .OrderBy(item => item.CandidateId, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static DimensionSourceLineMetricEvidence ToDrawingLineEvidence(
+        string role,
+        TeyPdfCad.Core.Semantics.Dimensions.DimensionSourceLineAppearance line,
+        SheetPlan sheet)
+        => new(
+            role,
+            line.SourceIds.OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            sheet.ModelOriginX + line.Start.X,
+            sheet.ModelOriginY + line.Start.Y,
+            sheet.ModelOriginX + line.End.X,
+            sheet.ModelOriginY + line.End.Y,
+            line.RgbColor,
+            line.StrokeWidthMm,
+            line.DashPatternMm.ToArray());
+
+    private static IReadOnlyList<ReplacementResidual> GetReportedResiduals(
+        SourceReplacementPlan plan,
+        SuppressionDecision? decision)
+        => decision?.Residuals ?? plan.Residuals;
+
+    private static string? GetHighestResidualSeverity(
+        SourceReplacementPlan plan,
+        SuppressionDecision? decision)
+    {
+        var residuals = GetReportedResiduals(plan, decision);
+        return residuals.Count == 0
+            ? null
+            : residuals
+                .OrderByDescending(residual => residual.Severity)
+                .First()
+                .Severity
+                .ToString();
+    }
+
+    private static void ValidateManifestParity(
+        NativeWriteManifest probe,
+        NativeWriteManifest final,
+        IReadOnlySet<string> authorizedNativeCandidateIds)
+    {
+        if (!authorizedNativeCandidateIds.OrderBy(value => value, StringComparer.Ordinal)
+            .SequenceEqual(
+                final.Candidates.Keys.OrderBy(value => value, StringComparer.Ordinal),
+                StringComparer.Ordinal))
+        {
+            throw new InvalidDataException(
+                "SourceSuppressionViolation: final native manifest candidate set differs from independently authorized native candidates.");
+        }
+
+        foreach (var pair in final.Candidates)
+        {
+            if (!probe.Candidates.TryGetValue(pair.Key, out var expected))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: final candidate {pair.Key} was absent from the verified probe manifest.");
+            }
+
+            var actual = pair.Value;
+            if (expected.SourceEquivalenceComplete != actual.SourceEquivalenceComplete
+                || !string.Equals(
+                    expected.SourceEquivalenceReason,
+                    actual.SourceEquivalenceReason,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: candidate {pair.Key} source-equivalence verdict changed between probe and final.");
+            }
+            if (!string.Equals(expected.SemanticType, actual.SemanticType, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: candidate {pair.Key} semantic type changed between probe and final.");
+            }
+
+            var expectedByRole = expected.Entities.ToDictionary(
+                entity => entity.Role,
+                StringComparer.Ordinal);
+            var actualByRole = actual.Entities.ToDictionary(
+                entity => entity.Role,
+                StringComparer.Ordinal);
+            if (!expectedByRole.Keys.OrderBy(value => value, StringComparer.Ordinal)
+                .SequenceEqual(
+                    actualByRole.Keys.OrderBy(value => value, StringComparer.Ordinal),
+                    StringComparer.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: candidate {pair.Key} role set changed between probe and final.");
+            }
+
+            foreach (var role in expectedByRole.Keys)
+            {
+                var probeEntity = expectedByRole[role];
+                var finalEntity = actualByRole[role];
+                if (!string.Equals(probeEntity.EntityKind, finalEntity.EntityKind, StringComparison.Ordinal)
+                    || !string.Equals(probeEntity.GeometryFingerprint, finalEntity.GeometryFingerprint, StringComparison.Ordinal)
+                    || !DictionaryEqual(probeEntity.RequiredProperties, finalEntity.RequiredProperties))
+                {
+                    throw new InvalidDataException(
+                        $"SourceSuppressionViolation: candidate {pair.Key} role {role} manifest changed between probe and final.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateVerifiedCandidatesRemainVerified(
+        NativeReadBackVerification probe,
+        NativeReadBackVerification final,
+        IReadOnlySet<string> authorizedNativeCandidateIds)
+    {
+        foreach (var candidateId in authorizedNativeCandidateIds.OrderBy(value => value, StringComparer.Ordinal))
+        {
+            if (!probe.Candidates.TryGetValue(candidateId, out var probeCandidate)
+                || !probeCandidate.IsVerified
+                || !probeCandidate.SourceEquivalenceComplete)
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: authorized candidate {candidateId} was not verified with complete source equivalence in the probe.");
+            }
+
+            if (!final.Candidates.TryGetValue(candidateId, out var finalCandidate)
+                || !finalCandidate.IsVerified
+                || !finalCandidate.SourceEquivalenceComplete)
+            {
+                throw new InvalidDataException(
+                    $"SourceSuppressionViolation: authorized candidate {candidateId} failed final read-back verification.");
+            }
+        }
+
+        var unexpectedFinal = final.Candidates.Keys
+            .Where(candidateId => !authorizedNativeCandidateIds.Contains(candidateId))
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (unexpectedFinal.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"SourceSuppressionViolation: final verification contains unauthorized candidate(s): {string.Join(", ", unexpectedFinal)}.");
+        }
+    }
+
+    private static bool DictionaryEqual(
+        IReadOnlyDictionary<string, string> first,
+        IReadOnlyDictionary<string, string> second)
+    {
+        if (first.Count != second.Count)
+            return false;
+
+        foreach (var pair in first)
+        {
+            if (!second.TryGetValue(pair.Key, out var value)
+                || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static string ResolvePageAuditStatus(
         VectorPdfPage page,
         HatchRecognitionResult hatchRecognition,
         PageSemanticSummary semanticRecognition,
         SourceReplacementPlan replacementPlan,
+        TemplateSelection? templateSelection,
+        SuppressionDecision? suppressionDecision,
         ReplacementExecutionReport? executionReport)
     {
         if (page.Entities.Count == 0 || page.Diagnostics.Count > 0)
             return "PARTIAL";
         if (executionReport is { AnyGeometryLost: true })
             return "PARTIAL";
+        if (executionReport is not null && executionReport.CandidateNotVerifiedSourceIds.Count > 0)
+            return "PASS_WITH_RESIDUALS";
+        if (suppressionDecision is not null && suppressionDecision.Residuals.Count > 0)
+            return "PASS_WITH_RESIDUALS";
+        if (string.Equals(
+                templateSelection?.Reason,
+                "template-source-replacement-deferred-p0",
+                StringComparison.Ordinal))
+            return "PASS_WITH_RESIDUALS";
         if (hatchRecognition.Warnings.Count > 0
             || semanticRecognition.Warnings.Count > 0
             || !replacementPlan.IsFullPassEligible)
@@ -337,7 +976,8 @@ public sealed class ConversionPipeline
             line.Style.SourceLayer,
             [line.SourceId],
             line.Style.StrokeWidthPoints * VectorPdfPage.MillimetresPerPoint,
-            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray())));
+            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray(),
+            line.Style.RgbColor)));
         var scene = new PrimitiveScene();
         scene.Lines.AddRange(semanticLines.Select(line => new LinePrimitive(
             line.Start,
@@ -345,7 +985,8 @@ public sealed class ConversionPipeline
             line.Style.SourceLayer,
             [line.SourceId],
             line.Style.StrokeWidthPoints * VectorPdfPage.MillimetresPerPoint,
-            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray())));
+            line.Style.DashPatternPoints?.Select(value => value * VectorPdfPage.MillimetresPerPoint).ToArray(),
+            line.Style.RgbColor)));
         foreach (var polyline in semanticPolylines.Where(polyline => !polyline.IsClosed && polyline.Vertices.Count >= 5))
         {
             if (CircularArcDetector.TryFit(polyline.Vertices, out var arc))
@@ -365,7 +1006,30 @@ public sealed class ConversionPipeline
             text.HeightPoints * VectorPdfPage.MillimetresPerPoint,
             text.RotationRadians * 180d / Math.PI,
             text.Style.SourceLayer,
-            [text.SourceId])).ToArray();
+            [text.SourceId],
+            text.Style.RgbColor,
+            text.FontName,
+            text.AdvanceWidthPoints > 0d
+                ? text.AdvanceWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.VisualCenter,
+            text.VisibleWidthPoints > 0d
+                ? text.VisibleWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.VisibleHeightPoints > 0d
+                ? text.VisibleHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.FontProgramSha256,
+            text.FontProgramSubtype,
+            text.FontEncodingName,
+            text.FontHasToUnicode,
+            text.FontIsSubset,
+            text.GlyphInkWidthPoints > 0d
+                ? text.GlyphInkWidthPoints * VectorPdfPage.MillimetresPerPoint
+                : null,
+            text.GlyphInkHeightPoints > 0d
+                ? text.GlyphInkHeightPoints * VectorPdfPage.MillimetresPerPoint
+                : null)).ToArray();
         baseScene.Texts.AddRange(primitiveTexts);
         scene.Texts.AddRange(primitiveTexts);
         var baseAnalyzed = new SemanticReconstructionEngine().Analyze(baseScene);
@@ -410,7 +1074,17 @@ public sealed class ConversionPipeline
             drawing.Layers.Count(),
             drawing.LineTypes.Count());
 
-    private static Task WriteReportAsync(string path, bool complete, int pagesRead, int pagesProcessed, int layoutsReadBack, IReadOnlyList<string> warnings, IReadOnlyList<PageReport> pages, ReadBackSummary? readBack, CancellationToken cancellationToken)
+    private static Task WriteReportAsync(
+        string path,
+        bool complete,
+        int pagesRead,
+        int pagesProcessed,
+        int layoutsReadBack,
+        IReadOnlyList<string> warnings,
+        IReadOnlyList<PageReport> pages,
+        ReadBackSummary? readBack,
+        CancellationToken cancellationToken,
+        IReadOnlyList<ReplacementResidual>? fatalResiduals = null)
         => WriteAtomicallyAsync(path, JsonSerializer.SerializeToUtf8Bytes(new
         {
             complete,
@@ -418,6 +1092,7 @@ public sealed class ConversionPipeline
             pagesProcessed,
             layoutsReadBack,
             warnings,
+            fatalResiduals = fatalResiduals ?? [],
             pages,
             readBack
         }, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), cancellationToken);
@@ -453,6 +1128,7 @@ public sealed class ConversionPipeline
         int LevelCandidateCount,
         int ArcDimensionCandidateCount,
         IReadOnlyList<string> SemanticWarnings,
+        IReadOnlyList<DimensionMetricEvidence> DimensionMetricEvidence,
         bool TemplateSelected,
         string? TemplateName,
         string TemplateReason,
@@ -467,6 +1143,41 @@ public sealed class ConversionPipeline
         int GeometryLostCount,
         string SemanticAuditStatus,
         bool Complete);
+
+    private sealed record DimensionMetricEvidence(
+        string CandidateId,
+        string SourceText,
+        string? SourceFontName,
+        string? SourceFontSha256,
+        string? SourceFontSubtype,
+        string? SourceFontEncodingName,
+        bool? SourceFontHasToUnicode,
+        bool? SourceFontIsSubset,
+        double? SourceAdvanceWidthMm,
+        double? SourceVisibleWidthMm,
+        double? SourceVisibleHeightMm,
+        double SourceHeightMm,
+        double? SourceNativeMeasurementMm,
+        double SourceRotationDegrees,
+        double? SourceVisualCenterX,
+        double? SourceVisualCenterY,
+        double? SourceGlyphInkWidthMm,
+        double? SourceGlyphInkHeightMm,
+        string SourceCoordinateFrame,
+        double ModelOriginX,
+        double ModelOriginY,
+        IReadOnlyList<DimensionSourceLineMetricEvidence> SourceLineGeometry);
+
+    private sealed record DimensionSourceLineMetricEvidence(
+        string Role,
+        IReadOnlyList<string> SourceIds,
+        double StartX,
+        double StartY,
+        double EndX,
+        double EndY,
+        int? RgbColor,
+        double? StrokeWidthMm,
+        IReadOnlyList<double> DashPatternMm);
 
     private sealed record PageSemanticSummary(
         int DimensionCandidateCount,

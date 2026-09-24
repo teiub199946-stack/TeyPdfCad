@@ -63,16 +63,53 @@ public sealed class DimensionChainDetector
         var secondUnit = GeometryMath.Normalize(secondVector);
         if (Math.Abs(GeometryMath.Dot(firstUnit, secondUnit)) < Math.Cos(3.0 * Math.PI / 180.0)) return false;
 
-        var lineOffsetTolerance = Math.Max(Math.Min(firstLength, secondLength) * 0.03, 1e-6);
+        var adjacencyTolerance = ChainAdjacencyTolerance(
+            first,
+            second,
+            firstLength,
+            secondLength);
         if (GeometryMath.DistancePointToInfiniteLine(
                 second.DimensionLinePoint,
                 first.DimensionLinePoint,
                 new Point2(first.DimensionLinePoint.X + firstUnit.X, first.DimensionLinePoint.Y + firstUnit.Y))
-            > lineOffsetTolerance)
+            > adjacencyTolerance)
             return false;
 
-        var endpointTolerance = Math.Max(Math.Min(firstLength, secondLength) * 0.03, 1e-6);
-        return EndpointDistance(first, second) <= endpointTolerance;
+        return EndpointDistance(first, second) <= adjacencyTolerance;
+    }
+
+    private static double ChainAdjacencyTolerance(
+        DimensionCandidate first,
+        DimensionCandidate second,
+        double firstLength,
+        double secondLength)
+    {
+        var minimumLength = Math.Min(firstLength, secondLength);
+        var relativeTolerance = minimumLength * 0.03;
+
+        var sourceTextHeights = new[]
+        {
+            first.SourceAppearance?.Text.HeightMm,
+            second.SourceAppearance?.Text.HeightMm
+        }
+            .Where(value => value is > 0 && double.IsFinite(value.Value))
+            .Select(value => value!.Value)
+            .ToArray();
+
+        if (sourceTextHeights.Length == 0)
+            return Math.Max(relativeTolerance, 1e-6);
+
+        // PDFIMPORT coordinate jitter is bounded in paper space, not as a
+        // percentage of the measured span. Scaling the source-aware allowance
+        // back down by the shorter dimension reintroduces the original failure
+        // for very short dimensions (for example 0.05 mm on paper): the
+        // tolerance collapses below ordinary import jitter. Keep the
+        // conservative quarter-text-height envelope instead. The adjacency
+        // predicate still requires equal scale, near-parallel measured axes,
+        // collinear dimension-line locations and endpoint continuity.
+        var sourceAwareFloor = sourceTextHeights.Min() * 0.25;
+
+        return Math.Max(Math.Max(relativeTolerance, sourceAwareFloor), 1e-6);
     }
 
     private static double EndpointDistance(DimensionCandidate first, DimensionCandidate second)

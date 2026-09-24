@@ -9,6 +9,11 @@ public sealed record SemanticReconstructionResult(
     double? DominantDrawingScale,
     double AverageDimensionConfidence)
 {
+    // Primary semantic output is intentionally separate from the complete
+    // recognizer claimant graph used by fail-closed source replacement.
+    // Empty means legacy/manual callers did not provide a separate safety set.
+    public IReadOnlyList<DimensionCandidate> DimensionClaimants { get; init; } = [];
+
     public IReadOnlyList<AxisCandidate> Axes { get; init; } = [];
 
     public IReadOnlyList<LeaderCandidate> Leaders { get; init; } = [];

@@ -57,5 +57,16 @@ public sealed record VectorText(
     VectorStyle Style,
     double Confidence = 1d,
     double RotationRadians = 0d,
-    double AdvanceWidthPoints = 0d)
+    double AdvanceWidthPoints = 0d,
+    string? FontName = null,
+    Point2? VisualCenter = null,
+    double VisibleWidthPoints = 0d,
+    double VisibleHeightPoints = 0d,
+    string? FontProgramSha256 = null,
+    string? FontProgramSubtype = null,
+    string? FontEncodingName = null,
+    bool? FontHasToUnicode = null,
+    bool? FontIsSubset = null,
+    double GlyphInkWidthPoints = 0d,
+    double GlyphInkHeightPoints = 0d)
     : VectorEntity(SourceId, Style, Confidence);

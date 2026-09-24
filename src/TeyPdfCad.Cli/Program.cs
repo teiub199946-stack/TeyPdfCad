@@ -4,9 +4,23 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        if ((args.Length != 7 && args.Length != 9) || !string.Equals(args[0], "convert", StringComparison.OrdinalIgnoreCase))
+        if (args.Length > 0
+            && string.Equals(
+                args[0],
+                "compare-dimension-metrics",
+                StringComparison.OrdinalIgnoreCase))
         {
-            await Console.Error.WriteLineAsync("Usage: TeyPdfCad.Cli convert --input <pdf> --output <dwg> --report <json> [--template-manifest <json>]");
+            return await DimensionMetricComparisonCommand.RunAsync(args);
+        }
+
+        if ((args.Length != 7 && args.Length != 9 && args.Length != 11)
+            || !string.Equals(args[0], "convert", StringComparison.OrdinalIgnoreCase))
+        {
+            await Console.Error.WriteLineAsync(
+                "Usage: TeyPdfCad.Cli convert --input <pdf> --output <dwg> --report <json> " +
+                "[--template-manifest <json>] [--probe-output <dwg>]\n" +
+                "   or: TeyPdfCad.Cli compare-dimension-metrics --conversion-report <json> " +
+                "--autocad-metrics <json> --output <json>");
             return (int)ConversionOutcome.InvalidArgumentsOrIo;
         }
 
@@ -27,8 +41,17 @@ public static class Program
         }
 
         options.TryGetValue("--template-manifest", out var templateManifest);
-        var result = await new ConversionPipeline().ConvertAsync(input, output, report, default, templateManifest);
-        await Console.Out.WriteLineAsync($"outcome={result.Outcome}; report={result.ReportPath}; dwg={result.DwgPath ?? "none"}");
+        options.TryGetValue("--probe-output", out var probeOutput);
+        var result = await new ConversionPipeline().ConvertAsync(
+            input,
+            output,
+            report,
+            default,
+            templateManifest,
+            probeOutput);
+        await Console.Out.WriteLineAsync(
+            $"outcome={result.Outcome}; report={result.ReportPath}; " +
+            $"dwg={result.DwgPath ?? "none"}; probe={result.ProbeDwgPath ?? "none"}");
         return (int)result.Outcome;
     }
 }

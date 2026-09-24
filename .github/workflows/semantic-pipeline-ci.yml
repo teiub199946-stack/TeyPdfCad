@@ -33,3 +33,83 @@ jobs:
         run: dotnet test tests/TeyPdfCad.Dwg.Tests/TeyPdfCad.Dwg.Tests.csproj --configuration Release --no-restore
       - name: CLI tests
         run: dotnet test tests/TeyPdfCad.Cli.Tests/TeyPdfCad.Cli.Tests.csproj --configuration Release --no-restore
+      - name: Upload Spike D manual DWG fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-d-persistent-candidate-id-fixture
+          path: tests/TeyPdfCad.Dwg.Tests/bin/Release/net8.0/spike-d-fixtures
+          if-no-files-found: error
+          retention-days: 14
+
+
+  semantic-release-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore semantic test generator
+        run: dotnet restore tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+      - name: TEST-002 current-branch 10k core run
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          core-run --count 10000 --seed 12345
+          --output artifacts/p0-test-002-current
+      - name: TEST-003 current-branch 10k diagnostics
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          diagnose-core --count 10000 --seed 12345
+          --output artifacts/p0-test-003-current
+      - name: Evaluate P0 suppression safety gate
+        id: suppression_safety_gate
+        continue-on-error: true
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          p0-suppression-safety-gate
+          --core-report artifacts/p0-test-002-current/report.json
+          --diagnostic-report artifacts/p0-test-003-current/report.json
+          --expected-count 10000
+          --output artifacts/p0-suppression-safety-gate.json
+      - name: Evaluate reconstruction quality gate
+        id: reconstruction_quality_gate
+        continue-on-error: true
+        run: >
+          dotnet run --project tests/TeyPdfCad.TestGenerator/TeyPdfCad.TestGenerator.csproj
+          --configuration Release --no-restore --
+          reconstruction-quality-gate
+          --core-report artifacts/p0-test-002-current/report.json
+          --expected-count 10000
+          --output artifacts/reconstruction-quality-gate.json
+      - name: Upload semantic release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semantic-release-evidence-current-branch
+          path: |
+            artifacts/p0-test-002-current
+            artifacts/p0-test-003-current
+            artifacts/p0-suppression-safety-gate.json
+            artifacts/reconstruction-quality-gate.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Enforce semantic release gates
+        if: always()
+        shell: bash
+        run: |
+          failed=0
+          if [ "${{ steps.suppression_safety_gate.outcome }}" != "success" ]; then
+            echo "P0 suppression safety gate failed."
+            failed=1
+          fi
+          if [ "${{ steps.reconstruction_quality_gate.outcome }}" != "success" ]; then
+            echo "Reconstruction quality gate failed. This branch is not release-quality even if suppression safety is green."
+            failed=1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "See uploaded semantic-release-evidence-current-branch artifact."
+            exit 2
+          fi
