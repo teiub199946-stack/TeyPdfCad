@@ -532,8 +532,11 @@ public sealed class LinearDimensionRecognizer
             probe.ProjectedDistance - targetPaperDistance);
         var correctionRatio = absolutePaperCorrection
             / Math.Max(targetPaperDistance, 1e-9);
-        if (correctionRatio > options.CanonicalScaleRelativeTolerance)
+        if (!scaleResolvedByAbsolutePaperCorrection
+            && correctionRatio > options.CanonicalScaleRelativeTolerance)
+        {
             return false;
+        }
 
         // A nearby canonical scale can still be the wrong scale when severe
         // noise dominates a tiny source span. Keep this recovery microscopic
