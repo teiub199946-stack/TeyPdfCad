@@ -483,6 +483,42 @@ internal static class DimensionGeometryAnalysis
         return error <= tolerance ? best : null;
     }
 
+    public static double? ResolveUniqueCanonicalScaleByPaperCorrection(
+        double displayedValue,
+        double observedPaperDistance,
+        double maximumAbsoluteCorrectionMm)
+    {
+        if (!NumericCompat.IsFinite(displayedValue)
+            || displayedValue <= 0d
+            || !NumericCompat.IsFinite(observedPaperDistance)
+            || observedPaperDistance <= 1e-9
+            || !NumericCompat.IsFinite(maximumAbsoluteCorrectionMm)
+            || maximumAbsoluteCorrectionMm <= 0d)
+        {
+            return null;
+        }
+
+        var matches = CanonicalScales
+            .Select(scale => new
+            {
+                Scale = scale,
+                Correction = Math.Abs(
+                    observedPaperDistance - displayedValue / scale)
+            })
+            .Where(candidate =>
+                candidate.Correction <= maximumAbsoluteCorrectionMm)
+            .OrderBy(candidate => candidate.Correction)
+            .ThenBy(candidate => candidate.Scale)
+            .ToArray();
+
+        // Absolute short-span evidence is allowed to recover a canonical scale
+        // only when it is unambiguous. Never rank between two canonical scales
+        // that both fit the same microscopic paper-space envelope.
+        return matches.Length == 1
+            ? matches[0].Scale
+            : null;
+    }
+
     public static double CanonicalScaleScore(double raw, double snapped)
     {
         var error = Math.Abs(raw - snapped) / Math.Max(snapped, 1e-9);
