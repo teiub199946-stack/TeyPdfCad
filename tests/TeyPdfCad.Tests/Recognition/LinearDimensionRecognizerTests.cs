@@ -840,6 +840,44 @@ public sealed class LinearDimensionRecognizerTests
     }
 
     [Fact]
+    public void Very_short_dimension_rejects_text_beyond_absolute_projection_floor()
+    {
+        var scene = new PrimitiveScene();
+        const double length = 0.05d;
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, 0),
+            new Point2(length, 0)));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(0, -3),
+            new Point2(0, 1)));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(length, -3),
+            new Point2(length, 1)));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(-0.01, -0.01),
+            new Point2(0.01, 0.01)));
+        scene.Lines.Add(new LinePrimitive(
+            new Point2(length - 0.01, -0.01),
+            new Point2(length + 0.01, 0.01)));
+        // 0.03 mm past the second endpoint: this is intentionally beyond the
+        // new 0.02 mm absolute floor and must remain rejected.
+        scene.Texts.Add(new TextPrimitive(
+            "25",
+            new Point2(0.08, 0),
+            2.5,
+            0));
+
+        var dimensions = new LinearDimensionRecognizer().Recognize(
+            scene,
+            new DimensionRecognitionOptions
+            {
+                DrawingScale = 500
+            });
+
+        Assert.Empty(dimensions);
+    }
+
+    [Fact]
     public void Long_dimension_is_not_normalized_only_because_canonical_scale_is_nearby()
     {
         var scene = new PrimitiveScene();
