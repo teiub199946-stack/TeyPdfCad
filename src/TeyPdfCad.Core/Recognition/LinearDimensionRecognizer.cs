@@ -360,11 +360,39 @@ public sealed class LinearDimensionRecognizer
             options.CanonicalScaleRelativeTolerance);
         if (scale is null) return null;
 
+        var definitionPoint1 = probe.Value.DefinitionPoint1;
+        var definitionPoint2 = probe.Value.DefinitionPoint2;
         var reconstructed = probe.Value.ProjectedDistance * scale.Value;
-        var relativeError = Math.Abs(reconstructed - displayedValue) / Math.Max(displayedValue, 1.0);
-        if (relativeError > options.MeasurementRelativeTolerance) return null;
+        var relativeError = Math.Abs(reconstructed - displayedValue)
+            / Math.Max(displayedValue, 1.0);
+        var geometryNormalizedFromCanonicalScale = false;
 
-        var measurementScore = 1.0 - NumericCompat.Clamp(relativeError / options.MeasurementRelativeTolerance, 0.0, 1.0);
+        if (relativeError > options.MeasurementRelativeTolerance)
+        {
+            if (!TryNormalizeShortCanonicalGeometry(
+                    text,
+                    displayedValue,
+                    rawScale,
+                    scale.Value,
+                    probe.Value,
+                    options,
+                    out definitionPoint1,
+                    out definitionPoint2,
+                    out reconstructed))
+            {
+                return null;
+            }
+
+            geometryNormalizedFromCanonicalScale = true;
+            relativeError = 0d;
+        }
+
+        var measurementScore = geometryNormalizedFromCanonicalScale
+            ? 1d
+            : 1.0 - NumericCompat.Clamp(
+                relativeError / options.MeasurementRelativeTolerance,
+                0.0,
+                1.0);
         var scaleScore = options.DrawingScale.HasValue
             ? measurementScore
             : DimensionGeometryAnalysis.CanonicalScaleScore(rawScale, scale.Value);
@@ -377,8 +405,8 @@ public sealed class LinearDimensionRecognizer
 
         return new DimensionCandidate(
             probe.Value.Kind,
-            probe.Value.DefinitionPoint1,
-            probe.Value.DefinitionPoint2,
+            definitionPoint1,
+            definitionPoint2,
             probe.Value.DimensionLinePoint,
             displayedValue,
             reconstructed,
@@ -392,6 +420,92 @@ public sealed class LinearDimensionRecognizer
             SourceClaims = probe.Value.SourceClaims,
             SourceAppearance = probe.Value.SourceAppearance
         };
+    }
+
+    private static bool TryNormalizeShortCanonicalGeometry(
+        TextPrimitive text,
+        double displayedValue,
+        double rawScale,
+        double resolvedScale,
+        GeometryProbe probe,
+        DimensionRecognitionOptions options,
+        out Point2 definitionPoint1,
+        out Point2 definitionPoint2,
+        out double reconstructedMeasurement)
+    {
+        definitionPoint1 = probe.DefinitionPoint1;
+        definitionPoint2 = probe.DefinitionPoint2;
+        reconstructedMeasurement = probe.ProjectedDistance * resolvedScale;
+
+        // This is semantic reconstruction, not a looser recognition threshold.
+        // It is only available when scale was inferred by the existing canonical
+        // snap path. Explicit/fixed and non-canonical consensus scales keep the
+        // strict MeasurementRelativeTolerance behavior.
+        if (options.DrawingScale.HasValue
+            || !NumericCompat.IsFinite(rawScale)
+            || !NumericCompat.IsFinite(resolvedScale)
+            || resolvedScale <= 1e-9)
+        {
+            return false;
+        }
+
+        var scaleError = Math.Abs(rawScale - resolvedScale)
+            / Math.Max(resolvedScale, 1e-9);
+        if (scaleError > options.CanonicalScaleRelativeTolerance)
+            return false;
+
+        var targetPaperDistance = displayedValue / resolvedScale;
+        if (!NumericCompat.IsFinite(targetPaperDistance)
+            || targetPaperDistance <= 1e-9)
+        {
+            return false;
+        }
+
+        // Absolute PDF/PDFIMPORT coordinate noise dominates only very short
+        // paper-space dimensions. Do not normalize ordinary long dimensions:
+        // they must continue to satisfy the strict 2% geometry measurement
+        // contract directly.
+        var shortSpanLimit = text.Height * options.TextDistanceHeightMultiplier;
+        if (!NumericCompat.IsFinite(shortSpanLimit)
+            || shortSpanLimit <= 0d
+            || targetPaperDistance > shortSpanLimit)
+        {
+            return false;
+        }
+
+        var correctionRatio = Math.Abs(
+                probe.ProjectedDistance - targetPaperDistance)
+            / Math.Max(targetPaperDistance, 1e-9);
+        if (correctionRatio > options.CanonicalScaleRelativeTolerance)
+            return false;
+
+        var axis = new Point2(
+            Math.Cos(probe.RotationRadians),
+            Math.Sin(probe.RotationRadians));
+        if (GeometryMath.Length(axis) <= 1e-9)
+            return false;
+
+        var rawDirection = GeometryMath.Subtract(
+            probe.DefinitionPoint2,
+            probe.DefinitionPoint1);
+        if (GeometryMath.Length(rawDirection) <= 1e-9)
+            return false;
+
+        if (GeometryMath.Dot(rawDirection, axis) < 0d)
+            axis = new Point2(-axis.X, -axis.Y);
+
+        var midpoint = GeometryMath.Midpoint(
+            probe.DefinitionPoint1,
+            probe.DefinitionPoint2);
+        var half = targetPaperDistance / 2d;
+        definitionPoint1 = new Point2(
+            midpoint.X - axis.X * half,
+            midpoint.Y - axis.Y * half);
+        definitionPoint2 = new Point2(
+            midpoint.X + axis.X * half,
+            midpoint.Y + axis.Y * half);
+        reconstructedMeasurement = targetPaperDistance * resolvedScale;
+        return true;
     }
 
     private static GeometryProbe? TryAnalyzeGeometry(
