@@ -1,0 +1,63 @@
+name: Export five core audit files
+
+on:
+  push:
+    branches:
+      - export/five-core-files-20260924
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact source snapshot
+        uses: actions/checkout@v4
+
+      - name: Collect audit files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf audit5
+          mkdir -p audit5/src/TeyPdfCad.Cli
+          mkdir -p audit5/src/TeyPdfCad.Pdf
+          mkdir -p audit5/src/TeyPdfCad.Core/Recognition
+          mkdir -p audit5/src/TeyPdfCad.Dwg
+          mkdir -p audit5/src/TeyPdfCad.AutoCAD
+
+          cp src/TeyPdfCad.Cli/Program.cs audit5/src/TeyPdfCad.Cli/
+          cp src/TeyPdfCad.Cli/ConversionPipeline.cs audit5/src/TeyPdfCad.Cli/
+          cp src/TeyPdfCad.Pdf/PdfPigVectorDocumentReader.cs audit5/src/TeyPdfCad.Pdf/
+          cp src/TeyPdfCad.Core/Recognition/SemanticReconstructionEngine.cs audit5/src/TeyPdfCad.Core/Recognition/
+          cp src/TeyPdfCad.Dwg/AcadSharpDwgWriter.cs audit5/src/TeyPdfCad.Dwg/
+          cp src/TeyPdfCad.AutoCAD/ReconstructionCommands.cs audit5/src/TeyPdfCad.AutoCAD/
+
+          cat > audit5/FILES_INCLUDED.txt <<'EOF'
+TeyPdfCad audit handoff
+Source branch: handoff/full-project-20260924-17646eff
+Source commit: 17646eff6eb103de2118ddfee9e4283939f7c889
+
+Requested critical path files:
+1. src/TeyPdfCad.Cli/Program.cs
+2. src/TeyPdfCad.Pdf/PdfPigVectorDocumentReader.cs
+3. src/TeyPdfCad.Dwg/AcadSharpDwgWriter.cs
+4. src/TeyPdfCad.AutoCAD/ReconstructionCommands.cs  (contains TEYPDFAUDITDWG)
+
+Important architecture note:
+The actual top-level conversion orchestration is in:
+5. src/TeyPdfCad.Cli/ConversionPipeline.cs
+
+The main semantic core engine is in:
+6. src/TeyPdfCad.Core/Recognition/SemanticReconstructionEngine.cs
+
+Both 5 and 6 are included because the repository splits orchestration and semantic reconstruction across CLI and Core.
+EOF
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeyPdfCad-CRITICAL-5-PLUS-CORE
+          path: audit5/
+          if-no-files-found: error
+          retention-days: 7
