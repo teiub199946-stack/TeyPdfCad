@@ -93,6 +93,39 @@ public sealed class CoreRegressionPipelineTests
     }
 
     [Fact]
+    public async Task Short_canonical_dimension_survives_small_absolute_pdf_noise()
+    {
+        // TEST-002/003 case_005570: a 25 mm linear dimension at 1:50 is only
+        // 0.5 mm long in paper space. 0.01 mm PDF/PDFIMPORT coordinate noise
+        // pushes the raw inferred scale to ~48.6. That is inside the existing
+        // 3% canonical-scale snap window for 1:50, but the old path then
+        // rejected the same hypothesis against the independent 2% measurement
+        // check. Keep both thresholds unchanged and require the semantic path to
+        // handle this internally-consistent short-span case.
+        var testCase = new DimensionCaseGenerator()
+            .Generate(5_570, 12345)
+            .Cases
+            .Single(testCase => testCase.Id == "case_005570");
+
+        var actual = await new SemanticCoreTestPipeline().RunAsync(testCase);
+
+        Assert.Equal(ExpectedResult.Recognized, actual.Result);
+        Assert.Equal(1, actual.DetectedDimensions);
+        Assert.Equal(DimensionType.Linear, actual.DimensionType);
+        Assert.Equal(25d, actual.Value!.Value, 6);
+        Assert.Equal(50d, actual.DrawingScale!.Value, 6);
+        Assert.NotNull(actual.P1);
+        Assert.NotNull(actual.P2);
+
+        var endpointError = Math.Min(
+            actual.P1!.Value.DistanceTo(testCase.P1)
+                + actual.P2!.Value.DistanceTo(testCase.P2),
+            actual.P1!.Value.DistanceTo(testCase.P2)
+                + actual.P2!.Value.DistanceTo(testCase.P1));
+        Assert.True(endpointError <= 1.0);
+    }
+
+    [Fact]
     public async Task Borderline_ambiguous_case_uses_observable_one_sided_arrow_evidence_and_abstains()
     {
         var testCase = CleanHorizontalCase() with
