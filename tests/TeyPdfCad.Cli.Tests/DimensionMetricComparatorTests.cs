@@ -305,6 +305,8 @@ public sealed class DimensionMetricComparatorTests
             DimensionMetricComparator.Compare(source, native).Candidates);
 
         Assert.True(candidate.CrossSnapshotLineAppearanceEvidenceUsable);
+        Assert.True(candidate.AllCapturedEvidenceChannelsUsable);
+        Assert.False(candidate.SourceToNativeEquivalenceProven);
         Assert.DoesNotContain(
             "cross-snapshot-line-appearance-mismatch",
             candidate.Blockers);
@@ -334,6 +336,7 @@ public sealed class DimensionMetricComparatorTests
             DimensionMetricComparator.Compare(source, native).Candidates);
 
         Assert.False(candidate.CrossSnapshotLineAppearanceEvidenceUsable);
+        Assert.False(candidate.AllCapturedEvidenceChannelsUsable);
         Assert.Contains(
             "cross-snapshot-line-appearance-mismatch",
             candidate.Blockers);
